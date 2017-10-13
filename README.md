@@ -329,3 +329,97 @@ Elasticsearch query response:
 By inspection, we can see that the results are (within floating point tolerance) identical. We have done this by hand for a representative selection of queries for each benchmark run.
 
 Successful query validation implies that the benchmarking suite has end-to-end reproducibility, and is correct between both databases.
+
+## Quickstart
+
+Executing the benchmarks requires the Go compiler and tools to be installed on your system. See https://golang.org/doc/install for package downloads and installation. Once Go is configured you can proceed to installing and running the benchmark.
+
+### Install
+
+Running benchmarks requires installing the data and query generators along with loaders and benchmarkers for the platforms you wish to test. For example, to install and run load tests for InfluxDB, execute:
+
+```
+go get github.com/influxdata/influxdb-comparisons/cmd/bulk_data_gen github.com/influxdata/influxdb-comparisons/cmd/bulk_load_influx
+```
+
+This will download and install the latest code from GitHub (including dependencies). Check the ``cmd`` directory for additional database implementations to download and install. For query benchmarking, install the query generator and benchmark executor for your platform. E.g. for InfluxDB:
+
+```
+go get github.com/influxdata/influxdb-comparisons/cmd/bulk_query_gen github.com/influxdata/influxdb-comparisons/cmd/query_benchmarker_influxdb
+```
+
+### Help
+
+For any module, you can run the executable with the ``-h`` flag and it will print a list of command line parameters. E.g.
+
+```
+-bash-4.1$ $GOPATH/bin/bulk_data_gen -h
+Usage of /home/clarsen/go/bin/bulk_data_gen:
+  -debug int
+    	Debug printing (choices: 0, 1, 2) (default 0).
+  -format string
+    	Format to emit. (choices: influx-bulk, es-bulk, cassandra, mongo, opentsdb) (default "influx-bulk")
+  -interleaved-generation-group-id uint
+    	Group (0-indexed) to perform round-robin serialization within. Use this to scale up data generation to multiple processes.
+  -interleaved-generation-groups uint
+    	The number of round-robin serialization groups. Use this to scale up data generation to multiple processes. (default 1)
+  -scale-var int
+    	Scaling variable specific to the use case. (default 1)
+  -seed int
+    	PRNG seed (default, or 0, uses the current timestamp).
+  -timestamp-end string
+    	Ending timestamp (RFC3339). (default "2016-01-01T06:00:00Z")
+  -timestamp-start string
+    	Beginning timestamp (RFC3339). (default "2016-01-01T00:00:00Z")
+  -use-case string
+    	Use case to model. (choices: devops, iot) (default "devops")
+```
+
+### Loading Data
+
+To generate and write data to a database, execute the bulk data generator using optional command line parameters and pipe the output to a bulk loader. For example, load data in an InfluxDB instance, run:
+
+```
+$GOPATH/bin/bulk_data_gen | $GOPATH/bin/bulk_load_influx -urls http://localhost:8086
+``` 
+
+This will automatically create a database instance and load about 19,440 data points. For additional data, set the start and end times. Also note that the default generation data format is ``influx-bulk``. If you want to test another database, use the ``-format`` parameter with the proper loader. E.g. for OpenTSDB:
+
+```
+$GOPATH/bin/bulk_data_gen -format opentsdb | $GOPATH/bin/bulk_load_opentsdb -urls http://localhost:4242
+```
+
+A successful run will the number of items generated and stored along with the total time and mean rate per second.
+
+```
+-bash-4.1$ $GOPATH/bin/bulk_data_gen | $GOPATH/bin/bulk_load_influx  -urls http://druidzoo-1.yms.gq1.yahoo.com:8086
+using random seed 329234002
+daemon URLs: [http://druidzoo-1.yms.gq1.yahoo.com:8086]
+[worker 0] backoffs took a total of 0.000000sec of runtime
+loaded 19440 items in 0.751433sec with 1 workers (mean rate 25870.568346/sec, 8.60MB/sec from stdin)
+```
+
+### Querying Data
+
+Querying the database is similar to loading data. Execute the bulk query generator and pipe it's output to the benchmark tool for the database under test. Each run requires a ``-query-type`` argument to determine what type of query to execute. These are meant to mimic actual queries such as searching for data on a single host out of many, multiple hosts from many or grouping by various tags. To find out what query types are available, execute ``$GOPATH/bin/bulk_query_gen -h`` and look for the ``use case matrix`` at the bottom of the output. An example run command looks like:
+
+```
+$GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -url http://druidzoo-1.yms.gq1.yahoo.com:8086
+```
+
+A successful run will execute multiple queries and periodically print status information to standard out. 
+
+```
+-bash-4.1$ $GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -url http://druidzoo-1.yms.gq1.yahoo.com:8086
+using random seed 684941023
+after 100 queries with 1 workers:
+Influx max cpu, rand    1 hosts, rand 1h0m0s by 1m : min:     1.50ms ( 668.55/sec), mean:     1.98ms ( 506.32/sec), max:    3.10ms (322.34/sec), count:      100, sum:   0.2sec
+all queries                                        : min:     1.50ms ( 668.55/sec), mean:     1.98ms ( 506.32/sec), max:    3.10ms (322.34/sec), count:      100, sum:   0.2sec
+
+...
+
+run complete after 1000 queries with 1 workers:
+Influx max cpu, rand    1 hosts, rand 1h0m0s by 1m : min:     1.45ms ( 689.62/sec), mean:     2.07ms ( 482.67/sec), max:   12.21ms ( 81.92/sec), count:     1000, sum:   2.1sec
+all queries                                        : min:     1.45ms ( 689.62/sec), mean:     2.07ms ( 482.67/sec), max:   12.21ms ( 81.92/sec), count:     1000, sum:   2.1sec
+wall clock time: 2.084896sec
+```
