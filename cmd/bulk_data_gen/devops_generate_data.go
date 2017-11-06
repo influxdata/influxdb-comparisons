@@ -85,7 +85,7 @@ func (d *DevopsSimulator) Next(p *Point) {
 
 	// Populate host-specific tags:
 	p.AppendTag(MachineTagKeys[0], host.Name)
-	p.AppendTag(MachineTagKeys[1], host.Region)
+/*	p.AppendTag(MachineTagKeys[1], host.Region)
 	p.AppendTag(MachineTagKeys[2], host.Datacenter)
 	p.AppendTag(MachineTagKeys[3], host.Rack)
 	p.AppendTag(MachineTagKeys[4], host.OS)
@@ -94,6 +94,7 @@ func (d *DevopsSimulator) Next(p *Point) {
 	p.AppendTag(MachineTagKeys[7], host.Service)
 	p.AppendTag(MachineTagKeys[8], host.ServiceVersion)
 	p.AppendTag(MachineTagKeys[9], host.ServiceEnvironment)
+*/
 
 	// Populate measurement-specific tags and fields:
 	host.SimulatedMeasurements[d.simulatedMeasurementIndex].ToPoint(p)
