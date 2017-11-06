@@ -40,14 +40,14 @@ type DevopsSimulatorConfig struct {
 	HostCount int64
 }
 
-func (d *DevopsSimulatorConfig) ToSimulator() *DevopsSimulator {
+func (d *DevopsSimulatorConfig) ToSimulator(size int) *DevopsSimulator {
 	hostInfos := make([]Host, d.HostCount)
 	for i := 0; i < len(hostInfos); i++ {
-		hostInfos[i] = NewHost(i, d.Start)
+		hostInfos[i] = NewHost(i, d.Start, size)
 	}
 
 	epochs := d.End.Sub(d.Start).Nanoseconds() / EpochDuration.Nanoseconds()
-	maxPoints := epochs * (d.HostCount * NHostSims)
+	maxPoints := epochs * (d.HostCount * int64(NHostSims))
 	dg := &DevopsSimulator{
 		madePoints: 0,
 		maxPoints:  maxPoints,

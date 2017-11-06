@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const NHostSims = 9
+var  NHostSims = 9
 
 // Count of choices for auto-generated tag values:
 const (
@@ -139,17 +139,57 @@ type Host struct {
 	Team, Service, ServiceVersion, ServiceEnvironment []byte
 }
 
-func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
-	sm := []SimulatedMeasurement{
-		NewCPUMeasurement(start),
-		NewDiskIOMeasurement(start),
-		NewDiskMeasurement(start),
-		NewKernelMeasurement(start),
-		NewMemMeasurement(start),
-		NewNetMeasurement(start),
-		NewNginxMeasurement(start),
-		NewPostgresqlMeasurement(start),
-		NewRedisMeasurement(start),
+func NewHostMeasurements(start time.Time, size int) []SimulatedMeasurement {
+	var sm []SimulatedMeasurement
+	switch(size) {
+		case 1:
+			sm = []SimulatedMeasurement{
+				NewCPUMeasurement(start),
+				NewDiskIOMeasurement(start),
+				NewDiskMeasurement(start),
+			}
+			NHostSims = 3
+			break
+	case 2:
+		sm = []SimulatedMeasurement{
+			NewCPUMeasurement(start),
+			NewDiskIOMeasurement(start),
+			NewDiskMeasurement(start),
+			NewKernelMeasurement(start),
+			NewMemMeasurement(start),
+			NewNetMeasurement(start),
+		}
+		NHostSims = 6
+		break
+	case 3:
+		sm = []SimulatedMeasurement{
+			NewCPUMeasurement(start),
+			NewDiskIOMeasurement(start),
+			NewDiskMeasurement(start),
+			NewKernelMeasurement(start),
+			NewMemMeasurement(start),
+			NewNetMeasurement(start),
+			NewNginxMeasurement(start),
+			NewPostgresqlMeasurement(start),
+		}
+		NHostSims = 8
+		break
+	case 4:
+		sm = []SimulatedMeasurement{
+			NewCPUMeasurement(start),
+			NewDiskIOMeasurement(start),
+			NewDiskMeasurement(start),
+			NewKernelMeasurement(start),
+			NewMemMeasurement(start),
+			NewNetMeasurement(start),
+			NewNginxMeasurement(start),
+			NewPostgresqlMeasurement(start),
+			NewRedisMeasurement(start),
+		}
+		NHostSims = 9
+		break
+	default:
+		panic("Invalid size of meassurements")
 	}
 
 	if len(sm) != NHostSims {
@@ -158,8 +198,8 @@ func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
 	return sm
 }
 
-func NewHost(i int, start time.Time) Host {
-	sm := NewHostMeasurements(start)
+func NewHost(i int, start time.Time, size int) Host {
+	sm := NewHostMeasurements(start, size)
 
 	region := &Regions[rand.Intn(len(Regions))]
 	rackId := rand.Int63n(MachineRackChoicesPerDatacenter)

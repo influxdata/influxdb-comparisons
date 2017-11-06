@@ -51,6 +51,7 @@ var (
 
 	seed  int64
 	debug int
+	size int
 )
 
 // Parse args:
@@ -65,6 +66,7 @@ func init() {
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1, 2) (default 0).")
+	flag.IntVar(&size, "size", 4, "Size of dataset (choices: 1 - a quarter, 2 - a half, 3 - 3 quarters, 4 - full).")
 
 	flag.UintVar(&interleavedGenerationGroupID, "interleaved-generation-group-id", 0, "Group (0-indexed) to perform round-robin serialization within. Use this to scale up data generation to multiple processes.")
 	flag.UintVar(&interleavedGenerationGroups, "interleaved-generation-groups", 1, "The number of round-robin serialization groups. Use this to scale up data generation to multiple processes.")
@@ -122,7 +124,7 @@ func main() {
 
 			HostCount: scaleVar,
 		}
-		sim = cfg.ToSimulator()
+		sim = cfg.ToSimulator(size)
 	default:
 		panic("unreachable")
 	}
