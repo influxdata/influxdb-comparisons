@@ -19,10 +19,12 @@ var (
 		[]byte("used"),
 		[]byte("free"),
 		[]byte("cached"),
+/*     TODO VH: Data size reduction
 		[]byte("buffered"),
 		[]byte("used_percent"),
 		[]byte("available_percent"),
 		[]byte("buffered_percent"),
+*/
 	}
 )
 
@@ -96,8 +98,10 @@ func (m *MemMeasurement) ToPoint(p *Point) {
 	p.AppendField(MemoryFieldKeys[2], int(math.Floor(used)))
 	p.AppendField(MemoryFieldKeys[3], int(math.Floor(cached)))
 	p.AppendField(MemoryFieldKeys[4], int(math.Floor(buffered)))
+/*	TODO VH: Data size reduction
 	p.AppendField(MemoryFieldKeys[5], int(math.Floor(used)))
 	p.AppendField(MemoryFieldKeys[6], 100.0*(used/float64(total)))
 	p.AppendField(MemoryFieldKeys[7], 100.0*(float64(total)-used)/float64(total))
 	p.AppendField(MemoryFieldKeys[8], 100.0*(float64(total)-buffered)/float64(total))
+*/
 }

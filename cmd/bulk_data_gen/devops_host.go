@@ -115,7 +115,8 @@ var (
 	// Tag fields common to all hosts:
 	MachineTagKeys = [][]byte{
 		[]byte("hostname"),
-/*		[]byte("region"),
+/*		TODO VH: Data size reduction
+		[]byte("region"),
 		[]byte("datacenter"),
 		[]byte("rack"),
 		[]byte("os"),

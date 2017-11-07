@@ -15,6 +15,7 @@ var (
 		{[]byte("tup_returned"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("tup_fetched"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("tup_inserted"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
+/*		TODO VH: Data size reduction
 		{[]byte("tup_updated"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("tup_deleted"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("conflicts"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
@@ -23,6 +24,7 @@ var (
 		{[]byte("deadlocks"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("blk_read_time"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("blk_write_time"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
+*/
 	}
 )
 

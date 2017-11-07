@@ -29,7 +29,6 @@ var (
 		{[]byte("evicted_keys"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("keyspace_hits"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("keyspace_misses"), func() Distribution { return MWD(ND(50, 1), 0) }},
-
 		{[]byte("instantaneous_ops_per_sec"), func() Distribution { return WD(ND(1, 1), 0) }},
 		{[]byte("instantaneous_input_kbps"), func() Distribution { return WD(ND(1, 1), 0) }},
 		{[]byte("instantaneous_output_kbps"), func() Distribution { return WD(ND(1, 1), 0) }},
@@ -39,12 +38,12 @@ var (
 		{[]byte("used_memory_peak"), func() Distribution { return CWD(ND(50, 1), 0, SixteenGB, SixteenGB/2) }},
 		{[]byte("used_memory_lua"), func() Distribution { return CWD(ND(50, 1), 0, SixteenGB, SixteenGB/2) }},
 		{[]byte("rdb_changes_since_last_save"), func() Distribution { return CWD(ND(50, 1), 0, 10000, 0) }},
-
 		{[]byte("sync_full"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("sync_partial_ok"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("sync_partial_err"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("pubsub_channels"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("pubsub_patterns"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
+/* TODO VH: Data size reduction
 		{[]byte("latest_fork_usec"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("connected_slaves"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("master_repl_offset"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
@@ -56,6 +55,7 @@ var (
 		{[]byte("used_cpu_user"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("used_cpu_sys_children"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("used_cpu_user_children"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
+*/
 	}
 )
 

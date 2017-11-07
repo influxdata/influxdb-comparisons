@@ -12,8 +12,10 @@ var (
 		{[]byte("interrupts"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("context_switches"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("processes_forked"), func() Distribution { return MWD(ND(5, 1), 0) }},
+/* TODO VH: Data size reduction
 		{[]byte("disk_pages_in"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("disk_pages_out"), func() Distribution { return MWD(ND(5, 1), 0) }},
+*/
 	}
 )
 

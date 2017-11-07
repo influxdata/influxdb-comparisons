@@ -14,10 +14,12 @@ var (
 		{[]byte("reads"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("writes"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("read_bytes"), func() Distribution { return MWD(ND(100, 1), 0) }},
+/* TODO VH: Data size reduction
 		{[]byte("write_bytes"), func() Distribution { return MWD(ND(100, 1), 0) }},
 		{[]byte("read_time"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("write_time"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("io_time"), func() Distribution { return MWD(ND(5, 1), 0) }},
+*/
 	}
 )
 

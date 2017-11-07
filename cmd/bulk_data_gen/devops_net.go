@@ -17,10 +17,12 @@ var (
 		{[]byte("bytes_recv"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("packets_sent"), func() Distribution { return MWD(ND(50, 1), 0) }},
 		{[]byte("packets_recv"), func() Distribution { return MWD(ND(50, 1), 0) }},
+/*		TODO VH: Data size reduction
 		{[]byte("err_in"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("err_out"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("drop_in"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("drop_out"), func() Distribution { return MWD(ND(5, 1), 0) }},
+*/
 	}
 )
 

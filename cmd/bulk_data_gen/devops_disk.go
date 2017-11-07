@@ -13,10 +13,12 @@ var (
 	TotalByteString = []byte("total")
 	FreeByteString = []byte("free")
 	UsedByteString = []byte("used")
+/*	TODO VH: Data size reduction
 	UsedPercentByteString = []byte("used_percent")
 	INodesTotalByteString = []byte("inodes_total")
 	INodesFreeByteString = []byte("inodes_total")
 	INodesUsedByteString = []byte("inodes_used")
+*/
 
 	DiskTags       = [][]byte{
 		[]byte("path"),
@@ -67,18 +69,21 @@ func (m *DiskMeasurement) ToPoint(p *Point) {
 
 	total := int64(OneTerabyte)
 	used := total - free
+/*  TODO VH: Data size reduction
 	usedPercent := int64(100.0 * (float64(used) / float64(total)))
 
 	// inodes are 4096b in size:
 	inodesTotal := total / 4096
 	inodesFree := free / 4096
 	inodesUsed := used / 4096
-
+*/
 	p.AppendField(TotalByteString, total )
 	p.AppendField(FreeByteString, free)
 	p.AppendField(UsedByteString, used)
+/*	TODO VH: Data size reduction
 	p.AppendField(UsedPercentByteString, usedPercent)
 	p.AppendField(INodesTotalByteString, inodesTotal)
 	p.AppendField(INodesFreeByteString, inodesFree)
 	p.AppendField(INodesUsedByteString, inodesUsed)
+*/
 }

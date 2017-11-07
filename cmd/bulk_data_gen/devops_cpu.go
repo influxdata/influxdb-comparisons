@@ -18,11 +18,12 @@ var (
 		[]byte("usage_idle"),
 		[]byte("usage_nice"),
 		[]byte("usage_iowait"),
+/*		TODO VH: Data size reduction
 		[]byte("usage_irq"),
 		[]byte("usage_softirq"),
 		[]byte("usage_steal"),
 		[]byte("usage_guest"),
-		[]byte("usage_guest_nice"),
+		[]byte("usage_guest_nice"),*/
 	}
 )
 

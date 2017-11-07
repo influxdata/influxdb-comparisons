@@ -85,7 +85,8 @@ func (d *DevopsSimulator) Next(p *Point) {
 
 	// Populate host-specific tags:
 	p.AppendTag(MachineTagKeys[0], host.Name)
-/*	p.AppendTag(MachineTagKeys[1], host.Region)
+/*	TODO VH: Data size reduction
+	p.AppendTag(MachineTagKeys[1], host.Region)
 	p.AppendTag(MachineTagKeys[2], host.Datacenter)
 	p.AppendTag(MachineTagKeys[3], host.Rack)
 	p.AppendTag(MachineTagKeys[4], host.OS)

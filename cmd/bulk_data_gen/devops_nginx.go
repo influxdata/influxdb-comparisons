@@ -18,10 +18,12 @@ var (
 		{[]byte("accepts"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("active"), func() Distribution { return CWD(ND(5, 1), 0, 100, 0) }},
 		{[]byte("handled"), func() Distribution { return MWD(ND(5, 1), 0) }},
+/*	TODO VH: Data size reduction
 		{[]byte("reading"), func() Distribution { return CWD(ND(5, 1), 0, 100, 0) }},
 		{[]byte("requests"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("waiting"), func() Distribution { return CWD(ND(5, 1), 0, 100, 0) }},
 		{[]byte("writing"), func() Distribution { return CWD(ND(5, 1), 0, 100, 0) }},
+*/
 	}
 )
 
