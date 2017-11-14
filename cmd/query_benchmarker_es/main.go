@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/influxdb-comparisons/util/telemetry"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
 // Program option vars:
@@ -50,7 +50,7 @@ var (
 	statChan            chan *Stat
 	workersGroup        sync.WaitGroup
 	statGroup           sync.WaitGroup
-	telemetryChanPoints chan *telemetry.Point
+	telemetryChanPoints chan *report.Point
 	telemetryChanDone   chan struct{}
 	telemetrySrcAddr    string
 	telemetryTags       [][2]string
@@ -137,8 +137,8 @@ func main() {
 	go processStats()
 
 	if telemetryHost != "" {
-		telemetryCollector := telemetry.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
-		telemetryChanPoints, telemetryChanDone = telemetry.EZRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
 	// Launch the query processors:
@@ -218,7 +218,7 @@ func scan(r io.Reader) {
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(w *HTTPClient, telemetrySink chan *telemetry.Point, telemetryWorkerLabel string) {
+func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	opts := &HTTPClientDoOptions{
 		Debug:                debug,
 		PrettyPrintResponses: prettyPrintResponses,
@@ -239,7 +239,7 @@ func processQueries(w *HTTPClient, telemetrySink chan *telemetry.Point, telemetr
 
 		// Report telemetry, if applicable:
 		if telemetrySink != nil {
-			p := telemetry.GetPointFromGlobalPool()
+			p := report.GetPointFromGlobalPool()
 			p.Init("benchmark_query", ts)
 			p.AddTag("src_addr", telemetrySrcAddr)
 			p.AddTag("dst_addr", w.HostString)

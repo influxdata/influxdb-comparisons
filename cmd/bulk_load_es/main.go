@@ -20,29 +20,29 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/influxdata/influxdb-comparisons/util/telemetry"
 	"github.com/valyala/fasthttp"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
 // Program option vars:
 var (
-	csvDaemonUrls           string
-	daemonUrls              []string
-	refreshEachBatch        bool
-	workers                 int
-	batchSize               int
-	itemLimit               int64
-	indexTemplateName       string
-	useGzip                 bool
-	doLoad                  bool
-	doDBCreate              bool
-	numberOfReplicas        uint
-	numberOfShards          uint
-	telemetryHost           string
-	telemetryStderr         bool
-	telemetryBatchSize      uint64
-	telemetryTagsCSV        string
-	telemetryBasicAuth      string
+	csvDaemonUrls      string
+	daemonUrls         []string
+	refreshEachBatch   bool
+	workers            int
+	batchSize          int
+	itemLimit          int64
+	indexTemplateName  string
+	useGzip            bool
+	doLoad             bool
+	doDBCreate         bool
+	numberOfReplicas   uint
+	numberOfShards     uint
+	telemetryHost      string
+	telemetryStderr    bool
+	telemetryBatchSize uint64
+	telemetryTagsCSV   string
+	telemetryBasicAuth string
 )
 
 // Global vars
@@ -51,7 +51,7 @@ var (
 	batchChan           chan *bytes.Buffer
 	inputDone           chan struct{}
 	workersGroup        sync.WaitGroup
-	telemetryChanPoints chan *telemetry.Point
+	telemetryChanPoints chan *report.Point
 	telemetryChanDone   chan struct{}
 	telemetryHostname   string
 	telemetryTags       [][2]string
@@ -237,8 +237,8 @@ func main() {
 	inputDone = make(chan struct{})
 
 	if telemetryHost != "" {
-		telemetryCollector := telemetry.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
-		telemetryChanPoints, telemetryChanDone = telemetry.EZRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 
 	for i := 0; i < workers; i++ {
@@ -251,32 +251,34 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead := scan(batchSize)
+	itemsRead, bytesRead := scan(batchSize)
 
 	<-inputDone
 	close(batchChan)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
-	rate := float64(itemsRead) / float64(took.Seconds())
+	itemsRate := float64(itemsRead) / float64(took.Seconds())
+	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
 	if telemetryHost != "" {
 		close(telemetryChanPoints)
 		<-telemetryChanDone
 	}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean rate %f items/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean itemsRate %f items/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, bytesRate/(1<<20))
 }
 
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
 // format: two line pairs, the first line being an 'action' and the second line
 // being the payload. (2 lines = 1 item)
-func scan(itemsPerBatch int) int64 {
+func scan(itemsPerBatch int) (int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
 	var n int
 	var linesRead int64
 	var itemsRead int64
+	var bytesRead int64
 	var itemsThisBatch int
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -295,6 +297,7 @@ func scan(itemsPerBatch int) int64 {
 		hitLimit := itemLimit >= 0 && itemsRead >= itemLimit
 
 		if itemsThisBatch == itemsPerBatch || hitLimit {
+			bytesRead += int64(buf.Len())
 			batchChan <- buf
 			buf = bufPool.Get().(*bytes.Buffer)
 			itemsThisBatch = 0
@@ -322,11 +325,11 @@ func scan(itemsPerBatch int) int64 {
 		log.Fatalf("the number of lines read was not a multiple of 2, which indicates a bad bulk format for Elastic")
 	}
 
-	return itemsRead
+	return itemsRead, bytesRead
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(w *HTTPWriter, telemetrySink chan *telemetry.Point, telemetryWorkerLabel string) {
+func processBatches(w *HTTPWriter, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	var batchesSeen int64
 	for batch := range batchChan {
 		batchesSeen++
@@ -361,7 +364,7 @@ func processBatches(w *HTTPWriter, telemetrySink chan *telemetry.Point, telemetr
 
 		// Report telemetry, if applicable:
 		if telemetrySink != nil {
-			p := telemetry.GetPointFromGlobalPool()
+			p := report.GetPointFromGlobalPool()
 			p.Init("benchmark_write", time.Now().UnixNano())
 			p.AddTag("src_addr", telemetryHostname)
 			p.AddTag("dst_addr", w.c.Host)

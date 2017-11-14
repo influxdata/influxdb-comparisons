@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/influxdata/influxdb-comparisons/util/telemetry"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/pkg/profile"
 	"github.com/valyala/fasthttp"
 )
@@ -58,7 +58,7 @@ var (
 	workersGroup        sync.WaitGroup
 	backingOffChans     []chan bool
 	backingOffDones     []chan struct{}
-	telemetryChanPoints chan *telemetry.Point
+	telemetryChanPoints chan *report.Point
 	telemetryChanDone   chan struct{}
 	telemetrySrcAddr    string
 	telemetryTags       [][2]string
@@ -175,8 +175,8 @@ func main() {
 	backingOffDones = make([]chan struct{}, workers)
 
 	if telemetryHost != "" {
-		telemetryCollector := telemetry.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
-		telemetryChanPoints, telemetryChanDone = telemetry.EZRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 
 	for i := 0; i < workers; i++ {
@@ -296,7 +296,7 @@ outer:
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *telemetry.Point, telemetryWorkerLabel string) {
+func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	var batchesSeen int64
 	for batch := range batchChan {
 		batchesSeen++
@@ -344,7 +344,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 
 		// Report telemetry, if applicable:
 		if telemetrySink != nil {
-			p := telemetry.GetPointFromGlobalPool()
+			p := report.GetPointFromGlobalPool()
 			p.Init("benchmark_write", time.Now().UnixNano())
 			for _, tagpair := range telemetryTags {
 				p.AddTag(tagpair[0], tagpair[1])
