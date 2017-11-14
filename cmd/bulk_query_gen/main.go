@@ -14,32 +14,39 @@ import (
 	"time"
 )
 
+const (
+	DevOps = "devops"
+	DevOpsOneHostOneHour     = "1-host-1-hr"
+	DevOpsOneHostTwelveHours = "1-host-12-hr"
+	DevOpsEightHostsOneHour = "8-host-1-hr"
+	DevOpsGroupBy = "groupby"
+)
 // query generator choices {use-case, query-type, format}
 // (This object is shown to the user when flag.Usage is called.)
 var useCaseMatrix = map[string]map[string]map[string]QueryGeneratorMaker{
-	"devops": {
-		"1-host-1-hr": {
+	DevOps: {
+		DevOpsOneHostOneHour: {
 			"cassandra":   NewCassandraDevopsSingleHost,
 			"es-http":     NewElasticSearchDevopsSingleHost,
 			"influx-http": NewInfluxDevopsSingleHost,
 			"mongo":       NewMongoDevopsSingleHost,
 			"opentsdb":    NewOpenTSDBDevopsSingleHost,
 		},
-		"1-host-12-hr": {
+		DevOpsOneHostTwelveHours : {
 			"cassandra":   NewCassandraDevopsSingleHost12hr,
 			"es-http":     NewElasticSearchDevopsSingleHost12hr,
 			"influx-http": NewInfluxDevopsSingleHost12hr,
 			"mongo":       NewMongoDevopsSingleHost12hr,
 			"opentsdb":    NewOpenTSDBDevopsSingleHost12hr,
 		},
-		"8-host-1-hr": {
+		DevOpsEightHostsOneHour : {
 			"cassandra":   NewCassandraDevops8Hosts,
 			"es-http":     NewElasticSearchDevops8Hosts,
 			"influx-http": NewInfluxDevops8Hosts,
 			"mongo":       NewMongoDevops8Hosts1Hr,
 			"opentsdb":    NewOpenTSDBDevops8Hosts,
 		},
-		"groupby": {
+		DevOpsGroupBy : {
 			"cassandra":   NewCassandraDevopsGroupBy,
 			"es-http":     NewElasticSearchDevopsGroupBy,
 			"influx-http": NewInfluxDevopsGroupBy,
@@ -109,6 +116,10 @@ func init() {
 
 	flag.Parse()
 
+	if queryType == DevOpsEightHostsOneHour && scaleVar < 8 {
+		log.Fatal("\"scale-var\" must be grater than the hosts grouping number")
+	}
+
 	if !(interleavedGenerationGroupID < interleavedGenerationGroups) {
 		log.Fatal("incorrect interleaved groups configuration")
 	}
@@ -125,11 +136,11 @@ func init() {
 		log.Fatal("invalid format specifier")
 	}
 
-	// the default seed is the current timestamp:
-	if seed == 0 {
-		seed = int64(time.Now().Nanosecond())
+	hourGroupInterval := 1
+
+	if queryType == DevOpsOneHostTwelveHours {
+		hourGroupInterval = 12
 	}
-	fmt.Fprintf(os.Stderr, "using random seed %d\n", seed)
 
 	// Parse timestamps:
 	var err error
@@ -143,6 +154,22 @@ func init() {
 		log.Fatal(err)
 	}
 	timestampEnd = timestampEnd.UTC()
+
+	duration := timestampEnd.Sub(timestampStart)
+
+	if duration.Nanoseconds() < 0 {
+		log.Fatal("\"timestamp-end\" must be grater than \"timestamp-start\"")
+	}
+
+	if duration.Nanoseconds()/time.Hour.Nanoseconds() < int64(hourGroupInterval) {
+		log.Fatal("Time interval must be grather than the grouping interval")
+	}
+
+	// the default seed is the current timestamp:
+	if seed == 0 {
+		seed = int64(time.Now().Nanosecond())
+	}
+	fmt.Fprintf(os.Stderr, "using random seed %d\n", seed)
 }
 
 func main() {
