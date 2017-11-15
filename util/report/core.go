@@ -163,8 +163,10 @@ type Collector struct {
 	Points []*Point
 
 	client           *fasthttp.Client
-	uri              string
+	writeUri         string
+	baseUri          string
 	encodedBasicAuth string
+	dbName			 string
 
 	buf *bytes.Buffer
 }
@@ -180,8 +182,10 @@ func NewCollector(influxhost, dbname, basicAuth string) *Collector {
 		client: &fasthttp.Client{
 			Name: "collector",
 		},
-		uri:              influxhost + "/write?db=" + url.QueryEscape(dbname),
+		baseUri:          influxhost,
+		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
 		encodedBasicAuth: encodedBasicAuth,
+		dbName: dbname,
 	}
 }
 
@@ -201,10 +205,33 @@ func (c *Collector) PrepBatch() {
 	}
 }
 
+func (c *Collector) CreateDatabase() error {
+	req := fasthttp.AcquireRequest()
+	req.Header.SetMethod("POST")
+	req.Header.SetRequestURI(c.baseUri + "/query?q=create%20database%20" + url.QueryEscape(c.dbName))
+	if c.encodedBasicAuth != "" {
+		req.Header.Set("Authorization", c.encodedBasicAuth)
+	}
+	req.SetBody(c.buf.Bytes())
+
+	// Perform the request while tracking latency:
+	resp := fasthttp.AcquireResponse()
+	err := c.client.Do(req, resp)
+
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return fmt.Errorf("collector error: unexpected status code %d", resp.StatusCode())
+	}
+
+	fasthttp.ReleaseResponse(resp)
+	fasthttp.ReleaseRequest(req)
+
+	return err
+}
+
 func (c *Collector) SendBatch() error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethod("POST")
-	req.Header.SetRequestURI(c.uri)
+	req.Header.SetRequestURI(c.writeUri)
 	if c.encodedBasicAuth != "" {
 		req.Header.Set("Authorization", c.encodedBasicAuth)
 	}
@@ -223,4 +250,3 @@ func (c *Collector) SendBatch() error {
 
 	return err
 }
-
