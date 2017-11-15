@@ -1,13 +1,11 @@
-package telemetry
+package report
 
 import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
-	"os"
 	"sync"
 
 	"github.com/valyala/fasthttp"
@@ -165,8 +163,10 @@ type Collector struct {
 	Points []*Point
 
 	client           *fasthttp.Client
-	uri              string
+	writeUri         string
+	baseUri          string
 	encodedBasicAuth string
+	dbName			 string
 
 	buf *bytes.Buffer
 }
@@ -182,8 +182,10 @@ func NewCollector(influxhost, dbname, basicAuth string) *Collector {
 		client: &fasthttp.Client{
 			Name: "collector",
 		},
-		uri:              influxhost + "/write?db=" + url.QueryEscape(dbname),
+		baseUri:          influxhost,
+		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
 		encodedBasicAuth: encodedBasicAuth,
+		dbName: dbname,
 	}
 }
 
@@ -203,10 +205,33 @@ func (c *Collector) PrepBatch() {
 	}
 }
 
+func (c *Collector) CreateDatabase() error {
+	req := fasthttp.AcquireRequest()
+	req.Header.SetMethod("POST")
+	req.Header.SetRequestURI(c.baseUri + "/query?q=create%20database%20" + url.QueryEscape(c.dbName))
+	if c.encodedBasicAuth != "" {
+		req.Header.Set("Authorization", c.encodedBasicAuth)
+	}
+	req.SetBody(c.buf.Bytes())
+
+	// Perform the request while tracking latency:
+	resp := fasthttp.AcquireResponse()
+	err := c.client.Do(req, resp)
+
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return fmt.Errorf("collector error: unexpected status code %d", resp.StatusCode())
+	}
+
+	fasthttp.ReleaseResponse(resp)
+	fasthttp.ReleaseRequest(req)
+
+	return err
+}
+
 func (c *Collector) SendBatch() error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethod("POST")
-	req.Header.SetRequestURI(c.uri)
+	req.Header.SetRequestURI(c.writeUri)
 	if c.encodedBasicAuth != "" {
 		req.Header.Set("Authorization", c.encodedBasicAuth)
 	}
@@ -224,56 +249,4 @@ func (c *Collector) SendBatch() error {
 	fasthttp.ReleaseRequest(req)
 
 	return err
-}
-
-// EZRunAsync runs a collection loop with many defaults already set. It will
-// abort the program if an error occurs. Assumes points are owned by the
-// GlobalPointPool.
-func EZRunAsync(c *Collector, batchSize uint64, writeToStderr bool, skipN uint64) (src chan *Point, done chan struct{}) {
-	src = make(chan *Point, 100)
-	done = make(chan struct{})
-
-	send := func() {
-		c.PrepBatch()
-		if writeToStderr {
-			_, err := os.Stderr.Write(c.buf.Bytes())
-			if err != nil {
-				log.Fatalf("collector error (stderr): %v", err.Error())
-			}
-		}
-
-		err := c.SendBatch()
-		if err != nil {
-			log.Fatalf("collector error (http): %v", err.Error())
-		}
-
-		for _, p := range c.Points {
-			PutPointIntoGlobalPool(p)
-		}
-	}
-
-	go func() {
-		var i uint64
-		for p := range src {
-			i++
-
-			if i <= skipN {
-				continue
-			}
-
-			c.Put(p)
-
-			if i%batchSize == 0 {
-				send()
-				c.Reset()
-			}
-		}
-		if len(c.Points) > 0 {
-			send()
-			c.Reset()
-		}
-		done <- struct{}{}
-	}()
-
-	return
 }
