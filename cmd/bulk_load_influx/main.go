@@ -25,52 +25,61 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// TODO VH: This should be calculated from available simulation data
+const ValuesPerMeasurement = 11.2222
+
 // Program option vars:
 var (
-	csvDaemonUrls           string
-	daemonUrls              []string
-	dbName                  string
-	replicationFactor       int
-	workers                 int
-	itemLimit               int64
-	batchSize               int
-	backoff                 time.Duration
-	timeLimit               time.Duration
-	progressInterval        time.Duration
-	doLoad                  bool
-	doDBCreate              bool
-	useGzip                 bool
-	doAbortOnExist          bool
-	memprofile              bool
-	consistency             string
-	telemetryHost           string
-	telemetryStderr         bool
-	telemetryBatchSize      uint64
-	telemetryTagsCSV        string
-	telemetryBasicAuth      string
+	csvDaemonUrls      string
+	daemonUrls         []string
+	dbName             string
+	replicationFactor  int
+	workers            int
+	itemLimit          int64
+	batchSize          int
+	backoff            time.Duration
+	timeLimit          time.Duration
+	progressInterval   time.Duration
+	doLoad             bool
+	doDBCreate         bool
+	useGzip            bool
+	doAbortOnExist     bool
+	memprofile         bool
+	consistency        string
+	telemetryHost      string
+	telemetryStderr    bool
+	telemetryBatchSize uint64
+	telemetryTagsCSV   string
+	telemetryBasicAuth string
+	reportDatabase     string
+	reportHost         string
+	reportUser         string
+	reportPassword     string
+	reportTagsCSV      string
 )
 
 // Global vars
 var (
-	bufPool             sync.Pool
-	batchChan           chan *bytes.Buffer
-	inputDone           chan struct{}
-	workersGroup        sync.WaitGroup
-	backingOffChans     []chan bool
-	backingOffDones     []chan struct{}
-	telemetryChanPoints chan *report.Point
-	telemetryChanDone   chan struct{}
-	telemetrySrcAddr    string
-	telemetryTags       [][2]string
-
+	bufPool               sync.Pool
+	batchChan             chan *bytes.Buffer
+	inputDone             chan struct{}
+	workersGroup          sync.WaitGroup
+	backingOffChans       []chan bool
+	backingOffDones       []chan struct{}
+	telemetryChanPoints   chan *report.Point
+	telemetryChanDone     chan struct{}
+	telemetrySrcAddr      string
+	telemetryTags         [][2]string
+	reportTags            [][2]string
+	reportHostname        string
 	progressIntervalItems uint64
 )
 
 var consistencyChoices = map[string]struct{}{
-	"any": struct{}{},
-	"one": struct{}{},
+	"any":    struct{}{},
+	"one":    struct{}{},
 	"quorum": struct{}{},
-	"all": struct{}{},
+	"all":    struct{}{},
 }
 
 // Parse args:
@@ -95,6 +104,11 @@ func init() {
 	flag.StringVar(&telemetryTagsCSV, "telemetry-tags", "", "Tag(s) for telemetry. Format: key0:val0,key1:val1,...")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
 	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 10, "Telemetry batch size (lines).")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metric")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metric")
+	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metric")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metric")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k=v tags to send  alongside result metric")
 
 	flag.Parse()
 
@@ -130,6 +144,27 @@ func init() {
 			}
 		}
 		fmt.Printf("telemetry tags: %v\n", telemetryTags)
+	}
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 }
 
@@ -227,12 +262,40 @@ func main() {
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
+	valuesRate := itemsRate * ValuesPerMeasurement
+
 	if telemetryHost != "" {
 		close(telemetryChanPoints)
 		<-telemetryChanDone
 	}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean rate %f/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
+
+	reportParams := &report.LoadReportParams{
+		DBType:                 "InfluxDB",
+		ReportDatabaseName:     reportDatabase,
+		ReportHost:             reportHost,
+		ReportUser:             reportUser,
+		ReportPassword:         reportPassword,
+		ReportTags:             reportTags,
+		Hostname:               reportHostname,
+		ParamIsGzip:            useGzip,
+		ParamDestinationUrl:    csvDaemonUrls,
+		ParamReplicationFactor: replicationFactor,
+		ParamBatchSize:         batchSize,
+		ParamWorkers:           workers,
+		ParamItemLimit:         int(itemLimit),
+		ParamBackoff:           backoff,
+		ParamConsistency:       consistency,
+	}
+	if reportHost != "" {
+		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 }
 
 // scan reads one item at a time from stdin. 1 item = 1 line.
@@ -336,7 +399,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 
 		// lagMillis intentionally includes backoff time,
 		// and incidentally includes compression time:
-		lagMillis := float64(time.Now().UnixNano() - ts) / 1e6
+		lagMillis := float64(time.Now().UnixNano()-ts) / 1e6
 
 		// Return the batch buffer to the pool.
 		batch.Reset()
