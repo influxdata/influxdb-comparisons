@@ -54,7 +54,12 @@ var (
 	telemetryChanDone   chan struct{}
 	telemetrySrcAddr    string
 	telemetryTags       [][2]string
+	statMapping			statsMap
 )
+
+type statsMap map[string]*StatGroup
+
+const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
@@ -259,8 +264,8 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	const allQueriesLabel = "all queries"
-	statMapping := map[string]*StatGroup{
+
+	statMapping = statsMap {
 		allQueriesLabel: &StatGroup{},
 	}
 
@@ -312,7 +317,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups map[string]*StatGroup) {
+func fprintStats(w io.Writer, statGroups statsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {
