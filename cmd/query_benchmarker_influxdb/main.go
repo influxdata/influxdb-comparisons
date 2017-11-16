@@ -26,20 +26,25 @@ import (
 
 // Program option vars:
 var (
-	csvDaemonUrls           string
-	daemonUrls              []string
-	workers                 int
-	debug                   int
-	prettyPrintResponses    bool
-	limit                   int64
-	burnIn                  uint64
-	printInterval           uint64
-	memProfile              string
-	telemetryHost           string
-	telemetryStderr         bool
-	telemetryBatchSize      uint64
-	telemetryTagsCSV        string
-	telemetryBasicAuth      string
+	csvDaemonUrls        string
+	daemonUrls           []string
+	workers              int
+	debug                int
+	prettyPrintResponses bool
+	limit                int64
+	burnIn               uint64
+	printInterval        uint64
+	memProfile           string
+	telemetryHost        string
+	telemetryStderr      bool
+	telemetryBatchSize   uint64
+	telemetryTagsCSV     string
+	telemetryBasicAuth   string
+	reportDatabase       string
+	reportHost           string
+	reportUser           string
+	reportPassword       string
+	reportTagsCSV        string
 )
 
 // Global vars:
@@ -54,7 +59,14 @@ var (
 	telemetryChanDone   chan struct{}
 	telemetrySrcAddr    string
 	telemetryTags       [][2]string
+	statMapping         statsMap
+	reportTags          [][2]string
+	reportHostname      string
 )
+
+type statsMap map[string]*StatGroup
+
+const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
@@ -71,6 +83,11 @@ func init() {
 	flag.StringVar(&telemetryBasicAuth, "telemetry-basic-auth", "", "basic auth (username:password) for telemetry.")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
 	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 1000, "Telemetry batch size (lines).")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
+	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
 
 	flag.Parse()
 
@@ -102,6 +119,28 @@ func init() {
 			}
 		}
 		fmt.Printf("telemetry tags: %v\n", telemetryTags)
+	}
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 }
 
@@ -175,6 +214,30 @@ func main() {
 		close(telemetryChanPoints)
 		<-telemetryChanDone
 		fmt.Println("done shutting down telemetry.")
+	}
+
+	if reportHost != "" {
+		reportParams := &report.QueryReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "InfluxDB",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     csvDaemonUrls,
+				Workers:            workers,
+				ItemLimit:          int(limit),
+			},
+			BurnIn: int64(burnIn),
+		}
+		stat := statMapping[allQueriesLabel]
+		err = report.ReportQueryResult(reportParams, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// (Optional) create a memory profile:
@@ -259,8 +322,8 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	const allQueriesLabel = "all queries"
-	statMapping := map[string]*StatGroup{
+
+	statMapping = statsMap{
 		allQueriesLabel: &StatGroup{},
 	}
 
@@ -312,7 +375,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups map[string]*StatGroup) {
+func fprintStats(w io.Writer, statGroups statsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {

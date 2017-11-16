@@ -70,9 +70,10 @@ var (
 	telemetryChanDone     chan struct{}
 	telemetrySrcAddr      string
 	telemetryTags         [][2]string
+	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
-	progressIntervalItems uint64
+	influxDBVersion       string
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -104,11 +105,11 @@ func init() {
 	flag.StringVar(&telemetryTagsCSV, "telemetry-tags", "", "Tag(s) for telemetry. Format: key0:val0,key1:val1,...")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
 	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 10, "Telemetry batch size (lines).")
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metric")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metric")
-	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metric")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metric")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k=v tags to send  alongside result metric")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
+	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 
 	flag.Parse()
 
@@ -173,12 +174,13 @@ func main() {
 		p := profile.Start(profile.MemProfile)
 		defer p.Stop()
 	}
+	// check that there are no pre-existing databases
+	// this also test db connection
+	existingDatabases, err := listDatabases(daemonUrls[0])
+	if err != nil {
+		log.Fatal(err)
+	}
 	if doLoad && doDBCreate {
-		// check that there are no pre-existing databases:
-		existingDatabases, err := listDatabases(daemonUrls[0])
-		if err != nil {
-			log.Fatal(err)
-		}
 
 		if len(existingDatabases) > 0 {
 			if doAbortOnExist {
@@ -271,25 +273,28 @@ func main() {
 
 	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 
-	reportParams := &report.LoadReportParams{
-		DBType:                 "InfluxDB",
-		ReportDatabaseName:     reportDatabase,
-		ReportHost:             reportHost,
-		ReportUser:             reportUser,
-		ReportPassword:         reportPassword,
-		ReportTags:             reportTags,
-		Hostname:               reportHostname,
-		ParamIsGzip:            useGzip,
-		ParamDestinationUrl:    csvDaemonUrls,
-		ParamReplicationFactor: replicationFactor,
-		ParamBatchSize:         batchSize,
-		ParamWorkers:           workers,
-		ParamItemLimit:         int(itemLimit),
-		ParamBackoff:           backoff,
-		ParamConsistency:       consistency,
-	}
 	if reportHost != "" {
-		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+		reportParams := &report.LoadReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "InfluxDB",
+				DBVersion:          influxDBVersion,
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     csvDaemonUrls,
+				Workers:            workers,
+				ItemLimit:          int(itemLimit),
+			},
+			IsGzip:            useGzip,
+			ReplicationFactor: replicationFactor,
+			BatchSize:         batchSize,
+			Backoff:           backoff,
+			Consistency:       consistency,
+		}
+		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
 
 		if err != nil {
 			log.Fatal(err)
@@ -484,6 +489,9 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listDatabases error: %s", err.Error())
 	}
+
+	influxDBVersion = resp.Header.Get("X-Influxdb-Version")
+
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
