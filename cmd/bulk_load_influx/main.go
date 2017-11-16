@@ -105,11 +105,11 @@ func init() {
 	flag.StringVar(&telemetryTagsCSV, "telemetry-tags", "", "Tag(s) for telemetry. Format: key0:val0,key1:val1,...")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
 	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 10, "Telemetry batch size (lines).")
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metric")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metric")
-	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metric")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metric")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metric")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
+	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 
 	flag.Parse()
 
