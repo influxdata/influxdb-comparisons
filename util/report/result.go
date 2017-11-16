@@ -6,7 +6,8 @@ import (
 	"fmt"
 )
 
-type LoadReportParams struct {
+// ReportParams is holder for common parameters across load and query reports
+type ReportParams struct {
 	DBType             string
 	DBVersion          string
 	ReportDatabaseName string
@@ -16,14 +17,22 @@ type LoadReportParams struct {
 	ReportTags         [][2]string
 	Hostname           string
 	DestinationUrl     string
+	Workers           int
+	ItemLimit         int
+}
+// LoadReportParams is holder of bulk load specific parameters
+type LoadReportParams struct {
+	ReportParams
 
 	IsGzip            bool
 	ReplicationFactor int
 	BatchSize         int
-	Workers           int
-	ItemLimit         int
 	Backoff           time.Duration
 	Consistency       string
+}
+// type QueryReportParams is holder of bulk query specific parameters
+type QueryReportParams struct {
+	ReportParams
 }
 
 func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate float64, inputSpeed float64, loadDuration time.Duration) error {

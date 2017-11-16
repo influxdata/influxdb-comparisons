@@ -275,20 +275,22 @@ func main() {
 
 	if reportHost != "" {
 		reportParams := &report.LoadReportParams{
-			DBType:             "InfluxDB",
-			DBVersion:          influxDBVersion,
-			ReportDatabaseName: reportDatabase,
-			ReportHost:         reportHost,
-			ReportUser:         reportUser,
-			ReportPassword:     reportPassword,
-			ReportTags:         reportTags,
-			Hostname:           reportHostname,
+			ReportParams: report.ReportParams {
+				DBType:             "InfluxDB",
+				DBVersion:          influxDBVersion,
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl: 	csvDaemonUrls,
+				Workers:            workers,
+				ItemLimit:          int(itemLimit),
+			},
 			IsGzip:             useGzip,
-			DestinationUrl:     csvDaemonUrls,
 			ReplicationFactor:  replicationFactor,
 			BatchSize:          batchSize,
-			Workers:            workers,
-			ItemLimit:          int(itemLimit),
 			Backoff:            backoff,
 			Consistency:        consistency,
 		}
