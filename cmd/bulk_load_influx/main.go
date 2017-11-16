@@ -70,9 +70,9 @@ var (
 	telemetryChanDone     chan struct{}
 	telemetrySrcAddr      string
 	telemetryTags         [][2]string
+	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
-	progressIntervalItems uint64
 	influxDBVersion       string
 )
 
@@ -275,7 +275,7 @@ func main() {
 
 	if reportHost != "" {
 		reportParams := &report.LoadReportParams{
-			ReportParams: report.ReportParams {
+			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
 				DBVersion:          influxDBVersion,
 				ReportDatabaseName: reportDatabase,
@@ -284,15 +284,15 @@ func main() {
 				ReportPassword:     reportPassword,
 				ReportTags:         reportTags,
 				Hostname:           reportHostname,
-				DestinationUrl: 	csvDaemonUrls,
+				DestinationUrl:     csvDaemonUrls,
 				Workers:            workers,
 				ItemLimit:          int(itemLimit),
 			},
-			IsGzip:             useGzip,
-			ReplicationFactor:  replicationFactor,
-			BatchSize:          batchSize,
-			Backoff:            backoff,
-			Consistency:        consistency,
+			IsGzip:            useGzip,
+			ReplicationFactor: replicationFactor,
+			BatchSize:         batchSize,
+			Backoff:           backoff,
+			Consistency:       consistency,
 		}
 		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
 
