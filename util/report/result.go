@@ -7,22 +7,23 @@ import (
 )
 
 type LoadReportParams struct {
-	DBType 	string
-	DBVersion string
+	DBType             string
+	DBVersion          string
 	ReportDatabaseName string
-	ReportHost string
-	ReportUser string
-	ReportPassword string
-	ReportTags [][2]string
-	Hostname	string
-	ParamIsGzip	bool
-	ParamDestinationUrl string
-	ParamReplicationFactor int
-	ParamBatchSize int
-	ParamWorkers	int
-	ParamItemLimit	int
-	ParamBackoff	time.Duration
-	ParamConsistency string
+	ReportHost         string
+	ReportUser         string
+	ReportPassword     string
+	ReportTags         [][2]string
+	Hostname           string
+	DestinationUrl     string
+
+	IsGzip            bool
+	ReplicationFactor int
+	BatchSize         int
+	Workers           int
+	ItemLimit         int
+	Backoff           time.Duration
+	Consistency       string
 }
 
 func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate float64, inputSpeed float64, loadDuration time.Duration) error {
@@ -44,23 +45,23 @@ func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate floa
 		p.AddTag(tagpair[0], tagpair[1])
 	}
 	p.AddTag("client_hostname", params.Hostname)
-	p.AddTag("server_url", params.ParamDestinationUrl)
+	p.AddTag("server_url", params.DestinationUrl)
 	if len(params.DBType) > 0  {
 		p.AddTag("database_type", params.DBType)
 	}
 	if len(params.DBVersion) > 0  {
 		p.AddTag("database_version", params.DBVersion)
 	}
-	p.AddTag("item_limit", strconv.Itoa(params.ParamItemLimit))
-	p.AddTag("gzip", strconv.FormatBool(params.ParamIsGzip))
-	p.AddTag("batch_size", strconv.Itoa(params.ParamBatchSize))
-	p.AddTag("workers", strconv.Itoa(params.ParamWorkers))
+	p.AddTag("item_limit", strconv.Itoa(params.ItemLimit))
+	p.AddTag("gzip", strconv.FormatBool(params.IsGzip))
+	p.AddTag("batch_size", strconv.Itoa(params.BatchSize))
+	p.AddTag("workers", strconv.Itoa(params.Workers))
 
-	p.AddTag("replication_factor", strconv.Itoa(params.ParamReplicationFactor))
-	p.AddTag("back_off", strconv.Itoa(int(params.ParamBackoff.Seconds())))
+	p.AddTag("replication_factor", strconv.Itoa(params.ReplicationFactor))
+	p.AddTag("back_off", strconv.Itoa(int(params.Backoff.Seconds())))
 
-	if len(params.ParamConsistency) > 0  {
-		p.AddTag("consistency", params.ParamConsistency)
+	if len(params.Consistency) > 0  {
+		p.AddTag("consistency", params.Consistency)
 	}
 
 
