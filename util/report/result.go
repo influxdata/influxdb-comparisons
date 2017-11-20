@@ -42,6 +42,9 @@ type QueryReportParams struct {
 func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate float64, inputSpeed float64, loadDuration time.Duration) error {
 
 	c, p, err := initReport(&params.ReportParams, "load_benchmarks")
+	if err != nil {
+		return err
+	}
 
 	p.AddTag("gzip", strconv.FormatBool(params.IsGzip))
 	p.AddTag("batch_size", strconv.Itoa(params.BatchSize))
@@ -109,6 +112,9 @@ func finishReport(c *Collector, p *Point) error {
 func ReportQueryResult(params *QueryReportParams, minQueryTime float64, meanQueryTime float64, maxQueryTime float64, totalQueries int64, queryDuration time.Duration) error {
 
 	c, p, err := initReport(&params.ReportParams, "query_benchmarks")
+	if err != nil {
+		return err
+	}
 
 	p.AddTag("burn_in", strconv.Itoa(int(params.BurnIn)))
 
