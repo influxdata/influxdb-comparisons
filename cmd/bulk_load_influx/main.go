@@ -23,6 +23,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/pkg/profile"
 	"github.com/valyala/fasthttp"
+	"strconv"
 )
 
 // TODO VH: This should be calculated from available simulation data
@@ -274,6 +275,11 @@ func main() {
 	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 
 	if reportHost != "" {
+		//append db specific tags to custom tags
+		reportTags = append(reportTags, [2]string{"replication_factor", strconv.Itoa(int(replicationFactor))})
+		reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
+		reportTags = append(reportTags, [2]string{"consistency", consistency})
+
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -288,11 +294,8 @@ func main() {
 				Workers:            workers,
 				ItemLimit:          int(itemLimit),
 			},
-			IsGzip:            useGzip,
-			ReplicationFactor: replicationFactor,
-			BatchSize:         batchSize,
-			Backoff:           backoff,
-			Consistency:       consistency,
+			IsGzip:    useGzip,
+			BatchSize: batchSize,
 		}
 		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
 

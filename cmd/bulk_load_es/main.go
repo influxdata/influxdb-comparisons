@@ -20,9 +20,13 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/valyala/fasthttp"
 	"github.com/influxdata/influxdb-comparisons/util/report"
+	"github.com/valyala/fasthttp"
+	"strconv"
 )
+
+// TODO VH: This should be calculated from available simulation data
+const ValuesPerMeasurement = 11.2222
 
 // Program option vars:
 var (
@@ -43,6 +47,11 @@ var (
 	telemetryBatchSize uint64
 	telemetryTagsCSV   string
 	telemetryBasicAuth string
+	reportDatabase     string
+	reportHost         string
+	reportUser         string
+	reportPassword     string
+	reportTagsCSV      string
 )
 
 // Global vars
@@ -55,6 +64,8 @@ var (
 	telemetryChanDone   chan struct{}
 	telemetryHostname   string
 	telemetryTags       [][2]string
+	reportTags          [][2]string
+	reportHostname      string
 )
 
 // Args parsing vars
@@ -162,6 +173,12 @@ func init() {
 	flag.StringVar(&telemetryBasicAuth, "telemetry-basic-auth", "", "basic auth (username:password) for telemetry.")
 	flag.StringVar(&telemetryTagsCSV, "telemetry-tags", "", "Tag(s) for telemetry. Format: key0:val0,key1:val1,...")
 
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
+	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+
 	flag.Parse()
 
 	daemonUrls = strings.Split(csvDaemonUrls, ",")
@@ -191,6 +208,28 @@ func init() {
 			}
 		}
 		fmt.Printf("telemetry tags: %v\n", telemetryTags)
+	}
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 
 	if _, ok := indexTemplateChoices[indexTemplateName]; !ok {
@@ -261,12 +300,42 @@ func main() {
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
+	valuesRate := itemsRate * ValuesPerMeasurement
+
 	if telemetryHost != "" {
 		close(telemetryChanPoints)
 		<-telemetryChanDone
 	}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean itemsRate %f items/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f items/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
+
+	if reportHost != "" {
+		//append db specific tags to custom tags
+		reportTags = append(reportTags, [2]string{"replicas", strconv.Itoa(int(numberOfReplicas))})
+		reportTags = append(reportTags, [2]string{"shards", strconv.Itoa(int(numberOfShards))})
+
+		reportParams := &report.LoadReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "ElasticSearch",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     csvDaemonUrls,
+				Workers:            workers,
+				ItemLimit:          int(itemLimit),
+			},
+			IsGzip:    useGzip,
+			BatchSize: batchSize,
+		}
+		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
