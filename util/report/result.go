@@ -25,11 +25,8 @@ type ReportParams struct {
 type LoadReportParams struct {
 	ReportParams
 
-	IsGzip            bool
-	ReplicationFactor int
-	BatchSize         int
-	Backoff           time.Duration
-	Consistency       string
+	IsGzip    bool
+	BatchSize int
 }
 
 // type QueryReportParams is holder of bulk query specific parameters
@@ -46,13 +43,6 @@ func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate floa
 
 	p.AddTag("gzip", strconv.FormatBool(params.IsGzip))
 	p.AddTag("batch_size", strconv.Itoa(params.BatchSize))
-
-	p.AddTag("replication_factor", strconv.Itoa(params.ReplicationFactor))
-	p.AddTag("back_off", strconv.Itoa(int(params.Backoff.Seconds())))
-
-	if len(params.Consistency) > 0 {
-		p.AddTag("consistency", params.Consistency)
-	}
 
 	p.AddInt64Field("total_items", totalItems)
 	p.AddFloat64Field("values_rate", valueRate)
