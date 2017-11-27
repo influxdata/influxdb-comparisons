@@ -313,6 +313,7 @@ func main() {
 		//append db specific tags to custom tags
 		reportTags = append(reportTags, [2]string{"replicas", strconv.Itoa(int(numberOfReplicas))})
 		reportTags = append(reportTags, [2]string{"shards", strconv.Itoa(int(numberOfShards))})
+		reportTags = append(reportTags, [2]string{"index-template", indexTemplateName})
 
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
