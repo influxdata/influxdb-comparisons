@@ -74,7 +74,6 @@ var (
 	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
-	influxDBVersion       string
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -283,7 +282,6 @@ func main() {
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
-				DBVersion:          influxDBVersion,
 				ReportDatabaseName: reportDatabase,
 				ReportHost:         reportHost,
 				ReportUser:         reportUser,
@@ -492,8 +490,6 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listDatabases error: %s", err.Error())
 	}
-
-	influxDBVersion = resp.Header.Get("X-Influxdb-Version")
 
 	defer resp.Body.Close()
 

@@ -9,7 +9,6 @@ import (
 // ReportParams is holder for common parameters across load and query reports
 type ReportParams struct {
 	DBType             string
-	DBVersion          string
 	ReportDatabaseName string
 	ReportHost         string
 	ReportUser         string
@@ -82,9 +81,6 @@ func initReport(params *ReportParams, measurement string) (*Collector, *Point, e
 	p.AddTag("server_url", params.DestinationUrl)
 	if len(params.DBType) > 0 {
 		p.AddTag("database_type", params.DBType)
-	}
-	if len(params.DBVersion) > 0 {
-		p.AddTag("database_version", params.DBVersion)
 	}
 	p.AddTag("item_limit", strconv.Itoa(params.ItemLimit))
 	p.AddTag("workers", strconv.Itoa(params.Workers))
