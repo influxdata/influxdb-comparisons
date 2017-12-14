@@ -14,11 +14,14 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
 	"os"
 	"runtime/pprof"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,6 +57,11 @@ var (
 	burnIn               uint64
 	printInterval        uint64
 	memProfile           string
+	reportDatabase       string
+	reportHost           string
+	reportUser           string
+	reportPassword       string
+	reportTagsCSV        string
 )
 
 // Helpers for choice-like flags:
@@ -66,14 +74,19 @@ var (
 
 // Global vars:
 var (
-	queryPool    sync.Pool
-	hlQueryChan  chan *HLQuery
-	statPool     sync.Pool
-	statChan     chan *Stat
-	workersGroup sync.WaitGroup
-	statGroup    sync.WaitGroup
-	aggrPlan     int
+	queryPool       sync.Pool
+	hlQueryChan     chan *HLQuery
+	statPool        sync.Pool
+	statChan        chan *Stat
+	workersGroup    sync.WaitGroup
+	statGroup       sync.WaitGroup
+	aggrPlan        int
+	reportTags      [][2]string
+	reportHostname  string
+	reportQueryStat StatGroup
 )
+
+type statsMap map[string]*StatGroup
 
 // Parse args:
 func init() {
@@ -89,6 +102,11 @@ func init() {
 	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
 	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print response bodies (for correctness checking) (default false).")
 	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
+	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
 
 	flag.Parse()
 
@@ -96,6 +114,28 @@ func init() {
 		log.Fatal("invalid aggregation plan")
 	}
 	aggrPlan = aggrPlanChoices[aggrPlanLabel]
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
+	}
 }
 
 func main() {
@@ -172,6 +212,35 @@ func main() {
 		}
 		pprof.WriteHeapProfile(f)
 		f.Close()
+	}
+
+	if reportHost != "" {
+		//append db specific tags to custom tags
+		reportTags = append(reportTags, [2]string{"aggregation_plan", aggrPlanLabel})
+		reportTags = append(reportTags, [2]string{"subquery_workers", strconv.Itoa(subQueryParallelism)})
+		reportTags = append(reportTags, [2]string{"request_timeout", strconv.Itoa(int(requestTimeout.Seconds()))})
+		reportTags = append(reportTags, [2]string{"client_side_index_timeout", strconv.Itoa(int(csiTimeout.Seconds()))})
+
+		reportParams := &report.QueryReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "Cassandra",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     daemonUrl,
+				Workers:            workers,
+				ItemLimit:          int(limit),
+			},
+			BurnIn: int64(burnIn),
+		}
+		err = report.ReportQueryResult(reportParams, reportQueryStat.Min, reportQueryStat.Mean, reportQueryStat.Max, reportQueryStat.Count, wallTook)
+
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -251,7 +320,7 @@ func processQueries(qc *HLQueryExecutor) {
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	statMapping := map[string]*StatGroup{}
+	statMapping := statsMap{}
 
 	i := uint64(0)
 	for stat := range statChan {
@@ -273,6 +342,7 @@ func processStats() {
 
 		if stat.IsActual {
 			i++
+			reportQueryStat.Push(stat.Value)
 		}
 
 		statPool.Put(stat)
@@ -301,7 +371,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups map[string]*StatGroup) {
+func fprintStats(w io.Writer, statGroups statsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {
