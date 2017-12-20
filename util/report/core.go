@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sync"
 
+	"crypto/tls"
 	"github.com/valyala/fasthttp"
 )
 
@@ -166,7 +167,7 @@ type Collector struct {
 	writeUri         string
 	baseUri          string
 	encodedBasicAuth string
-	dbName			 string
+	dbName           string
 
 	buf *bytes.Buffer
 }
@@ -181,11 +182,14 @@ func NewCollector(influxhost, dbname, basicAuth string) *Collector {
 		Points: make([]*Point, 0, 0),
 		client: &fasthttp.Client{
 			Name: "collector",
+			TLSConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
 		},
 		baseUri:          influxhost,
 		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
 		encodedBasicAuth: encodedBasicAuth,
-		dbName: dbname,
+		dbName:           dbname,
 	}
 }
 
