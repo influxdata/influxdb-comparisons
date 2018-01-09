@@ -147,7 +147,7 @@ func main() {
 	took := end.Sub(start)
 	rate := float64(itemsRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean rate %f/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean values rate %f/sec)\n", itemsRead, took.Seconds(), workers, rate)
 
 	if reportHost != "" {
 		reportParams := &report.LoadReportParams{
