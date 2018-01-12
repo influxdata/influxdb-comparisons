@@ -126,7 +126,7 @@ func main() {
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
-		reportTags = append(reportTags, [2]string{"write-timeout", strconv.Itoa(int(writeTimeout))})
+		reportTags = append(reportTags, [2]string{"write_timeout", strconv.Itoa(int(writeTimeout))})
 
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
