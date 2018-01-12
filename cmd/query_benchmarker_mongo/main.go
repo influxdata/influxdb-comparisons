@@ -19,7 +19,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/util/report"
 	"gopkg.in/mgo.v2"
+	"strings"
 )
 
 // Program option vars:
@@ -33,20 +35,31 @@ var (
 	printInterval        uint64
 	memProfile           string
 	doQueries            bool
+	reportDatabase       string
+	reportHost           string
+	reportUser           string
+	reportPassword       string
+	reportTagsCSV        string
 )
 
 // Global vars:
 var (
-	queryPool    sync.Pool
-	queryChan    chan *Query
-	statPool     sync.Pool
-	statChan     chan *Stat
-	workersGroup sync.WaitGroup
-	statGroup    sync.WaitGroup
+	queryPool      sync.Pool
+	queryChan      chan *Query
+	statPool       sync.Pool
+	statChan       chan *Stat
+	workersGroup   sync.WaitGroup
+	statGroup      sync.WaitGroup
+	statMapping    statsMap
+	reportTags     [][2]string
+	reportHostname string
 )
 
 type S []interface{}
 type M map[string]interface{}
+type statsMap map[string]*StatGroup
+
+const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
@@ -64,8 +77,35 @@ func init() {
 	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print JSON response bodies (for correctness checking) (default false).")
 	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
 	flag.BoolVar(&doQueries, "do-queries", true, "Whether to perform queries (useful for benchmarking the query executor.)")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
+	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
 
 	flag.Parse()
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
+	}
 }
 
 func main() {
@@ -138,6 +178,31 @@ func main() {
 		}
 		pprof.WriteHeapProfile(f)
 		f.Close()
+	}
+	if reportHost != "" {
+
+		reportParams := &report.QueryReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "MongoDB",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     daemonUrl,
+				Workers:            workers,
+				ItemLimit:          int(limit),
+			},
+			BurnIn: int64(burnIn),
+		}
+
+		stat := statMapping[allQueriesLabel]
+		err = report.ReportQueryResult(reportParams, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -224,8 +289,7 @@ func oneQuery(session *mgo.Session, q *Query) (float64, error) {
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	const allQueriesLabel = "all queries"
-	statMapping := map[string]*StatGroup{
+	statMapping = statsMap{
 		allQueriesLabel: &StatGroup{},
 	}
 
@@ -255,7 +319,7 @@ func processStats() {
 
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
-			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i - burnIn, workers)
+			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i-burnIn, workers)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -268,7 +332,7 @@ func processStats() {
 	}
 
 	// the final stats output goes to stdout:
-	_, err := fmt.Printf("run complete after %d queries with %d workers:\n", i - burnIn, workers)
+	_, err := fmt.Printf("run complete after %d queries with %d workers:\n", i-burnIn, workers)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -277,7 +341,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups map[string]*StatGroup) {
+func fprintStats(w io.Writer, statGroups statsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {
