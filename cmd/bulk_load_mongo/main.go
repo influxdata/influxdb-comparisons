@@ -150,16 +150,17 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead := scan(session, batchSize)
+	itemsRead, bytesRead := scan(session, batchSize)
 
 	<-inputDone
 	close(batchChan)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
-	rate := float64(itemsRead) / float64(took.Seconds())
+	itemRate := float64(itemsRead) / float64(took.Seconds())
+	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d values in %fsec with %d workers (mean values rate %f values/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	fmt.Printf("loaded %d values in %fsec with %d workers (mean values rate %f values/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemRate, bytesRate/(1<<20))
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
@@ -181,7 +182,7 @@ func main() {
 			IsGzip:    false,
 			BatchSize: batchSize,
 		}
-		err := report.ReportLoadResult(reportParams, itemsRead, rate, -1, took)
+		err := report.ReportLoadResult(reportParams, itemsRead, itemRate, bytesRate, took)
 
 		if err != nil {
 			log.Fatal(err)
@@ -190,9 +191,9 @@ func main() {
 }
 
 // scan reads length-delimited flatbuffers items from stdin.
-func scan(session *mgo.Session, itemsPerBatch int) int64 {
+func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
 	var n int
-	var itemsRead int64
+	var itemsRead, bytesRead int64
 	r := bufio.NewReaderSize(os.Stdin, 32<<20)
 
 	start := time.Now()
@@ -240,6 +241,7 @@ func scan(session *mgo.Session, itemsPerBatch int) int64 {
 		n++
 
 		if n >= batchSize {
+			bytesRead += int64(len(itemBuf))
 			batchChan <- batch
 			n = 0
 			batch = batchPool.Get().(*Batch)
@@ -261,7 +263,7 @@ func scan(session *mgo.Session, itemsPerBatch int) int64 {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	return itemsRead
+	return itemsRead, bytesRead
 }
 
 // processBatches reads byte buffers from batchChan, interprets them and writes
