@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"strings"
 )
 
 // ReportParams is holder for common parameters across load and query reports
@@ -78,7 +79,7 @@ func initReport(params *ReportParams, measurement string) (*Collector, *Point, e
 	}
 
 	p.AddTag("client_hostname", params.Hostname)
-	p.AddTag("server_url", params.DestinationUrl)
+	p.AddTag("server_url", strings.Replace(params.DestinationUrl, ",", "\\,", -1))
 	if len(params.DBType) > 0 {
 		p.AddTag("database_type", params.DBType)
 	}
