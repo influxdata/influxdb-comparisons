@@ -288,7 +288,7 @@ func main() {
 				ReportPassword:     reportPassword,
 				ReportTags:         reportTags,
 				Hostname:           reportHostname,
-				DestinationUrl:     csvDaemonUrls,
+				DestinationUrl:     strings.Join(daemonUrls,"\\,"),
 				Workers:            workers,
 				ItemLimit:          int(itemLimit),
 			},
