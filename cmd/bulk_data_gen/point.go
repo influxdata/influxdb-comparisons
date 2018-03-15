@@ -31,8 +31,7 @@ type Point struct {
 
 // Using these literals prevents the slices from escaping to the heap, saving
 // a few micros per call:
-var (
-)
+var ()
 
 // scratchBufPool helps reuse serialization scratch buffers.
 var scratchBufPool = &sync.Pool{
@@ -404,6 +403,54 @@ func (p *Point) SerializeOpenTSDBBulk(w io.Writer) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// SerializeTimeScale writes Point data to the given writer, conforming to the
+// TimeScale query format.
+//
+// This function writes output that looks like:
+// INSERT INTO <tablename> (time,<tag_name list>,<field_name list>') VALUES (<timestamp in nanoseconds>, <tag values list>, <field values>)
+//
+// For example:
+// INSERT INTO all_series (series_id, timestamp_ns, value) VALUES ('cpu,hostname=host_01#user#2016-01-01', 12345, 42.1)\n
+func (p *Point) SerializeTimeScale(w io.Writer) (err error) {
+	timestampNanos := p.Timestamp.UTC().UnixNano()
+	buf := make([]byte, 0, 4096)
+	buf = append(buf, []byte("INSERT INTO ")...)
+	buf = append(buf, []byte(p.MeasurementName)...)
+	buf = append(buf, []byte(" (time")...)
+
+	for i := 0; i < len(p.TagKeys); i++ {
+		buf = append(buf, ","...)
+		buf = append(buf, p.TagKeys[i]...)
+	}
+
+	for i := 0; i < len(p.FieldKeys); i++ {
+		buf = append(buf, ","...)
+		buf = append(buf, p.FieldKeys[i]...)
+	}
+	buf = append(buf, []byte(") VALUES (")...)
+	buf = append(buf, []byte(fmt.Sprintf("%d", timestampNanos))...)
+
+	for i := 0; i < len(p.TagValues); i++ {
+		buf = append(buf, ",'"...)
+		buf = append(buf, p.TagValues[i]...)
+		buf = append(buf, byte('\''))
+	}
+
+	for i := 0; i < len(p.FieldValues); i++ {
+		buf = append(buf, ","...)
+		v := p.FieldValues[i]
+		buf = fastFormatAppend(v, buf)
+	}
+	buf = append(buf, []byte(");\n")...)
+
+	_, err = w.Write(buf)
+	if err != nil {
+		return err
 	}
 
 	return nil
