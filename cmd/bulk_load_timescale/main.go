@@ -97,24 +97,6 @@ func main() {
 	if doLoad && doDbCreate {
 		createDatabase(daemonUrl)
 	}
-	var conn *pgx.Conn
-	var err error
-
-	if doLoad {
-		hostPort := strings.Split(daemonUrl, ":")
-		port, _ := strconv.Atoi(hostPort[1])
-		conn, err = pgx.Connect(pgx.ConnConfig{
-			Host:     hostPort[0],
-			Port:     uint16(port),
-			User:     "postgres",
-			Database: "measurements",
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer conn.Close()
-
-	}
 
 	bufPool = sync.Pool{
 		New: func() interface{} {
@@ -127,6 +109,23 @@ func main() {
 
 	for i := 0; i < workers; i++ {
 		workersGroup.Add(1)
+		var conn *pgx.Conn
+		var err error
+		if doLoad {
+			hostPort := strings.Split(daemonUrl, ":")
+			port, _ := strconv.Atoi(hostPort[1])
+			conn, err = pgx.Connect(pgx.ConnConfig{
+				Host:     hostPort[0],
+				Port:     uint16(port),
+				User:     "postgres",
+				Database: "measurements",
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer conn.Close()
+
+		}
 		go processBatches(conn)
 	}
 
