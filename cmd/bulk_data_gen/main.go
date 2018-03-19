@@ -25,7 +25,7 @@ import (
 )
 
 // Output data format choices:
-var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb"}
+var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb", "timescaledb-bin"}
 
 // Use case choices:
 var useCaseChoices = []string{"devops", "iot"}
@@ -141,16 +141,20 @@ func main() {
 		serializer = (*Point).SerializeOpenTSDBBulk
 	case "timescaledb":
 		serializer = (*Point).SerializeTimeScale
+	case "timescaledb-bin":
+		serializer = (*Point).SerializeTimeScaleBin
 	default:
 		panic("unreachable")
 	}
 
 	var currentInterleavedGroup uint = 0
 
+	t := time.Now()
 	point := MakeUsablePoint()
+	n := 0
 	for !sim.Finished() {
 		sim.Next(point)
-
+		n++
 		// in the default case this is always true
 		if currentInterleavedGroup == interleavedGenerationGroupID {
 			//println("printing")
@@ -169,6 +173,8 @@ func main() {
 	}
 
 	err := out.Flush()
+	dur := time.Now().Sub(t)
+	log.Printf("Written %d points, took %0f seconds\n", n, dur.Seconds())
 	if err != nil {
 		log.Fatal(err.Error())
 	}

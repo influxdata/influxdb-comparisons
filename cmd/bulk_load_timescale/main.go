@@ -19,6 +19,9 @@ import (
 	"github.com/jackc/pgx"
 
 	"bytes"
+	"encoding/gob"
+	"golang.org/x/tools/go/gcimporter15/testdata"
+	"io"
 )
 
 // TODO VH: This should be calculated from available simulation data
@@ -38,24 +41,47 @@ var (
 	reportTagsCSV  string
 	psUser         string
 	psPassword     string
+	file           string
 )
 
 // Global vars
 var (
 	bufPool        sync.Pool
 	batchChan      chan *bytes.Buffer
+	batchChanBin   chan []FlatPoint
 	inputDone      chan struct{}
 	workersGroup   sync.WaitGroup
 	reportTags     [][2]string
 	reportHostname string
+	format         string
+	reader         *os.File
 )
+
+// Output data format choices:
+var formatChoices = []string{"timescaledb", "timescaledb-bin"}
+
+var processes = map[string]struct {
+	scan    func(int, io.Reader) (int64, int64)
+	process func(*pgx.Conn)
+}{
+	formatChoices[0]: {scan, processBatches},
+	formatChoices[1]: {scanBin, processBatchesBin},
+}
+
+type FlatPoint struct {
+	MeasurementName string
+	Columns         []string
+	Values          []interface{}
+}
 
 // Parse args:
 func init() {
 	flag.StringVar(&daemonUrl, "url", "localhost:5432", "TimeScaleDB URL.")
-	flag.StringVar(&reportUser, "user", "postgres", "Postgresql User")
-	flag.StringVar(&reportPassword, "password", "", "User password for Host to send result metrics")
+	flag.StringVar(&psUser, "user", "postgres", "Postgresql user")
+	flag.StringVar(&psPassword, "password", "", "Postgresql password")
+	flag.StringVar(&file, "file", "", "Input file")
 
+	flag.StringVar(&format, "format", formatChoices[0], "Input data format. One of: "+strings.Join(formatChoices, ","))
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 
@@ -70,6 +96,9 @@ func init() {
 
 	flag.Parse()
 
+	if _, ok := processes[format]; !ok {
+		log.Fatal("Invalid format choice '", format, "'. Available are: ", strings.Join(formatChoices, ","))
+	}
 	if reportHost != "" {
 		fmt.Printf("results report destination: %v\n", reportHost)
 		fmt.Printf("results report database: %v\n", reportDatabase)
@@ -91,6 +120,18 @@ func init() {
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
+
+	if file != "" {
+		if f, err := os.Open(file); err == nil {
+			reader = f
+		} else {
+			log.Fatalf("Error opening %s: %v\n", file, err)
+		}
+	}
+	if reader == nil {
+		reader = os.Stdin
+	}
+
 }
 
 func main() {
@@ -105,7 +146,10 @@ func main() {
 	}
 
 	batchChan = make(chan *bytes.Buffer, workers)
+	batchChanBin = make(chan []FlatPoint, workers)
 	inputDone = make(chan struct{})
+
+	procs := processes[format]
 
 	for i := 0; i < workers; i++ {
 		workersGroup.Add(1)
@@ -117,7 +161,8 @@ func main() {
 			conn, err = pgx.Connect(pgx.ConnConfig{
 				Host:     hostPort[0],
 				Port:     uint16(port),
-				User:     "postgres",
+				User:     psUser,
+				Password: psPassword,
 				Database: "measurements",
 			})
 			if err != nil {
@@ -126,14 +171,15 @@ func main() {
 			defer conn.Close()
 
 		}
-		go processBatches(conn)
+		go procs.process(conn)
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead := scan(batchSize)
+	itemsRead, bytesRead := procs.scan(batchSize, reader)
 
 	<-inputDone
 	close(batchChan)
+	close(batchChanBin)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
@@ -143,6 +189,9 @@ func main() {
 	valuesRate := itemsRate * ValuesPerMeasurement
 
 	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
+	if file != "" {
+		reader.Close()
+	}
 
 	if reportHost != "" {
 
@@ -170,15 +219,15 @@ func main() {
 	}
 }
 
-// scan reads lines from stdin. It expects input in the Cassandra CQL format.
-func scan(itemsPerBatch int) (int64, int64) {
+// scan reads lines from stdin. It expects input in the postgresql sql format.
+func scan(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	var n int
 	var linesRead, bytesRead int64
 
 	buff := bufPool.Get().(*bytes.Buffer)
 	newline := []byte("\n")
 
-	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
+	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
 	for scanner.Scan() {
 		linesRead++
 
@@ -212,6 +261,58 @@ func scan(itemsPerBatch int) (int64, int64) {
 	return itemsRead, bytesRead
 }
 
+// scan reads data from stdin. It expects gop encoded points
+func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
+
+	var n int
+	var itemsRead, bytesRead int64
+	var err error
+	var lastMeasurement string
+
+	dec := gob.NewDecoder(reader)
+	buff := make([]FlatPoint, 0, itemsPerBatch)
+
+	for err == nil {
+		var p FlatPoint
+		err = dec.Decode(&p)
+
+		//log.Printf("Decoded %d point\n",itemsRead+1)
+		newMeasurement := itemsRead > 1 && p.MeasurementName != lastMeasurement
+		if !newMeasurement {
+			buff = append(buff, p)
+			itemsRead++
+			n++
+		}
+		if n > 0 && (n >= itemsPerBatch || newMeasurement) {
+			batchChanBin <- buff
+			n = 0
+			buff = nil
+			buff = make([]FlatPoint, 0, itemsPerBatch)
+		}
+		if newMeasurement {
+			buff = append(buff, p)
+			itemsRead++
+			n++
+		}
+		lastMeasurement = p.MeasurementName
+	}
+
+	if err != nil && err != io.EOF {
+		log.Fatalf("Error reading input after %d items: %s", itemsRead, err.Error())
+	}
+
+	// Finished reading input, make sure last batch goes out.
+	if n > 0 {
+		batchChanBin <- buff
+		buff = nil
+	}
+
+	// Closing inputDone signals to the application that we've read everything and can now shut down.
+	close(inputDone)
+
+	return itemsRead, bytesRead
+}
+
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func processBatches(conn *pgx.Conn) {
 	for batch := range batchChan {
@@ -228,6 +329,56 @@ func processBatches(conn *pgx.Conn) {
 		// Return the batch buffer to the pool.
 		batch.Reset()
 		bufPool.Put(batch)
+	}
+	workersGroup.Done()
+}
+
+// CopyFromPoint is implementation of the interface CopyFromSource  used by *Conn.CopyFrom as the source for copy data.
+// It wraps arrays of FlatPoints
+type CopyFromPoint struct {
+	i      int
+	points []FlatPoint
+	n      int
+}
+
+func NewCopyFromPoint(points []FlatPoint) *CopyFromPoint {
+	//log.Printf("NewCopyFromPoint\n")
+	cp := &CopyFromPoint{}
+	cp.points = points
+	cp.i = 0
+	cp.n = len(points)
+	return cp
+}
+
+func (c *CopyFromPoint) Next() bool {
+	c.i++
+	return c.i < c.n
+}
+
+func (c *CopyFromPoint) Values() ([]interface{}, error) {
+	//log.Printf("Copying %dth values\n",c.i)
+	return c.points[c.i].Values, nil
+}
+
+func (c *CopyFromPoint) Err() error {
+	return nil
+}
+
+// processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
+func processBatchesBin(conn *pgx.Conn) {
+	n := 0
+	for batch := range batchChanBin {
+		if !doLoad {
+			continue
+		}
+		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
+		// Write the batch.
+		_, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, NewCopyFromPoint(batch))
+		//log.Println("CopyFrom End")
+		if err != nil {
+			log.Fatalf("Error writing: %s\n", err.Error())
+		}
+		n++
 	}
 	workersGroup.Done()
 }
@@ -265,7 +416,7 @@ func createDatabase(daemon_url string) {
 	conn, err := pgx.Connect(pgx.ConnConfig{
 		Host: hostPort[0],
 		Port: uint16(port),
-		User: "postgres",
+		User: psUser,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -278,7 +429,7 @@ func createDatabase(daemon_url string) {
 	conn, err = pgx.Connect(pgx.ConnConfig{
 		Host:     hostPort[0],
 		Port:     uint16(port),
-		User:     "postgres",
+		User:     psUser,
 		Database: "measurements",
 	})
 

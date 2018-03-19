@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,8 @@ type Point struct {
 	FieldKeys       [][]byte
 	FieldValues     []interface{}
 	Timestamp       *time.Time
+
+	encoder *gob.Encoder
 }
 
 // Using these literals prevents the slices from escaping to the heap, saving
@@ -409,7 +412,7 @@ func (p *Point) SerializeOpenTSDBBulk(w io.Writer) error {
 }
 
 // SerializeTimeScale writes Point data to the given writer, conforming to the
-// TimeScale query format.
+// TimeScale insert format.
 //
 // This function writes output that looks like:
 // INSERT INTO <tablename> (time,<tag_name list>,<field_name list>') VALUES (<timestamp in nanoseconds>, <tag values list>, <field values>)
@@ -449,6 +452,56 @@ func (p *Point) SerializeTimeScale(w io.Writer) (err error) {
 	buf = append(buf, []byte(");\n")...)
 
 	_, err = w.Write(buf)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type FlatPoint struct {
+	MeasurementName string
+	Columns         []string
+	Values          []interface{}
+}
+
+// SerializeTimeScaleBin writes Point data to the given writer, conforming to the
+// Binary GOP encoded format to write
+//
+//
+func (p *Point) SerializeTimeScaleBin(w io.Writer) (err error) {
+
+	var f FlatPoint
+	f.MeasurementName = string(p.MeasurementName)
+	// Write the batch.
+	f.Columns = make([]string, len(p.TagKeys)+len(p.FieldKeys)+1)
+	c := 0
+	for i := 0; i < len(p.TagKeys); i++ {
+		f.Columns[c] = string(p.TagKeys[i])
+		c++
+	}
+	for i := 0; i < len(p.FieldKeys); i++ {
+		f.Columns[c] = string(p.FieldKeys[i])
+		c++
+	}
+	f.Columns[c] = "time"
+
+	c = 0
+	f.Values = make([]interface{}, len(p.TagValues)+len(p.FieldValues)+1)
+	for i := 0; i < len(p.TagValues); i++ {
+		f.Values[c] = string(p.TagValues[i])
+		c++
+	}
+	for i := 0; i < len(p.FieldValues); i++ {
+		f.Values[c] = p.FieldValues[i]
+		c++
+	}
+	f.Values[c] = p.Timestamp.UnixNano()
+
+	if p.encoder == nil {
+		p.encoder = gob.NewEncoder(w)
+	}
+	err = p.encoder.Encode(f)
 	if err != nil {
 		return err
 	}
