@@ -363,6 +363,10 @@ func (c *CopyFromPoint) Err() error {
 	return nil
 }
 
+func (c *CopyFromPoint) Position() int {
+	return c.i
+}
+
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func processBatchesBin(conn *pgx.Conn) {
 	n := 0
@@ -372,10 +376,11 @@ func processBatchesBin(conn *pgx.Conn) {
 		}
 		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
 		// Write the batch.
-		_, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, NewCopyFromPoint(batch))
+		c := NewCopyFromPoint(batch)
+		_, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
-			log.Fatalf("Error writing: %s\n", err.Error())
+			log.Fatalf("Error writing %d batch of '%s' in position %d: %s\n", n, batch[0].MeasurementName, c.Position(), err.Error())
 		}
 		n++
 	}
