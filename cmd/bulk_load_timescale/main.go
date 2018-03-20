@@ -267,13 +267,14 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	var itemsRead, bytesRead int64
 	var err error
 	var lastMeasurement string
+	var p FlatPoint
 
 	dec := gob.NewDecoder(reader)
 	buff := make([]FlatPoint, 0, itemsPerBatch)
 
-	for err == nil {
-		var p FlatPoint
-		err = dec.Decode(&p)
+	err = dec.Decode(&p)
+
+	for ; err == nil; err = dec.Decode(&p) {
 
 		//log.Printf("Decoded %d point\n",itemsRead+1)
 		newMeasurement := itemsRead > 1 && p.MeasurementName != lastMeasurement
@@ -294,6 +295,7 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 			n++
 		}
 		lastMeasurement = p.MeasurementName
+		p = FlatPoint{}
 	}
 
 	if err != nil && err != io.EOF {
@@ -380,7 +382,7 @@ func processBatchesBin(conn *pgx.Conn) {
 		_, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
-			log.Fatalf("Error writing %d batch of '%s' in position %d: %s\n", n, batch[0].MeasurementName, c.Position(), err.Error())
+			log.Fatalf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
 		}
 		n++
 	}
