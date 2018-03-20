@@ -20,7 +20,6 @@ import (
 
 	"bytes"
 	"encoding/gob"
-	"golang.org/x/tools/go/gcimporter15/testdata"
 	"io"
 )
 
