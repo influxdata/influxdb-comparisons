@@ -173,10 +173,10 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		go func() {
-			procReads[i] = procs.process(conn)
+		go func(ind int) {
+			procReads[ind] = procs.process(conn)
 			defer conn.Close()
-		}()
+		}(i)
 	}
 
 	start := time.Now()
