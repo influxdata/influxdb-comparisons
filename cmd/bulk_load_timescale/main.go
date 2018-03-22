@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx"
 
 	"bytes"
+	"context"
 	"encoding/gob"
 	"io"
 )
@@ -48,6 +49,7 @@ var (
 	bufPool        sync.Pool
 	batchChan      chan *bytes.Buffer
 	batchChanBin   chan []FlatPoint
+	batchChanBatch chan []string
 	inputDone      chan struct{}
 	workersGroup   sync.WaitGroup
 	reportTags     [][2]string
@@ -57,14 +59,15 @@ var (
 )
 
 // Output data format choices:
-var formatChoices = []string{"timescaledb", "timescaledb-bin"}
+var formatChoices = []string{"timescaledb", "timescaledb-bin", "timescaledb-batch"}
 
 var processes = map[string]struct {
 	scan    func(int, io.Reader) (int64, int64)
-	process func(*pgx.Conn)
+	process func(*pgx.Conn) int64
 }{
 	formatChoices[0]: {scan, processBatches},
 	formatChoices[1]: {scanBin, processBatchesBin},
+	formatChoices[2]: {scanBatch, processBatchesBatch},
 }
 
 type FlatPoint struct {
@@ -260,6 +263,44 @@ func scan(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	return itemsRead, bytesRead
 }
 
+// scan reads lines from stdin. It expects input in the postgresql sql format.
+func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64) {
+	var n int
+	var linesRead, bytesRead int64
+
+	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
+	var buff = make([]string, 0, itemsPerBatch)
+	for scanner.Scan() {
+		linesRead++
+		line := scanner.Text()
+		buff = append(buff, line)
+		bytesRead += int64(len(line))
+		n++
+		if n >= itemsPerBatch {
+			batchChanBatch <- buff
+			buff = make([]string, 0, itemsPerBatch)
+			n = 0
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading input: %s", err.Error())
+	}
+
+	// Finished reading input, make sure last batch goes out.
+	if n > 0 {
+		batchChanBatch <- buff
+	}
+
+	// Closing inputDone signals to the application that we've read everything and can now shut down.
+	close(inputDone)
+
+	// The timescaledb format uses 1 line per item:
+	itemsRead := linesRead
+
+	return itemsRead, bytesRead
+}
+
 // scan reads data from stdin. It expects gop encoded points
 func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 
@@ -315,7 +356,8 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(conn *pgx.Conn) {
+func processBatches(conn *pgx.Conn) int64 {
+	var total int64
 	for batch := range batchChan {
 		if !doLoad {
 			continue
@@ -330,8 +372,46 @@ func processBatches(conn *pgx.Conn) {
 		// Return the batch buffer to the pool.
 		batch.Reset()
 		bufPool.Put(batch)
+		total += int64(batch.Len())
 	}
 	workersGroup.Done()
+	return total
+}
+
+// processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
+func processBatchesBatch(conn *pgx.Conn) int64 {
+	var total int64
+	var batches int64
+	for batch := range batchChanBatch {
+		if !doLoad {
+			continue
+		}
+
+		// Write the batch.
+		sqlBatch := conn.BeginBatch()
+		for _, line := range batch {
+			sqlBatch.Queue(line, nil, nil, nil)
+		}
+
+		err := sqlBatch.Send(context.Background(), nil)
+
+		if err != nil {
+			log.Fatalf("Error writing: %s\n", err.Error())
+		}
+
+		for i := 0; i < len(batch); i++ {
+			_, err = sqlBatch.ExecResults()
+			if err != nil {
+				log.Fatalf("Error line %d of batch %d: %s\n", i, batch, err.Error())
+			}
+		}
+		sqlBatch.Close()
+		// Return the batch buffer to the pool.
+		total += int64(len(batch))
+		batches++
+	}
+	workersGroup.Done()
+	return total
 }
 
 // CopyFromPoint is implementation of the interface CopyFromSource  used by *Conn.CopyFrom as the source for copy data.
@@ -370,8 +450,9 @@ func (c *CopyFromPoint) Position() int {
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatchesBin(conn *pgx.Conn) {
+func processBatchesBin(conn *pgx.Conn) int64 {
 	n := 0
+	var total int64
 	for batch := range batchChanBin {
 		if !doLoad {
 			continue
@@ -384,9 +465,11 @@ func processBatchesBin(conn *pgx.Conn) {
 		if err != nil {
 			log.Fatalf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
 		}
+		total += int64(len(batch))
 		n++
 	}
 	workersGroup.Done()
+	return total
 }
 
 const createDatabaseSql = "create database measurements;"
