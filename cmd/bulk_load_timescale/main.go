@@ -149,10 +149,12 @@ func main() {
 
 	batchChan = make(chan *bytes.Buffer, workers)
 	batchChanBin = make(chan []FlatPoint, workers)
+	batchChanBatch = make(chan []string, workers)
 	inputDone = make(chan struct{})
 
 	procs := processes[format]
 
+	procReads := make([]int64, workers)
 	for i := 0; i < workers; i++ {
 		workersGroup.Add(1)
 		var conn *pgx.Conn
@@ -170,10 +172,11 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			defer conn.Close()
-
 		}
-		go procs.process(conn)
+		go func() {
+			procReads[i] = procs.process(conn)
+			defer conn.Close()
+		}()
 	}
 
 	start := time.Now()
@@ -182,6 +185,7 @@ func main() {
 	<-inputDone
 	close(batchChan)
 	close(batchChanBin)
+	close(batchChanBatch)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
@@ -189,8 +193,12 @@ func main() {
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
 	valuesRate := itemsRate * ValuesPerMeasurement
+	var totalProcRead int64
+	for _, val := range procReads {
+		totalProcRead += val
+	}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items (%d in workers) in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, totalProcRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 	if file != "" {
 		reader.Close()
 	}
