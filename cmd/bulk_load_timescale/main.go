@@ -174,8 +174,8 @@ func main() {
 			}
 		}
 		go func(ind int) {
-			procReads[ind] = procs.process(conn)
 			defer conn.Close()
+			procReads[ind] = procs.process(conn)
 		}(i)
 	}
 
