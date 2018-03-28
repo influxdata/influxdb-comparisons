@@ -42,6 +42,7 @@ var (
 	reportTagsCSV        string
 	psUser               string
 	psPassword           string
+	batchSize            int
 )
 
 // Global vars:
@@ -70,6 +71,7 @@ func init() {
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
+	flag.IntVar(&batchSize, "batch-size", 1, "Batch size (input items).")
 	flag.Uint64Var(&burnIn, "burn-in", 0, "Number of queries to ignore before collecting statistics.")
 	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
 	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print JSON response bodies (for correctness checking) (default false).")
@@ -153,11 +155,13 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			defer conn.Close()
 
 		}
 		workersGroup.Add(1)
-		go processQueries(conn)
+		go func() {
+			defer conn.Close()
+			processQueries(conn)
+		}()
 	}
 
 	// Read in jobs, closing the job channel when done:
