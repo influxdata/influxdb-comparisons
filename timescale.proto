@@ -1,0 +1,23 @@
+syntax = "proto3";
+package timescale_serialization;
+
+message FlatPoint {
+  string measurementName = 1;
+  repeated string columns = 2;
+
+  enum ValueType {
+    INTEGER = 0;
+    FLOAT = 1;
+    STRING = 2;
+  }
+
+  message FlatPointValue {
+    ValueType type = 1;
+    int64 intVal = 2;
+    double doubleVal = 3;
+    string stringVal = 4;
+  }
+
+  repeated FlatPointValue values = 3;
+}
+//protoc --gofast_out=timescale_serializaition timescale.proto

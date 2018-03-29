@@ -14,6 +14,8 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 
 	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
+	"github.com/influxdata/influxdb-comparisons/timescale_serializaition"
+	"log"
 )
 
 // Point wraps a single data point. It stores database-agnostic data
@@ -459,19 +461,13 @@ func (p *Point) SerializeTimeScale(w io.Writer) (err error) {
 	return nil
 }
 
-type FlatPoint struct {
-	MeasurementName string
-	Columns         []string
-	Values          []interface{}
-}
-
 // SerializeTimeScaleBin writes Point data to the given writer, conforming to the
 // Binary GOP encoded format to write
 //
 //
 func (p *Point) SerializeTimeScaleBin(w io.Writer) (err error) {
 
-	var f FlatPoint
+	var f timescale_serialization.FlatPoint
 	f.MeasurementName = string(p.MeasurementName)
 	// Write the batch.
 	f.Columns = make([]string, len(p.TagKeys)+len(p.FieldKeys)+1)
@@ -487,25 +483,49 @@ func (p *Point) SerializeTimeScaleBin(w io.Writer) (err error) {
 	f.Columns[c] = "time"
 
 	c = 0
-	f.Values = make([]interface{}, len(p.TagValues)+len(p.FieldValues)+1)
+	f.Values = make([]*timescale_serialization.FlatPoint_FlatPointValue, len(p.TagValues)+len(p.FieldValues)+1)
 	for i := 0; i < len(p.TagValues); i++ {
-		f.Values[c] = string(p.TagValues[i])
+		v := timescale_serialization.FlatPoint_FlatPointValue{}
+		v.Type = timescale_serialization.FlatPoint_STRING
+		v.StringVal = string(p.TagValues[i])
+		f.Values[c] = &v
 		c++
 	}
 	for i := 0; i < len(p.FieldValues); i++ {
-		f.Values[c] = p.FieldValues[i]
+		v := timescale_serialization.FlatPoint_FlatPointValue{}
+		switch p.FieldValues[i].(type) {
+		case int64:
+			v.Type = timescale_serialization.FlatPoint_INTEGER
+			v.IntVal = p.FieldValues[i].(int64)
+			break
+		case int:
+			v.Type = timescale_serialization.FlatPoint_INTEGER
+			v.IntVal = int64(p.FieldValues[i].(int))
+			break
+		case float64:
+			v.Type = timescale_serialization.FlatPoint_FLOAT
+			v.DoubleVal = p.FieldValues[i].(float64)
+			break
+		case string:
+			v.Type = timescale_serialization.FlatPoint_STRING
+			v.StringVal = p.FieldValues[i].(string)
+			break
+		default:
+			panic(fmt.Sprintf("logic error in timescale serialization, %s", reflect.TypeOf(v)))
+		}
+		f.Values[c] = &v
 		c++
 	}
-	f.Values[c] = p.Timestamp.UnixNano()
+	timeVal := timescale_serialization.FlatPoint_FlatPointValue{}
+	timeVal.Type = timescale_serialization.FlatPoint_INTEGER
+	timeVal.IntVal = p.Timestamp.UnixNano()
+	f.Values[c] = &timeVal
 
-	if p.encoder == nil {
-		p.encoder = gob.NewEncoder(w)
-	}
-	err = p.encoder.Encode(f)
+	out, err := f.Marshal()
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
-
+	w.Write(out)
 	return nil
 }
 
