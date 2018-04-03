@@ -347,6 +347,9 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 		if err != nil {
 			log.Fatalf("cannot unmarshall %d item: %v\n", itemsRead, err)
 		}
+
+		bytesRead += int64(size) + 8
+
 		p.MeasurementName = tsfp.MeasurementName
 		p.Columns = tsfp.Columns
 		p.Values = make([]interface{}, len(tsfp.Values))
@@ -510,10 +513,13 @@ func processBatchesBin(conn *pgx.Conn) int64 {
 		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
 		// Write the batch.
 		c := NewCopyFromPoint(batch)
-		_, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
+		rows, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
 			log.Fatalf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
+		}
+		if rows != len(batch) {
+			log.Printf("Problem writing of %d batch: Written only %d rows of %d", n, rows, len(batch))
 		}
 		total += int64(len(batch))
 		n++
