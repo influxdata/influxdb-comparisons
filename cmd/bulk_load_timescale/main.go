@@ -43,6 +43,7 @@ var (
 	psUser         string
 	psPassword     string
 	file           string
+	chunkDuration  time.Duration
 )
 
 // Global vars
@@ -79,7 +80,7 @@ type FlatPoint struct {
 
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:5432", "TimeScaleDB URL.")
+	flag.StringVar(&daemonUrl, "url", "localhost:5432", "Timescale DB URL.")
 	flag.StringVar(&psUser, "user", "postgres", "Postgresql user")
 	flag.StringVar(&psPassword, "password", "", "Postgresql password")
 	flag.StringVar(&file, "file", "", "Input file")
@@ -90,6 +91,7 @@ func init() {
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 	flag.BoolVar(&doDbCreate, "do-db-create", true, "Whether to create database. Set this flag to false to write data to existing database")
+	flag.DurationVar(&chunkDuration, "chunk-interval", time.Hour*24, "Timescale chunk interval")
 
 	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
 	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
@@ -553,15 +555,15 @@ var createTableSql = []string{
 }
 
 var createHypertableSql = []string{
-	"select create_hypertable('cpu','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('diskio','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('disk','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('kernel','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('mem','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('Net','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('nginx','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('postgresl','time', chunk_time_interval => 86400000000000);",
-	"select create_hypertable('redis','time', chunk_time_interval => 86400000000000);",
+	"select create_hypertable('cpu','time', chunk_time_interval => %d);",
+	"select create_hypertable('diskio','time', chunk_time_interval => %d);",
+	"select create_hypertable('disk','time', chunk_time_interval => %d);",
+	"select create_hypertable('kernel','time', chunk_time_interval => %d);",
+	"select create_hypertable('mem','time', chunk_time_interval => %d);",
+	"select create_hypertable('Net','time', chunk_time_interval => %d);",
+	"select create_hypertable('nginx','time', chunk_time_interval => %d);",
+	"select create_hypertable('postgresl','time', chunk_time_interval => %d);",
+	"select create_hypertable('redis','time', chunk_time_interval => %d);",
 }
 
 var createIndexSql = []string{
@@ -614,7 +616,7 @@ func createDatabase(daemon_url string) {
 		}
 	}
 	for _, sql := range createHypertableSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(fmt.Sprintf(sql, chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)
 		}
