@@ -177,7 +177,9 @@ func main() {
 			}
 		}
 		go func(ind int, connection *pgx.Conn) {
-			defer connection.Close()
+			if doLoad {
+				defer connection.Close()
+			}
 			procReads[ind] = procs.process(connection)
 		}(i, conn)
 	}
