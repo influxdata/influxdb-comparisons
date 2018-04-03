@@ -525,6 +525,8 @@ func (p *Point) SerializeTimeScaleBin(w io.Writer) (err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	s := uint64(len(out))
+	binary.Write(w, binary.LittleEndian, s)
 	w.Write(out)
 	return nil
 }

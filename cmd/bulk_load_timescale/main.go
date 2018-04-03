@@ -20,7 +20,8 @@ import (
 
 	"bytes"
 	"context"
-	"encoding/gob"
+	"encoding/binary"
+	"github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 	"io"
 )
 
@@ -317,13 +318,53 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	var err error
 	var lastMeasurement string
 	var p FlatPoint
+	var tsfp timescale_serialization.FlatPoint
+	var size uint64
 
-	dec := gob.NewDecoder(reader)
 	buff := make([]FlatPoint, 0, itemsPerBatch)
+	byteBuff := make([]byte, 100*1024)
 
-	err = dec.Decode(&p)
+	for {
+		err = binary.Read(reader, binary.LittleEndian, &size)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("cannot read size of %d item: %v\n", itemsRead, err)
+		}
 
-	for ; err == nil; err = dec.Decode(&p) {
+		if uint64(cap(byteBuff)) < size {
+			byteBuff = make([]byte, size)
+		}
+		r, err := reader.Read(byteBuff[:size])
+		if err != nil && err != io.EOF {
+			log.Fatalf("cannot read %d item: %v\n", itemsRead, err)
+		}
+		if uint64(r) != size {
+			log.Fatalf("cannot read %d item: read %d, expected %d\n", itemsRead, r, size)
+		}
+		err = tsfp.Unmarshal(byteBuff[:size])
+		if err != nil {
+			log.Fatalf("cannot unmarshall %d item: %v\n", itemsRead, err)
+		}
+		p.MeasurementName = tsfp.MeasurementName
+		p.Columns = tsfp.Columns
+		p.Values = make([]interface{}, len(tsfp.Values))
+		for i, f := range tsfp.Values {
+			switch f.Type {
+			case timescale_serialization.FlatPoint_FLOAT:
+				p.Values[i] = f.DoubleVal
+				break
+			case timescale_serialization.FlatPoint_INTEGER:
+				p.Values[i] = f.IntVal
+				break
+			case timescale_serialization.FlatPoint_STRING:
+				p.Values[i] = f.StringVal
+				break
+			default:
+				log.Fatalf("invalid type of %d item: %d", itemsRead, f.Type)
+			}
+		}
 
 		//log.Printf("Decoded %d point\n",itemsRead+1)
 		newMeasurement := itemsRead > 1 && p.MeasurementName != lastMeasurement
@@ -345,6 +386,7 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 		}
 		lastMeasurement = p.MeasurementName
 		p = FlatPoint{}
+		tsfp = timescale_serialization.FlatPoint{}
 	}
 
 	if err != nil && err != io.EOF {
