@@ -176,10 +176,10 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		go func(ind int) {
-			defer conn.Close()
-			procReads[ind] = procs.process(conn)
-		}(i)
+		go func(ind int, connection *pgx.Conn) {
+			defer connection.Close()
+			procReads[ind] = procs.process(connection)
+		}(i, conn)
 	}
 
 	start := time.Now()
