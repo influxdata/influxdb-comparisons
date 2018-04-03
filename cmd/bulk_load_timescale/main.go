@@ -336,12 +336,21 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 		if uint64(cap(byteBuff)) < size {
 			byteBuff = make([]byte, size)
 		}
-		r, err := reader.Read(byteBuff[:size])
-		if err != nil && err != io.EOF {
-			log.Fatalf("cannot read %d item: %v\n", itemsRead, err)
+
+		bytesPerItem := uint64(0)
+		for i := 10; i > 0; i-- {
+			r, err := reader.Read(byteBuff[bytesPerItem:size])
+			if err != nil && err != io.EOF {
+				log.Fatalf("cannot read %d item: %v\n", itemsRead, err)
+			}
+			bytesPerItem += uint64(r)
+			if bytesPerItem == size {
+				break
+			}
+
 		}
-		if uint64(r) != size {
-			log.Fatalf("cannot read %d item: read %d, expected %d\n", itemsRead, r, size)
+		if bytesPerItem != size {
+			log.Fatalf("cannot read %d item: read %d, expected %d\n", itemsRead, bytesPerItem, size)
 		}
 		err = tsfp.Unmarshal(byteBuff[:size])
 		if err != nil {
