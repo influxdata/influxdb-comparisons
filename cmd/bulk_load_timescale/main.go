@@ -57,7 +57,7 @@ var (
 	reportTags     [][2]string
 	reportHostname string
 	format         string
-	reader         *os.File
+	sourceReader   *os.File
 )
 
 // Output data format choices:
@@ -128,13 +128,13 @@ func init() {
 
 	if file != "" {
 		if f, err := os.Open(file); err == nil {
-			reader = f
+			sourceReader = f
 		} else {
 			log.Fatalf("Error opening %s: %v\n", file, err)
 		}
 	}
-	if reader == nil {
-		reader = os.Stdin
+	if sourceReader == nil {
+		sourceReader = os.Stdin
 	}
 
 }
@@ -185,7 +185,7 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead := procs.scan(batchSize, reader)
+	itemsRead, bytesRead := procs.scan(batchSize, sourceReader)
 
 	<-inputDone
 	close(batchChan)
@@ -205,7 +205,7 @@ func main() {
 
 	fmt.Printf("loaded %d items (%d in workers) in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, totalProcRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 	if file != "" {
-		reader.Close()
+		sourceReader.Close()
 	}
 
 	if reportHost != "" {
@@ -315,7 +315,7 @@ func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64) {
 }
 
 // scan reads data from stdin. It expects gop encoded points
-func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
+func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64) {
 
 	var n int
 	var itemsRead, bytesRead int64
@@ -327,7 +327,7 @@ func scanBin(itemsPerBatch int, reader io.Reader) (int64, int64) {
 
 	buff := make([]FlatPoint, 0, itemsPerBatch)
 	byteBuff := make([]byte, 100*1024)
-
+	reader := bufio.NewReaderSize(origReader, 4*1024*1024)
 	for {
 		err = binary.Read(reader, binary.LittleEndian, &size)
 		if err == io.EOF {
