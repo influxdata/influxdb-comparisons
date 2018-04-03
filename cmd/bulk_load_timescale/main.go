@@ -479,7 +479,7 @@ func NewCopyFromPoint(points []FlatPoint) *CopyFromPoint {
 	//log.Printf("NewCopyFromPoint\n")
 	cp := &CopyFromPoint{}
 	cp.points = points
-	cp.i = 0
+	cp.i = -1
 	cp.n = len(points)
 	return cp
 }
