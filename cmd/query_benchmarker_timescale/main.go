@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/jackc/pgx"
 	"strconv"
@@ -48,7 +49,7 @@ var (
 // Global vars:
 var (
 	queryPool      sync.Pool
-	queryChan      chan *Query
+	queryChan      chan []*Query
 	statPool       sync.Pool
 	statChan       chan *Stat
 	workersGroup   sync.WaitGroup
@@ -131,7 +132,7 @@ func main() {
 	}
 
 	// Make data and control channels:
-	queryChan = make(chan *Query, workers)
+	queryChan = make(chan []*Query, workers)
 	statChan = make(chan *Stat, workers)
 
 	// Launch the stats processor:
@@ -223,9 +224,11 @@ func main() {
 
 // scan reads encoded Queries and places them onto the workqueue.
 func scan(r io.Reader) {
-	dec := gob.NewDecoder(r)
+	dec := gob.NewDecoder(bufio.NewReaderSize(r, 4*1024*1014))
 
 	n := int64(0)
+	b := int64(0)
+	batch := make([]*Query, 0, batchSize)
 	for {
 		if limit >= 0 && n >= limit {
 			break
@@ -241,25 +244,46 @@ func scan(r io.Reader) {
 		}
 
 		q.ID = n
+		batch = append(batch, q)
 
-		queryChan <- q
-
+		b++
 		n++
 
+		if b == int64(batchSize) {
+			queryChan <- batch
+			batch = batch[:0]
+			b = 0
+		}
+	}
+	//make sure remaining batch goes out
+	if b > 0 {
+		queryChan <- batch
 	}
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
 func processQueries(conn *pgx.Conn) {
-	for q := range queryChan {
-		lag, err := oneQuery(conn, q)
+	var lag float64
+	var err error
+	for qb := range queryChan {
+		if len(qb) == 1 {
+			lag, err = oneQuery(conn, qb[0])
+			stat := statPool.Get().(*Stat)
+			stat.Init(qb[0].HumanLabel, lag)
+			statChan <- stat
+			queryPool.Put(qb[0])
+		} else {
+			lag, err = batchQueries(conn, qb)
+			lagPerQuery := lag / float64(len(qb))
+			for _, q := range qb {
+				stat := statPool.Get().(*Stat)
+				stat.Init(q.HumanLabel, lagPerQuery)
+				statChan <- stat
+				queryPool.Put(q)
+			}
+		}
 
-		stat := statPool.Get().(*Stat)
-		stat.Init(q.HumanLabel, lag)
-		statChan <- stat
-
-		queryPool.Put(q)
 		if err != nil {
 			log.Fatalf("Error during request: %s\n", err.Error())
 		}
@@ -289,6 +313,47 @@ func oneQuery(conn *pgx.Conn, q *Query) (float64, error) {
 		rows.Close()
 	}
 
+	took := time.Now().UnixNano() - start
+	lag := float64(took) / 1e6 // milliseconds
+	return lag, err
+}
+
+func batchQueries(conn *pgx.Conn, batch []*Query) (float64, error) {
+	var timeCol int64
+	var valCol float64
+	start := time.Now().UnixNano()
+	sqlBatch := conn.BeginBatch()
+	for _, query := range batch {
+		sqlBatch.Queue(string(query.QuerySQL), nil, nil, []int16{pgx.BinaryFormatCode, pgx.BinaryFormatCode})
+	}
+
+	err := sqlBatch.Send(context.Background(), nil)
+
+	if err != nil {
+		log.Fatalf("Error writing: %s\n", err.Error())
+	}
+
+	for i := 0; i < len(batch); i++ {
+		rows, err := sqlBatch.QueryResults()
+		if err != nil {
+			log.Fatalf("Error line %d of batch: %s\n", i, err.Error())
+		}
+		for rows.Next() {
+			if prettyPrintResponses {
+				err = rows.Scan(&timeCol, &valCol)
+				if err != nil {
+					log.Fatalf("Error scan row of query %d of batch: %s\n", i, err.Error())
+				}
+				t := time.Unix(0, timeCol).UTC()
+				fmt.Printf("ID %d: %s, %f\n", batch[i].ID, t, valCol)
+			}
+		}
+
+		rows.Close()
+
+	}
+	sqlBatch.Close()
+	// Return the batch buffer to the pool.
 	took := time.Now().UnixNano() - start
 	lag := float64(took) / 1e6 // milliseconds
 	return lag, err
