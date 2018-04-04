@@ -569,7 +569,7 @@ var createHypertableSql = []string{
 }
 
 var createIndexSql = []string{
-	"CREATE index cpu_hostname_index on cpu(hostname);",
+	"CREATE index cpu_hostname_index on cpu(hostname, time DESC);",
 }
 
 func createDatabase(daemon_url string) {
