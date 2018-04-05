@@ -20,23 +20,33 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
+	"github.com/influxdata/influxdb-comparisons/util/report"
+	"strconv"
+	"strings"
 )
 
 // Program option vars:
 var (
-	daemonUrl    string
-	workers      int
-	batchSize    int
-	limit        int64
-	doLoad       bool
-	writeTimeout time.Duration
+	daemonUrl      string
+	workers        int
+	batchSize      int
+	limit          int64
+	doLoad         bool
+	writeTimeout   time.Duration
+	reportDatabase string
+	reportHost     string
+	reportUser     string
+	reportPassword string
+	reportTagsCSV  string
 )
 
 // Global vars
 var (
-	batchChan    chan *Batch
-	inputDone    chan struct{}
-	workersGroup sync.WaitGroup
+	batchChan      chan *Batch
+	inputDone      chan struct{}
+	workersGroup   sync.WaitGroup
+	reportTags     [][2]string
+	reportHostname string
 )
 
 // Magic database constants
@@ -77,10 +87,38 @@ func init() {
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
+	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+
 	flag.Parse()
 
 	for i := 0; i < workers*batchSize; i++ {
 		bufPool.Put(bufPool.New())
+	}
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 }
 
@@ -112,22 +150,50 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead := scan(session, batchSize)
+	itemsRead, bytesRead := scan(session, batchSize)
 
 	<-inputDone
 	close(batchChan)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
-	rate := float64(itemsRead) / float64(took.Seconds())
+	itemRate := float64(itemsRead) / float64(took.Seconds())
+	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d values in %fsec with %d workers (mean rate %f values/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	fmt.Printf("loaded %d values in %fsec with %d workers (mean values rate %f values/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemRate, bytesRate/(1<<20))
+
+	if reportHost != "" {
+		//append db specific tags to custom tags
+		reportTags = append(reportTags, [2]string{"write_timeout", strconv.Itoa(int(writeTimeout))})
+
+		reportParams := &report.LoadReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "MongoDB",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     daemonUrl,
+				Workers:            workers,
+				ItemLimit:          int(limit),
+			},
+			IsGzip:    false,
+			BatchSize: batchSize,
+		}
+		err := report.ReportLoadResult(reportParams, itemsRead, itemRate, bytesRate, took)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // scan reads length-delimited flatbuffers items from stdin.
-func scan(session *mgo.Session, itemsPerBatch int) int64 {
+func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
 	var n int
-	var itemsRead int64
+	var itemsRead, bytesRead int64
 	r := bufio.NewReaderSize(os.Stdin, 32<<20)
 
 	start := time.Now()
@@ -175,6 +241,7 @@ func scan(session *mgo.Session, itemsPerBatch int) int64 {
 		n++
 
 		if n >= batchSize {
+			bytesRead += int64(len(itemBuf))
 			batchChan <- batch
 			n = 0
 			batch = batchPool.Get().(*Batch)
@@ -196,7 +263,7 @@ func scan(session *mgo.Session, itemsPerBatch int) int64 {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	return itemsRead
+	return itemsRead, bytesRead
 }
 
 // processBatches reads byte buffers from batchChan, interprets them and writes

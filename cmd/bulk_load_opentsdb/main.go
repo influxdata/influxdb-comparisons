@@ -15,19 +15,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/klauspost/compress/gzip"
 	"github.com/pkg/profile"
 )
 
 // Program option vars:
 var (
-	csvDaemonUrls string
-	daemonUrls    []string
-	workers       int
-	batchSize     int
-	backoff       time.Duration
-	doLoad        bool
-	memprofile    bool
+	csvDaemonUrls  string
+	daemonUrls     []string
+	workers        int
+	batchSize      int
+	backoff        time.Duration
+	doLoad         bool
+	memprofile     bool
+	reportDatabase string
+	reportHost     string
+	reportUser     string
+	reportPassword string
+	reportTagsCSV  string
 )
 
 // Global vars
@@ -38,6 +44,8 @@ var (
 	workersGroup   sync.WaitGroup
 	backingOffChan chan bool
 	backingOffDone chan struct{}
+	reportTags     [][2]string
+	reportHostname string
 )
 
 // Parse args:
@@ -48,7 +56,11 @@ func init() {
 	//flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 	flag.BoolVar(&memprofile, "memprofile", false, "Whether to write a memprofile (file automatically determined).")
-
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
+	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 	flag.Parse()
 
 	daemonUrls = strings.Split(csvDaemonUrls, ",")
@@ -56,6 +68,28 @@ func init() {
 		log.Fatal("missing 'urls' flag")
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
+	}
 }
 
 func main() {
@@ -113,7 +147,31 @@ func main() {
 	took := end.Sub(start)
 	rate := float64(itemsRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean rate %f/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean values rate %f/sec)\n", itemsRead, took.Seconds(), workers, rate)
+
+	if reportHost != "" {
+		reportParams := &report.LoadReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "OpenTSDB",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     daemonUrls[0],
+				Workers:            workers,
+				ItemLimit:          -1,
+			},
+			IsGzip:    true,
+			BatchSize: batchSize,
+		}
+		err := report.ReportLoadResult(reportParams, itemsRead, rate, -1, took)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // scan reads one line at a time from stdin.

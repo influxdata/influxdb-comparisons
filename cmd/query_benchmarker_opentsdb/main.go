@@ -12,6 +12,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
 	"os"
@@ -30,19 +31,32 @@ var (
 	debug                int
 	prettyPrintResponses bool
 	limit                int64
-	printInterval        int64
+	burnIn               uint64
+	printInterval        uint64
 	memProfile           string
+	reportDatabase       string
+	reportHost           string
+	reportUser           string
+	reportPassword       string
+	reportTagsCSV        string
 )
 
 // Global vars:
 var (
-	queryPool    sync.Pool
-	queryChan    chan *Query
-	statPool     sync.Pool
-	statChan     chan *Stat
-	workersGroup sync.WaitGroup
-	statGroup    sync.WaitGroup
+	queryPool      sync.Pool
+	queryChan      chan *Query
+	statPool       sync.Pool
+	statChan       chan *Stat
+	workersGroup   sync.WaitGroup
+	statGroup      sync.WaitGroup
+	statMapping    statsMap
+	reportTags     [][2]string
+	reportHostname string
 )
+
+type statsMap map[string]*StatGroup
+
+const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
@@ -50,9 +64,15 @@ func init() {
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
-	flag.Int64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
+	flag.Uint64Var(&burnIn, "burn-in", 0, "Number of queries to ignore before collecting statistics.")
+	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
 	flag.BoolVar(&prettyPrintResponses, "print-filtered-responses", false, "Pretty print filtered JSON response bodies (for correctness checking) (default false).")
 	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
+	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
+	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
+	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
+	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
+	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
 
 	flag.Parse()
 
@@ -61,6 +81,28 @@ func init() {
 		log.Fatal("missing 'urls' flag")
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+
+	if reportHost != "" {
+		fmt.Printf("results report destination: %v\n", reportHost)
+		fmt.Printf("results report database: %v\n", reportDatabase)
+
+		var err error
+		reportHostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("os.Hostname() error: %s", err.Error())
+		}
+		fmt.Printf("hostname for results report: %v\n", reportHostname)
+
+		if reportTagsCSV != "" {
+			pairs := strings.Split(reportTagsCSV, ",")
+			for _, pair := range pairs {
+				fields := strings.SplitN(pair, ":", 2)
+				tagpair := [2]string{fields[0], fields[1]}
+				reportTags = append(reportTags, tagpair)
+			}
+		}
+		fmt.Printf("results report tags: %v\n", reportTags)
+	}
 }
 
 func main() {
@@ -132,6 +174,32 @@ func main() {
 		pprof.WriteHeapProfile(f)
 		f.Close()
 	}
+
+	if reportHost != "" {
+
+		reportParams := &report.QueryReportParams{
+			ReportParams: report.ReportParams{
+				DBType:             "Cassandra",
+				ReportDatabaseName: reportDatabase,
+				ReportHost:         reportHost,
+				ReportUser:         reportUser,
+				ReportPassword:     reportPassword,
+				ReportTags:         reportTags,
+				Hostname:           reportHostname,
+				DestinationUrl:     csvDaemonUrls,
+				Workers:            workers,
+				ItemLimit:          int(limit),
+			},
+			BurnIn: int64(burnIn),
+		}
+
+		stat := statMapping[allQueriesLabel]
+		err = report.ReportQueryResult(reportParams, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // scan reads encoded Queries and places them onto the workqueue.
@@ -187,13 +255,23 @@ func processQueries(w *HTTPClient) {
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	const allQueriesLabel = "all queries"
-	statMapping := map[string]*StatGroup{
+	statMapping = statsMap{
 		allQueriesLabel: &StatGroup{},
 	}
 
-	i := int64(0)
+	i := uint64(0)
 	for stat := range statChan {
+		if i < burnIn {
+			i++
+			statPool.Put(stat)
+			continue
+		} else if i == burnIn && burnIn > 0 {
+			_, err := fmt.Fprintf(os.Stderr, "burn-in complete after %d queries with %d workers\n", burnIn, workers)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		if _, ok := statMapping[string(stat.Label)]; !ok {
 			statMapping[string(stat.Label)] = &StatGroup{}
 		}
@@ -206,7 +284,7 @@ func processStats() {
 		i++
 
 		// print stats to stderr (if printInterval is greater than zero):
-		if printInterval > 0 && i > 0 && i%printInterval == 0 && (i < limit || limit < 0) {
+		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
 			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i, workers)
 			if err != nil {
 				log.Fatal(err)
@@ -229,7 +307,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups map[string]*StatGroup) {
+func fprintStats(w io.Writer, statGroups statsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {

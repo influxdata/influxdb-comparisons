@@ -1,9 +1,8 @@
-// query_benchmarker_mongo speed tests Mongo using requests from stdin.
+// query_benchmarker_timescale speed tests TimescaleDB using requests from stdin.
 //
 // It reads encoded Query objects from stdin, and makes concurrent requests
-// to the provided Mongo endpoint using mgo.
+// to the provided TimescaleDB endpoint using jackc/pgx.
 //
-// TODO(rw): On my machine, this only decodes 700k/sec messages from stdin.
 package main
 
 import (
@@ -19,8 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/influxdata/influxdb-comparisons/util/report"
-	"gopkg.in/mgo.v2"
+	"github.com/jackc/pgx"
+	"strconv"
 	"strings"
 )
 
@@ -40,12 +41,15 @@ var (
 	reportUser           string
 	reportPassword       string
 	reportTagsCSV        string
+	psUser               string
+	psPassword           string
+	batchSize            int
 )
 
 // Global vars:
 var (
 	queryPool      sync.Pool
-	queryChan      chan *Query
+	queryChan      chan []*Query
 	statPool       sync.Pool
 	statChan       chan *Stat
 	workersGroup   sync.WaitGroup
@@ -55,23 +59,20 @@ var (
 	reportHostname string
 )
 
-type S []interface{}
-type M map[string]interface{}
 type statsMap map[string]*StatGroup
 
 const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
-	// needed for deserializing the mongo query from gob
-	gob.Register(S{})
-	gob.Register(M{})
-	gob.Register([]M{})
 
-	flag.StringVar(&daemonUrl, "url", "mongodb://localhost:27017", "Daemon URL.")
+	flag.StringVar(&daemonUrl, "url", "localhost:5432", "Daemon URL.")
+	flag.StringVar(&psUser, "user", "postgres", "Postgresql user")
+	flag.StringVar(&psPassword, "password", "", "Postgresql password")
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
+	flag.IntVar(&batchSize, "batch-size", 1, "Batch size (input items).")
 	flag.Uint64Var(&burnIn, "burn-in", 0, "Number of queries to ignore before collecting statistics.")
 	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
 	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print JSON response bodies (for correctness checking) (default false).")
@@ -109,13 +110,14 @@ func init() {
 }
 
 func main() {
+	var err error
 	// Make pools to minimize heap usage:
 	queryPool = sync.Pool{
 		New: func() interface{} {
 			return &Query{
 				HumanLabel:       make([]byte, 0, 1024),
 				HumanDescription: make([]byte, 0, 1024),
-				BsonDoc:          nil,
+				QuerySQL:         make([]byte, 0, 1024),
 			}
 		},
 	}
@@ -130,23 +132,37 @@ func main() {
 	}
 
 	// Make data and control channels:
-	queryChan = make(chan *Query, workers)
+	queryChan = make(chan []*Query, workers)
 	statChan = make(chan *Stat, workers)
 
 	// Launch the stats processor:
 	statGroup.Add(1)
 	go processStats()
 
-	// Establish the connection pool:
-	session, err := mgo.Dial(daemonUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	hostPort := strings.Split(daemonUrl, ":")
+	port, _ := strconv.Atoi(hostPort[1])
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
+		var conn *pgx.Conn
+
+		if doQueries {
+			conn, err = pgx.Connect(pgx.ConnConfig{
+				Host:     hostPort[0],
+				Port:     uint16(port),
+				User:     psUser,
+				Password: psPassword,
+				Database: "measurements",
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		}
 		workersGroup.Add(1)
-		go processQueries(session)
+		go func() {
+			defer conn.Close()
+			processQueries(conn)
+		}()
 	}
 
 	// Read in jobs, closing the job channel when done:
@@ -183,7 +199,7 @@ func main() {
 
 		reportParams := &report.QueryReportParams{
 			ReportParams: report.ReportParams{
-				DBType:             "MongoDB",
+				DBType:             "TimescaleDB",
 				ReportDatabaseName: reportDatabase,
 				ReportHost:         reportHost,
 				ReportUser:         reportUser,
@@ -208,9 +224,11 @@ func main() {
 
 // scan reads encoded Queries and places them onto the workqueue.
 func scan(r io.Reader) {
-	dec := gob.NewDecoder(r)
+	dec := gob.NewDecoder(bufio.NewReaderSize(r, 4*1024*1014))
 
 	n := int64(0)
+	b := int64(0)
+	batch := make([]*Query, 0, batchSize)
 	for {
 		if limit >= 0 && n >= limit {
 			break
@@ -226,25 +244,46 @@ func scan(r io.Reader) {
 		}
 
 		q.ID = n
+		batch = append(batch, q)
 
-		queryChan <- q
-
+		b++
 		n++
 
+		if b == int64(batchSize) {
+			queryChan <- batch
+			batch = batch[:0]
+			b = 0
+		}
+	}
+	//make sure remaining batch goes out
+	if b > 0 {
+		queryChan <- batch
 	}
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(session *mgo.Session) {
-	for q := range queryChan {
-		lag, err := oneQuery(session, q)
+func processQueries(conn *pgx.Conn) {
+	var lag float64
+	var err error
+	for qb := range queryChan {
+		if len(qb) == 1 {
+			lag, err = oneQuery(conn, qb[0])
+			stat := statPool.Get().(*Stat)
+			stat.Init(qb[0].HumanLabel, lag)
+			statChan <- stat
+			queryPool.Put(qb[0])
+		} else {
+			lag, err = batchQueries(conn, qb)
+			lagPerQuery := lag / float64(len(qb))
+			for _, q := range qb {
+				stat := statPool.Get().(*Stat)
+				stat.Init(q.HumanLabel, lagPerQuery)
+				statChan <- stat
+				queryPool.Put(q)
+			}
+		}
 
-		stat := statPool.Get().(*Stat)
-		stat.Init(q.HumanLabel, lag)
-		statChan <- stat
-
-		queryPool.Put(q)
 		if err != nil {
 			log.Fatalf("Error during request: %s\n", err.Error())
 		}
@@ -253,34 +292,68 @@ func processQueries(session *mgo.Session) {
 }
 
 // oneQuery executes on Query
-func oneQuery(session *mgo.Session, q *Query) (float64, error) {
+func oneQuery(conn *pgx.Conn, q *Query) (float64, error) {
 	start := time.Now().UnixNano()
 	var err error
+	var timeCol int64
+	var valCol float64
 	if doQueries {
-		db := session.DB(unsafeBytesToString(q.DatabaseName))
-		//fmt.Printf("db: %#v\n", db)
-		collection := db.C(unsafeBytesToString(q.CollectionName))
-		//fmt.Printf("collection: %#v\n", collection)
-		pipe := collection.Pipe(q.BsonDoc)
-		iter := pipe.Iter()
-		type Result struct {
-			Id struct {
-				TimeBucket int64 `bson:"time_bucket"`
-			} `bson:"_id"`
-			Value float64 `bson:"max_value"`
+		rows, err := conn.Query(string(q.QuerySQL))
+		if err != nil {
+			return 0, err
 		}
-
-		result := Result{}
-		for iter.Next(&result) {
+		for rows.Next() {
 			if prettyPrintResponses {
-				t := time.Unix(0, result.Id.TimeBucket).UTC()
-				fmt.Printf("ID %d: %s, %f\n", q.ID, t, result.Value)
+				rows.Scan(&timeCol, &valCol)
+				t := time.Unix(0, timeCol).UTC()
+				fmt.Printf("ID %d: %s, %f\n", q.ID, t, valCol)
 			}
 		}
 
-		err = iter.Close()
+		rows.Close()
 	}
 
+	took := time.Now().UnixNano() - start
+	lag := float64(took) / 1e6 // milliseconds
+	return lag, err
+}
+
+func batchQueries(conn *pgx.Conn, batch []*Query) (float64, error) {
+	var timeCol int64
+	var valCol float64
+	start := time.Now().UnixNano()
+	sqlBatch := conn.BeginBatch()
+	for _, query := range batch {
+		sqlBatch.Queue(string(query.QuerySQL), nil, nil, []int16{pgx.BinaryFormatCode, pgx.BinaryFormatCode})
+	}
+
+	err := sqlBatch.Send(context.Background(), nil)
+
+	if err != nil {
+		log.Fatalf("Error writing: %s\n", err.Error())
+	}
+
+	for i := 0; i < len(batch); i++ {
+		rows, err := sqlBatch.QueryResults()
+		if err != nil {
+			log.Fatalf("Error line %d of batch: %s\n", i, err.Error())
+		}
+		for rows.Next() {
+			if prettyPrintResponses {
+				err = rows.Scan(&timeCol, &valCol)
+				if err != nil {
+					log.Fatalf("Error scan row of query %d of batch: %s\n", i, err.Error())
+				}
+				t := time.Unix(0, timeCol).UTC()
+				fmt.Printf("ID %d: %s, %f\n", batch[i].ID, t, valCol)
+			}
+		}
+
+		rows.Close()
+
+	}
+	sqlBatch.Close()
+	// Return the batch buffer to the pool.
 	took := time.Now().UnixNano() - start
 	lag := float64(took) / 1e6 // milliseconds
 	return lag, err
