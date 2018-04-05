@@ -27,6 +27,7 @@ import (
 
 // TODO VH: This should be calculated from available simulation data
 const ValuesPerMeasurement = 11.2222
+const DatabaseName = "benchmark_db"
 
 // Program option vars:
 var (
@@ -179,7 +180,7 @@ func main() {
 				Port:     uint16(port),
 				User:     psUser,
 				Password: psPassword,
-				Database: "measurements",
+				Database: DatabaseName,
 			})
 			if err != nil {
 				log.Fatal(err)
@@ -547,7 +548,7 @@ func processBatchesBin(conn *pgx.Conn) int64 {
 	return total
 }
 
-const createDatabaseSql = "create database measurements;"
+const createDatabaseSql = "create database " + DatabaseName + ";"
 const createExtensionSql = "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
 
 var createTableSql = []string{
@@ -598,7 +599,7 @@ func createDatabase(daemon_url string) {
 		Host:     hostPort[0],
 		Port:     uint16(port),
 		User:     psUser,
-		Database: "measurements",
+		Database: DatabaseName,
 	})
 
 	defer func() {
