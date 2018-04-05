@@ -30,20 +30,21 @@ const ValuesPerMeasurement = 11.2222
 
 // Program option vars:
 var (
-	daemonUrl      string
-	workers        int
-	batchSize      int
-	doLoad         bool
-	doDbCreate     bool
-	reportDatabase string
-	reportHost     string
-	reportUser     string
-	reportPassword string
-	reportTagsCSV  string
-	psUser         string
-	psPassword     string
-	file           string
-	chunkDuration  time.Duration
+	daemonUrl           string
+	workers             int
+	batchSize           int
+	doLoad              bool
+	doDbCreate          bool
+	reportDatabase      string
+	reportHost          string
+	reportUser          string
+	reportPassword      string
+	reportTagsCSV       string
+	psUser              string
+	psPassword          string
+	file                string
+	chunkDuration       time.Duration
+	usePostgresBatching bool
 )
 
 // Global vars
@@ -61,15 +62,15 @@ var (
 )
 
 // Output data format choices:
-var formatChoices = []string{"timescaledb", "timescaledb-bin", "timescaledb-batch"}
+var formatChoices = []string{"timescaledb-sql", "timescaledb-copyFrom"}
 
 var processes = map[string]struct {
 	scan    func(int, io.Reader) (int64, int64)
 	process func(*pgx.Conn) int64
 }{
-	formatChoices[0]: {scan, processBatches},
-	formatChoices[1]: {scanBin, processBatchesBin},
-	formatChoices[2]: {scanBatch, processBatchesBatch},
+	formatChoices[0]:           {scan, processBatches},
+	formatChoices[1]:           {scanBin, processBatchesBin},
+	"timescaledb-sql-batching": {scanBatch, processBatchesBatch},
 }
 
 type FlatPoint struct {
@@ -85,9 +86,10 @@ func init() {
 	flag.StringVar(&psPassword, "password", "", "Postgresql password")
 	flag.StringVar(&file, "file", "", "Input file")
 
-	flag.StringVar(&format, "format", formatChoices[0], "Input data format. One of: "+strings.Join(formatChoices, ","))
+	flag.StringVar(&format, "format", formatChoices[1], "Input data format. One of: "+strings.Join(formatChoices, ","))
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
+	flag.BoolVar(&usePostgresBatching, "postgresql-batching", false, "Whether to use Postgresql batching feature. Works only for '"+formatChoices[0]+"' format")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 	flag.BoolVar(&doDbCreate, "do-db-create", true, "Whether to create database. Set this flag to false to write data to existing database")
@@ -103,6 +105,13 @@ func init() {
 
 	if _, ok := processes[format]; !ok {
 		log.Fatal("Invalid format choice '", format, "'. Available are: ", strings.Join(formatChoices, ","))
+	}
+	if usePostgresBatching {
+		if format == formatChoices[1] {
+			log.Fatal("Cannot use Postgresql batching when using format '", formatChoices[1], "'")
+		} else {
+			format = "timescaledb-sql-batching"
+		}
 	}
 	if reportHost != "" {
 		fmt.Printf("results report destination: %v\n", reportHost)
@@ -198,18 +207,15 @@ func main() {
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
 	valuesRate := itemsRate * ValuesPerMeasurement
-	var totalProcRead int64
-	for _, val := range procReads {
-		totalProcRead += val
-	}
 
-	fmt.Printf("loaded %d items (%d in workers) in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, totalProcRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 	if file != "" {
 		sourceReader.Close()
 	}
 
-	if reportHost != "" {
-
+	if reportHost != "" && doLoad {
+		reportTags = append(reportTags, [2]string{"format", format})
+		reportTags = append(reportTags, [2]string{"postgresql-batching", strconv.FormatBool(usePostgresBatching)})
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "TimeScaleDB",
@@ -226,7 +232,7 @@ func main() {
 			IsGzip:    false,
 			BatchSize: batchSize,
 		}
-		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, -1, took)
+		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
 
 		if err != nil {
 			log.Fatal(err)
