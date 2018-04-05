@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	DevOps = "devops"
+	DevOps                   = "devops"
 	DevOpsOneHostOneHour     = "1-host-1-hr"
 	DevOpsOneHostTwelveHours = "1-host-12-hr"
-	DevOpsEightHostsOneHour = "8-host-1-hr"
-	DevOpsGroupBy = "groupby"
+	DevOpsEightHostsOneHour  = "8-host-1-hr"
+	DevOpsGroupBy            = "groupby"
 )
+
 // query generator choices {use-case, query-type, format}
 // (This object is shown to the user when flag.Usage is called.)
 var useCaseMatrix = map[string]map[string]map[string]QueryGeneratorMaker{
@@ -31,25 +32,29 @@ var useCaseMatrix = map[string]map[string]map[string]QueryGeneratorMaker{
 			"influx-http": NewInfluxDevopsSingleHost,
 			"mongo":       NewMongoDevopsSingleHost,
 			"opentsdb":    NewOpenTSDBDevopsSingleHost,
+			"timescaledb": NewTimescaleDevopsSingleHost,
 		},
-		DevOpsOneHostTwelveHours : {
+		DevOpsOneHostTwelveHours: {
 			"cassandra":   NewCassandraDevopsSingleHost12hr,
 			"es-http":     NewElasticSearchDevopsSingleHost12hr,
 			"influx-http": NewInfluxDevopsSingleHost12hr,
 			"mongo":       NewMongoDevopsSingleHost12hr,
 			"opentsdb":    NewOpenTSDBDevopsSingleHost12hr,
+			"timescaledb": NewTimescaleDevopsSingleHost12hr,
 		},
-		DevOpsEightHostsOneHour : {
+		DevOpsEightHostsOneHour: {
 			"cassandra":   NewCassandraDevops8Hosts,
 			"es-http":     NewElasticSearchDevops8Hosts,
 			"influx-http": NewInfluxDevops8Hosts,
 			"mongo":       NewMongoDevops8Hosts1Hr,
 			"opentsdb":    NewOpenTSDBDevops8Hosts,
+			"timescaledb": NewTimescaleDevops8Hosts1Hr,
 		},
-		DevOpsGroupBy : {
+		DevOpsGroupBy: {
 			"cassandra":   NewCassandraDevopsGroupBy,
 			"es-http":     NewElasticSearchDevopsGroupBy,
 			"influx-http": NewInfluxDevopsGroupBy,
+			"timescaledb": NewTimescaleDevopsGroupby,
 		},
 	},
 }
