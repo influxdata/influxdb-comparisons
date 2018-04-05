@@ -62,6 +62,7 @@ var (
 type statsMap map[string]*StatGroup
 
 const allQueriesLabel = "all queries"
+const DatabaseName = "benchmark_db"
 
 // Parse args:
 func init() {
@@ -151,7 +152,7 @@ func main() {
 				Port:     uint16(port),
 				User:     psUser,
 				Password: psPassword,
-				Database: "measurements",
+				Database: DatabaseName,
 			})
 			if err != nil {
 				log.Fatal(err)
@@ -159,10 +160,12 @@ func main() {
 
 		}
 		workersGroup.Add(1)
-		go func() {
-			defer conn.Close()
-			processQueries(conn)
-		}()
+		go func(connection *pgx.Conn) {
+			if doQueries {
+				defer connection.Close()
+			}
+			processQueries(connection)
+		}(conn)
 	}
 
 	// Read in jobs, closing the job channel when done:
