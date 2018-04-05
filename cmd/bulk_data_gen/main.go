@@ -25,7 +25,7 @@ import (
 )
 
 // Output data format choices:
-var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb", "timescaledb-bin"}
+var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
 
 // Use case choices:
 var useCaseChoices = []string{"devops", "iot"}
@@ -139,9 +139,9 @@ func main() {
 		serializer = (*Point).SerializeMongo
 	case "opentsdb":
 		serializer = (*Point).SerializeOpenTSDBBulk
-	case "timescaledb":
+	case "timescaledb-sql":
 		serializer = (*Point).SerializeTimeScale
-	case "timescaledb-bin":
+	case "timescaledb-copyFrom":
 		serializer = (*Point).SerializeTimeScaleBin
 	default:
 		panic("unreachable")
