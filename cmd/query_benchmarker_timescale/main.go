@@ -303,6 +303,7 @@ func oneQuery(conn *pgx.Conn, q *Query) (float64, error) {
 	if doQueries {
 		rows, err := conn.Query(string(q.QuerySQL))
 		if err != nil {
+			log.Println("Error running query: '", string(q.QuerySQL), "'" )
 			return 0, err
 		}
 		for rows.Next() {
