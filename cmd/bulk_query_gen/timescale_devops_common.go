@@ -87,7 +87,7 @@ func (d *TimescaleDevops) maxCPUUsageHourByMinuteNHosts(qi Query, scaleVar, nhos
 	q.HumanLabel = []byte(humanLabel)
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
 
-	q.QuerySQL = []byte(fmt.Sprintf("select time_bucket(60000000000,time) as time1min,max(usage_user) from cpu where (%s) and time >=%d and time < %d group by time1min order by time1min", combinedHostnameClause, interval.StartUnixNano(), interval.EndUnixNano()))
+	q.QuerySQL = []byte(fmt.Sprintf("select time_bucket(60000000000,time) as \"time1min\",max(usage_user) from cpu where (%s) and time >=%d and time < %d group by \"time1min\" order by \"time1min\"", combinedHostnameClause, interval.StartUnixNano(), interval.EndUnixNano()))
 }
 
 // MeanCPUUsageDayByHourAllHosts populates a Query with a query that looks like:
