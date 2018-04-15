@@ -577,6 +577,14 @@ var createHypertableSql = []string{
 
 var createIndexSql = []string{
 	"CREATE index cpu_hostname_index on cpu(hostname, time DESC);",
+	"CREATE index diskio_hostname_index on diskio(hostname, time DESC);",
+	"CREATE index disk_hostname_index on disk(hostname, time DESC);",
+	"CREATE index kernel_hostname_index on kernel(hostname, time DESC);",
+	"CREATE index mem_hostname_index on mem(hostname, time DESC);",
+	"CREATE index Net_hostname_index on Net(hostname, time DESC);",
+	"CREATE index nginx_hostname_index on nginx(hostname, time DESC);",
+	"CREATE index postgresl_hostname_index on postgresl(hostname, time DESC);",
+	"CREATE index redis_hostname_index on redis(hostname, time DESC);",
 }
 
 func createDatabase(daemon_url string) {
