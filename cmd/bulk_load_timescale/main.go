@@ -216,7 +216,8 @@ func main() {
 
 	if reportHost != "" && doLoad {
 		reportTags = append(reportTags, [2]string{"format", format})
-		reportTags = append(reportTags, [2]string{"postgresql-batching", strconv.FormatBool(usePostgresBatching)})
+		reportTags = append(reportTags, [2]string{"postgresql_batching", strconv.FormatBool(usePostgresBatching)})
+		reportTags = append(reportTags, [2]string{"chunk_interval", chunkDuration.String()})
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "TimeScaleDB",
