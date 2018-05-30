@@ -148,7 +148,7 @@ type ConstantDistribution struct {
 	State float64
 }
 
-func (d *ConstantDistribution) Advacne() {
+func (d *ConstantDistribution) Advance() {
 }
 
 func (d *ConstantDistribution) Get() float64 {
