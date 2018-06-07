@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	ATHIByteString      = []byte("air_temp_hum_indoor")       // heap optimization
+	ATHIByteString      = []byte("air_condition_room")       // heap optimization
 )
 
 var (
