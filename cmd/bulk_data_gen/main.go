@@ -10,7 +10,7 @@
 // Supported use cases:
 // Devops: scale_var is the number of hosts to simulate, with log messages
 //         every 10 seconds.
-package main
+package bulk_data_gen
 
 import (
 	"bufio"
@@ -22,6 +22,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 )
 
 // Output data format choices:
@@ -112,11 +114,11 @@ func main() {
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
 	defer out.Flush()
 
-	var sim Simulator
+	var sim common.Simulator
 
 	switch useCase {
 	case "devops":
-		cfg := &DevopsSimulatorConfig{
+		cfg := &devops.DevopsSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
 
@@ -127,22 +129,22 @@ func main() {
 		panic("unreachable")
 	}
 
-	var serializer func(*Point, io.Writer) error
+	var serializer func(*common.Point, io.Writer) error
 	switch format {
 	case "influx-bulk":
-		serializer = (*Point).SerializeInfluxBulk
+		serializer = (*common.Point).SerializeInfluxBulk
 	case "es-bulk":
-		serializer = (*Point).SerializeESBulk
+		serializer = (*common.Point).SerializeESBulk
 	case "cassandra":
-		serializer = (*Point).SerializeCassandra
+		serializer = (*common.Point).SerializeCassandra
 	case "mongo":
-		serializer = (*Point).SerializeMongo
+		serializer = (*common.Point).SerializeMongo
 	case "opentsdb":
-		serializer = (*Point).SerializeOpenTSDBBulk
+		serializer = (*common.Point).SerializeOpenTSDBBulk
 	case "timescaledb-sql":
-		serializer = (*Point).SerializeTimeScale
+		serializer = (*common.Point).SerializeTimeScale
 	case "timescaledb-copyFrom":
-		serializer = (*Point).SerializeTimeScaleBin
+		serializer = (*common.Point).SerializeTimeScaleBin
 	default:
 		panic("unreachable")
 	}
@@ -150,7 +152,7 @@ func main() {
 	var currentInterleavedGroup uint = 0
 
 	t := time.Now()
-	point := MakeUsablePoint()
+	point := common.MakeUsablePoint()
 	n := 0
 	for !sim.Finished() {
 		sim.Next(point)
