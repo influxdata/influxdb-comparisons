@@ -1,7 +1,8 @@
-package main
+package iot
 
 import (
 	"time"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
@@ -18,11 +19,12 @@ var (
 )
 
 type ATHIMeasurement struct {
+	sensorId 	[]byte
 	timestamp     time.Time
 	distributions []Distribution
 }
 
-func NewATHIMeasurement(start time.Time) *ATHIMeasurement {
+func NewATHIMeasurement(start time.Time, id []byte) *ATHIMeasurement {
 	distributions := make([]Distribution, len(ATHIFieldKeys))
 	//temperature
 	distributions[0] = MUDWD(ND(0,1), 15, 28, 15 )
@@ -30,9 +32,11 @@ func NewATHIMeasurement(start time.Time) *ATHIMeasurement {
 	distributions[1] = MUDWD(ND(0,1), 25, 60, 40 )
 	//battery_voltage
 	distributions[2] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+
 	return &ATHIMeasurement{
 		timestamp:   start,
 		distributions: distributions,
+		sensorId: id,
 	}
 }
 
