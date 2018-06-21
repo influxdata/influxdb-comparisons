@@ -1,0 +1,55 @@
+package iot
+
+import (
+	"time"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+)
+
+var (
+	DoorByteString      = []byte("door_state")       // heap optimization
+)
+
+var (
+	// Field keys for 'air condition indoor' points.
+	DoorFieldKeys = [][]byte{
+		[]byte("state"),
+		[]byte("battery_voltage"),
+
+	}
+)
+
+type DoorMeasurement struct {
+	sensorId 	[]byte
+	timestamp     time.Time
+	distributions []Distribution
+}
+
+func NewDoorMeasurement(start time.Time, id []byte) *DoorMeasurement {
+	distributions := make([]Distribution, len(DoorFieldKeys))
+	//state
+	distributions[0] = TSD(0,1,0)
+	//battery_voltage
+	distributions[1] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+
+	return &DoorMeasurement{
+		timestamp:   start,
+		distributions: distributions,
+		sensorId: id,
+	}
+}
+
+func (m *DoorMeasurement) Tick(d time.Duration) {
+	m.timestamp = m.timestamp.Add(d)
+	for i := range m.distributions {
+		m.distributions[i].Advance()
+	}
+}
+
+func (m *DoorMeasurement) ToPoint(p *Point) {
+	p.SetMeasurementName(DoorByteString)
+	p.SetTimestamp(&m.timestamp)
+
+	for i := range m.distributions {
+		p.AppendField(DoorFieldKeys[i], m.distributions[i].Get())
+	}
+}
