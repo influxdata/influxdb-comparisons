@@ -146,8 +146,7 @@ func MWD(step Distribution, state float64) *MonotonicRandomWalkDistribution {
 
 // MonotonicUpDownRandomWalkDistribution is a stateful random walk that continually
 // increases and decreases. Initialize it with State, Min And Max an underlying distribution,
-// which is used to compute the new step value. The sign of any value of the
-// u.d. is always made positive.
+// which is used to compute the new step value.
 type MonotonicUpDownRandomWalkDistribution struct {
 	Step  Distribution
 	State float64
@@ -190,4 +189,27 @@ func (d *ConstantDistribution) Advance() {
 
 func (d *ConstantDistribution) Get() float64 {
 	return d.State
+}
+
+//TwoStateDistribution randomly chooses state from two values
+type TwoStateDistribution struct {
+	Low float64
+	High float64
+	State float64
+}
+
+func (d *TwoStateDistribution) Advance() {
+	newState := d.Low
+	if rand.Float64() > 0.5 {
+		newState = d.High
+	}
+	d.State = newState
+}
+
+func (d *TwoStateDistribution) Get() float64 {
+	return d.State
+}
+
+func TSD(low float64, high float64, state float64) *TwoStateDistribution {
+	return &TwoStateDistribution{Low: low, High: high, State: state}
 }
