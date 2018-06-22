@@ -1,12 +1,12 @@
 package iot
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 var (
-	AirQualityRoomByteString      = []byte("air_quality_room")       // heap optimization
+	AirQualityRoomByteString = []byte("air_quality_room") // heap optimization
 )
 
 var (
@@ -19,7 +19,7 @@ var (
 )
 
 type AirQualityRoomMeasurement struct {
-	sensorId 	[]byte
+	sensorId      []byte
 	timestamp     time.Time
 	distributions []Distribution
 }
@@ -27,16 +27,16 @@ type AirQualityRoomMeasurement struct {
 func NewAirQualityRoomMeasurement(start time.Time, id []byte) *AirQualityRoomMeasurement {
 	distributions := make([]Distribution, len(AirQualityRoomFieldKeys))
 	//co2_level
-	distributions[0] = MUDWD(ND(0,1), 200, 3000, 300 )
+	distributions[0] = MUDWD(ND(0, 1), 200, 3000, 300)
 	//co_level
-	distributions[1] = MUDWD(ND(0.001,0.0001), 0, 10, 0 )
+	distributions[1] = MUDWD(ND(0.001, 0.0001), 0, 10, 0)
 	//battery_voltage
-	distributions[2] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+	distributions[2] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
 
 	return &AirQualityRoomMeasurement{
-		timestamp:   start,
+		timestamp:     start,
 		distributions: distributions,
-		sensorId: id,
+		sensorId:      id,
 	}
 }
 
@@ -50,7 +50,7 @@ func (m *AirQualityRoomMeasurement) Tick(d time.Duration) {
 func (m *AirQualityRoomMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(AirQualityRoomByteString)
 	p.SetTimestamp(&m.timestamp)
-
+	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(AirQualityRoomFieldKeys[i], m.distributions[i].Get())
 	}

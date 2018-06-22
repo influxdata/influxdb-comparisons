@@ -51,6 +51,7 @@ func (m *DoorMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(DoorByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(DoorTagKey, m.doorId)
+	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(DoorFieldKeys[i], m.distributions[i].Get())
 	}

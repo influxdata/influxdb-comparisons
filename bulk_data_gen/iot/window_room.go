@@ -50,6 +50,7 @@ func (m *WindowMeasurement) Tick(d time.Duration) {
 func (m *WindowMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(WindowByteString)
 	p.SetTimestamp(&m.timestamp)
+	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	p.AppendTag(WindowTagKey, m.windowId)
 	for i := range m.distributions {
 		p.AppendField(WindowFieldKeys[i], m.distributions[i].Get())

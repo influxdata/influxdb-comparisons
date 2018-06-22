@@ -51,6 +51,7 @@ func (m *RadiatorValveRoomMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(RadiatorValveRoomByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(RadiatorTagKey, m.randiatorId)
+	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(RadiatorValveRoomFieldKeys[i], m.distributions[i].Get())
 	}

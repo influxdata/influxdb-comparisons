@@ -93,7 +93,7 @@ func (m *CameraDetectionMeasurement) Tick(d time.Duration) {
 func (m *CameraDetectionMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(CameraDetectionByteString)
 	p.SetTimestamp(&m.timestamp)
-
+	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	p.AppendField(CameraDetectionFieldKeys[0], m.object)
 	p.AppendField(CameraDetectionFieldKeys[1], m.kind)
 	p.AppendField(CameraDetectionFieldKeys[2], m.batteryDist.Get())
