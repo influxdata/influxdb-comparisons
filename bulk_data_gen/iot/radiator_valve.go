@@ -1,12 +1,13 @@
 package iot
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 var (
-	RadiatorValveRoomByteString      = []byte("radiator_valve_room")       // heap optimization
+	RadiatorValveRoomByteString = []byte("radiator_valve_room") // heap optimization
+	RadiatorTagKey              = []byte("radiator")
 )
 
 var (
@@ -18,22 +19,24 @@ var (
 )
 
 type RadiatorValveRoomMeasurement struct {
-	sensorId 	[]byte
+	sensorId      []byte
+	randiatorId   []byte
 	timestamp     time.Time
 	distributions []Distribution
 }
 
-func NewRadiatorValveRoomMeasurement(start time.Time, id []byte) *RadiatorValveRoomMeasurement {
+func NewRadiatorValveRoomMeasurement(start time.Time, randiatorId []byte, sensorId []byte) *RadiatorValveRoomMeasurement {
 	distributions := make([]Distribution, len(RadiatorValveRoomFieldKeys))
 	//opening_level
-	distributions[0] = CWD(ND(0,1), 0.0, 100, 0 )
+	distributions[0] = CWD(ND(0, 1), 0.0, 100, 0)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
 
 	return &RadiatorValveRoomMeasurement{
-		timestamp:   start,
+		timestamp:     start,
 		distributions: distributions,
-		sensorId: id,
+		sensorId:      sensorId,
+		randiatorId:   randiatorId,
 	}
 }
 
@@ -47,7 +50,7 @@ func (m *RadiatorValveRoomMeasurement) Tick(d time.Duration) {
 func (m *RadiatorValveRoomMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(RadiatorValveRoomByteString)
 	p.SetTimestamp(&m.timestamp)
-
+	p.AppendTag(RadiatorTagKey, m.randiatorId)
 	for i := range m.distributions {
 		p.AppendField(RadiatorValveRoomFieldKeys[i], m.distributions[i].Get())
 	}
