@@ -1,12 +1,13 @@
 package iot
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 var (
-	WindowByteString      = []byte("window_state_room")       // heap optimization
+	WindowByteString = []byte("window_state_room") // heap optimization
+	WindowTagKey     = []byte("window")
 )
 
 var (
@@ -14,27 +15,28 @@ var (
 	WindowFieldKeys = [][]byte{
 		[]byte("state"),
 		[]byte("battery_voltage"),
-
 	}
 )
 
 type WindowMeasurement struct {
-	sensorId 	[]byte
+	sensorId      []byte
+	windowId      []byte
 	timestamp     time.Time
 	distributions []Distribution
 }
 
-func NewWindowMeasurement(start time.Time, id []byte) *WindowMeasurement {
+func NewWindowMeasurement(start time.Time, windowId []byte, sensorId []byte) *WindowMeasurement {
 	distributions := make([]Distribution, len(WindowFieldKeys))
 	//state
-	distributions[0] = TSD(0,1,0)
+	distributions[0] = TSD(0, 1, 0)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
 
 	return &WindowMeasurement{
-		timestamp:   start,
+		timestamp:     start,
 		distributions: distributions,
-		sensorId: id,
+		sensorId:      sensorId,
+		windowId:      windowId,
 	}
 }
 
@@ -48,7 +50,7 @@ func (m *WindowMeasurement) Tick(d time.Duration) {
 func (m *WindowMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(WindowByteString)
 	p.SetTimestamp(&m.timestamp)
-
+	p.AppendTag(WindowTagKey, m.windowId)
 	for i := range m.distributions {
 		p.AppendField(WindowFieldKeys[i], m.distributions[i].Get())
 	}
