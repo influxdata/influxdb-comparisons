@@ -97,8 +97,8 @@ type ClampedRandomWalkDistribution struct {
 func CWD(step Distribution, min, max, state float64) *ClampedRandomWalkDistribution {
 	return &ClampedRandomWalkDistribution{
 		Step: step,
-		Min: min,
-		Max: max,
+		Min:  min,
+		Max:  max,
 
 		State: state,
 	}
@@ -148,10 +148,10 @@ func MWD(step Distribution, state float64) *MonotonicRandomWalkDistribution {
 // increases and decreases. Initialize it with State, Min And Max an underlying distribution,
 // which is used to compute the new step value.
 type MonotonicUpDownRandomWalkDistribution struct {
-	Step  Distribution
-	State float64
-	Min float64
-	Max float64
+	Step      Distribution
+	State     float64
+	Min       float64
+	Max       float64
 	direction int //1 or -1
 }
 
@@ -177,7 +177,7 @@ func MUDWD(step Distribution, min float64, max float64, state float64) *Monotoni
 	if state < max {
 		direction = 1
 	}
-	return &MonotonicUpDownRandomWalkDistribution{Step: step, Min:min, Max:max, State: state, direction: direction}
+	return &MonotonicUpDownRandomWalkDistribution{Step: step, Min: min, Max: max, State: state, direction: direction}
 }
 
 type ConstantDistribution struct {
@@ -193,17 +193,16 @@ func (d *ConstantDistribution) Get() float64 {
 
 //TwoStateDistribution randomly chooses state from two values
 type TwoStateDistribution struct {
-	Low float64
-	High float64
+	Low   float64
+	High  float64
 	State float64
 }
 
 func (d *TwoStateDistribution) Advance() {
-	newState := d.Low
+	d.State = d.Low
 	if rand.Float64() > 0.5 {
-		newState = d.High
+		d.State = d.High
 	}
-	d.State = newState
 }
 
 func (d *TwoStateDistribution) Get() float64 {
