@@ -1,12 +1,13 @@
 package iot
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 var (
-	DoorByteString      = []byte("door_state")       // heap optimization
+	DoorByteString = []byte("door_state") // heap optimization
+	DoorTagKey     = []byte("door")
 )
 
 var (
@@ -14,27 +15,28 @@ var (
 	DoorFieldKeys = [][]byte{
 		[]byte("state"),
 		[]byte("battery_voltage"),
-
 	}
 )
 
 type DoorMeasurement struct {
-	sensorId 	[]byte
+	sensorId      []byte
+	doorId        []byte
 	timestamp     time.Time
 	distributions []Distribution
 }
 
-func NewDoorMeasurement(start time.Time, id []byte) *DoorMeasurement {
+func NewDoorMeasurement(start time.Time, doorId []byte, sendorId []byte) *DoorMeasurement {
 	distributions := make([]Distribution, len(DoorFieldKeys))
 	//state
-	distributions[0] = TSD(0,1,0)
+	distributions[0] = TSD(0, 1, 0)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1,0.5), 1, 3.2, 3.2 )
+	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
 
 	return &DoorMeasurement{
-		timestamp:   start,
+		timestamp:     start,
 		distributions: distributions,
-		sensorId: id,
+		sensorId:      sendorId,
+		doorId:        doorId,
 	}
 }
 
@@ -48,7 +50,7 @@ func (m *DoorMeasurement) Tick(d time.Duration) {
 func (m *DoorMeasurement) ToPoint(p *Point) {
 	p.SetMeasurementName(DoorByteString)
 	p.SetTimestamp(&m.timestamp)
-
+	p.AppendTag(DoorTagKey, m.doorId)
 	for i := range m.distributions {
 		p.AppendField(DoorFieldKeys[i], m.distributions[i].Get())
 	}
