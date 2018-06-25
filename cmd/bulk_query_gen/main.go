@@ -7,6 +7,13 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	bulkQueryGen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/cassandra"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/elasticsearch"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/influxdb"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/opentsdb"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
 	"log"
 	"math/rand"
 	"os"
@@ -24,37 +31,37 @@ const (
 
 // query generator choices {use-case, query-type, format}
 // (This object is shown to the user when flag.Usage is called.)
-var useCaseMatrix = map[string]map[string]map[string]QueryGeneratorMaker{
+var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGeneratorMaker{
 	DevOps: {
 		DevOpsOneHostOneHour: {
-			"cassandra":   NewCassandraDevopsSingleHost,
-			"es-http":     NewElasticSearchDevopsSingleHost,
-			"influx-http": NewInfluxDevopsSingleHost,
-			"mongo":       NewMongoDevopsSingleHost,
-			"opentsdb":    NewOpenTSDBDevopsSingleHost,
-			"timescaledb": NewTimescaleDevopsSingleHost,
+			"cassandra":   cassandra.NewCassandraDevopsSingleHost,
+			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost,
+			"influx-http": influxdb.NewInfluxDevopsSingleHost,
+			"mongo":       mongodb.NewMongoDevopsSingleHost,
+			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost,
+			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost,
 		},
 		DevOpsOneHostTwelveHours: {
-			"cassandra":   NewCassandraDevopsSingleHost12hr,
-			"es-http":     NewElasticSearchDevopsSingleHost12hr,
-			"influx-http": NewInfluxDevopsSingleHost12hr,
-			"mongo":       NewMongoDevopsSingleHost12hr,
-			"opentsdb":    NewOpenTSDBDevopsSingleHost12hr,
-			"timescaledb": NewTimescaleDevopsSingleHost12hr,
+			"cassandra":   cassandra.NewCassandraDevopsSingleHost12hr,
+			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost12hr,
+			"influx-http": influxdb.NewInfluxDevopsSingleHost12hr,
+			"mongo":       mongodb.NewMongoDevopsSingleHost12hr,
+			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost12hr,
+			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost12hr,
 		},
 		DevOpsEightHostsOneHour: {
-			"cassandra":   NewCassandraDevops8Hosts,
-			"es-http":     NewElasticSearchDevops8Hosts,
-			"influx-http": NewInfluxDevops8Hosts,
-			"mongo":       NewMongoDevops8Hosts1Hr,
-			"opentsdb":    NewOpenTSDBDevops8Hosts,
-			"timescaledb": NewTimescaleDevops8Hosts1Hr,
+			"cassandra":   cassandra.NewCassandraDevops8Hosts,
+			"es-http":     elasticsearch.NewElasticSearchDevops8Hosts,
+			"influx-http": influxdb.NewInfluxDevops8Hosts,
+			"mongo":       mongodb.NewMongoDevops8Hosts1Hr,
+			"opentsdb":    opentsdb.NewOpenTSDBDevops8Hosts,
+			"timescaledb": timescaledb.NewTimescaleDevops8Hosts1Hr,
 		},
 		DevOpsGroupBy: {
-			"cassandra":   NewCassandraDevopsGroupBy,
-			"es-http":     NewElasticSearchDevopsGroupBy,
-			"influx-http": NewInfluxDevopsGroupBy,
-			"timescaledb": NewTimescaleDevopsGroupby,
+			"cassandra":   cassandra.NewCassandraDevopsGroupBy,
+			"es-http":     elasticsearch.NewElasticSearchDevopsGroupBy,
+			"influx-http": influxdb.NewInfluxDevopsGroupBy,
+			"timescaledb": timescaledb.NewTimescaleDevopsGroupby,
 		},
 	},
 }
@@ -181,13 +188,13 @@ func main() {
 	rand.Seed(seed)
 
 	// TODO(rw): Parse this from the CLI (maybe).
-	dbConfig := DatabaseConfig{
+	dbConfig := bulkQueryGen.DatabaseConfig{
 		"database-name": dbName,
 	}
 
 	// Make the query generator:
 	maker := useCaseMatrix[useCase][queryType][format]
-	var generator QueryGenerator = maker(dbConfig, timestampStart, timestampEnd)
+	var generator bulkQueryGen.QueryGenerator = maker(dbConfig, timestampStart, timestampEnd)
 
 	// Set up bookkeeping:
 	stats := make(map[string]int64)
