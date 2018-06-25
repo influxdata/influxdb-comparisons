@@ -16,6 +16,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"io"
 	"log"
 	"math/rand"
@@ -57,11 +60,11 @@ var (
 func init() {
 	flag.StringVar(&format, "format", formatChoices[0], fmt.Sprintf("Format to emit. (choices: %s)", strings.Join(formatChoices, ", ")))
 
-	flag.StringVar(&useCase, "use-case", useCaseChoices[0], "Use case to model. (choices: devops, iot)")
+	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 
-	flag.StringVar(&timestampStartStr, "timestamp-start", "2016-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
-	flag.StringVar(&timestampEndStr, "timestamp-end", "2016-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
+	flag.StringVar(&timestampStartStr, "timestamp-start", "2018-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
+	flag.StringVar(&timestampEndStr, "timestamp-end", "2018-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1, 2) (default 0).")
@@ -112,37 +115,45 @@ func main() {
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
 	defer out.Flush()
 
-	var sim Simulator
+	var sim common.Simulator
 
 	switch useCase {
 	case "devops":
-		cfg := &DevopsSimulatorConfig{
+		cfg := &devops.DevopsSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
 
 			HostCount: scaleVar,
 		}
 		sim = cfg.ToSimulator()
+	case "iot":
+		cfg := &iot.IotSimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			SmartHomeCount: scaleVar,
+		}
+		sim = cfg.ToSimulator()
 	default:
 		panic("unreachable")
 	}
 
-	var serializer func(*Point, io.Writer) error
+	var serializer func(*common.Point, io.Writer) error
 	switch format {
 	case "influx-bulk":
-		serializer = (*Point).SerializeInfluxBulk
+		serializer = (*common.Point).SerializeInfluxBulk
 	case "es-bulk":
-		serializer = (*Point).SerializeESBulk
+		serializer = (*common.Point).SerializeESBulk
 	case "cassandra":
-		serializer = (*Point).SerializeCassandra
+		serializer = (*common.Point).SerializeCassandra
 	case "mongo":
-		serializer = (*Point).SerializeMongo
+		serializer = (*common.Point).SerializeMongo
 	case "opentsdb":
-		serializer = (*Point).SerializeOpenTSDBBulk
+		serializer = (*common.Point).SerializeOpenTSDBBulk
 	case "timescaledb-sql":
-		serializer = (*Point).SerializeTimeScale
+		serializer = (*common.Point).SerializeTimeScale
 	case "timescaledb-copyFrom":
-		serializer = (*Point).SerializeTimeScaleBin
+		serializer = (*common.Point).SerializeTimeScaleBin
 	default:
 		panic("unreachable")
 	}
@@ -150,7 +161,7 @@ func main() {
 	var currentInterleavedGroup uint = 0
 
 	t := time.Now()
-	point := MakeUsablePoint()
+	point := common.MakeUsablePoint()
 	n := 0
 	for !sim.Finished() {
 		sim.Next(point)

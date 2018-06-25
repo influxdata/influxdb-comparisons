@@ -1,9 +1,10 @@
-package main
+package devops
 
 import (
 	"fmt"
 	"math/rand"
 	"time"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 type LabeledDistributionMaker struct {

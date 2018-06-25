@@ -1,8 +1,9 @@
-package main
+package devops
 
 import (
 	"math/rand"
 	"time"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (

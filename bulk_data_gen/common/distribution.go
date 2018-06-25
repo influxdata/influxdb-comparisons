@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"math"
@@ -97,8 +97,8 @@ type ClampedRandomWalkDistribution struct {
 func CWD(step Distribution, min, max, state float64) *ClampedRandomWalkDistribution {
 	return &ClampedRandomWalkDistribution{
 		Step: step,
-		Min: min,
-		Max: max,
+		Min:  min,
+		Max:  max,
 
 		State: state,
 	}
@@ -144,13 +144,71 @@ func MWD(step Distribution, state float64) *MonotonicRandomWalkDistribution {
 	return &MonotonicRandomWalkDistribution{Step: step, State: state}
 }
 
+// MonotonicUpDownRandomWalkDistribution is a stateful random walk that continually
+// increases and decreases. Initialize it with State, Min And Max an underlying distribution,
+// which is used to compute the new step value.
+type MonotonicUpDownRandomWalkDistribution struct {
+	Step      Distribution
+	State     float64
+	Min       float64
+	Max       float64
+	direction int //1 or -1
+}
+
+// Advance computes the next value of this distribution and stores it.
+func (d *MonotonicUpDownRandomWalkDistribution) Advance() {
+	d.Step.Advance()
+	d.State += d.Step.Get() * float64(d.direction)
+	if d.State < d.Min {
+		d.State = d.Min
+		d.direction = 1
+	} else if d.State > d.Max {
+		d.State = d.Max
+		d.direction = -1
+	}
+}
+
+func (d *MonotonicUpDownRandomWalkDistribution) Get() float64 {
+	return d.State
+}
+
+func MUDWD(step Distribution, min float64, max float64, state float64) *MonotonicUpDownRandomWalkDistribution {
+	direction := -1
+	if state < max {
+		direction = 1
+	}
+	return &MonotonicUpDownRandomWalkDistribution{Step: step, Min: min, Max: max, State: state, direction: direction}
+}
+
 type ConstantDistribution struct {
 	State float64
 }
 
-func (d *ConstantDistribution) Advacne() {
+func (d *ConstantDistribution) Advance() {
 }
 
 func (d *ConstantDistribution) Get() float64 {
 	return d.State
+}
+
+//TwoStateDistribution randomly chooses state from two values
+type TwoStateDistribution struct {
+	Low   float64
+	High  float64
+	State float64
+}
+
+func (d *TwoStateDistribution) Advance() {
+	d.State = d.Low
+	if rand.Float64() > 0.5 {
+		d.State = d.High
+	}
+}
+
+func (d *TwoStateDistribution) Get() float64 {
+	return d.State
+}
+
+func TSD(low float64, high float64, state float64) *TwoStateDistribution {
+	return &TwoStateDistribution{Low: low, High: high, State: state}
 }
