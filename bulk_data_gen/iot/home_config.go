@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	HomeConfigByteString = []byte("home_state") // heap optimization
+	HomeConfigByteString = []byte("home_config") // heap optimization
 )
 
 var (

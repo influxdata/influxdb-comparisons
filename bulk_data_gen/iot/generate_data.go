@@ -1,6 +1,7 @@
 package iot
 
 import (
+	"fmt"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"time"
 )
@@ -77,7 +78,7 @@ func (d *IotSimulator) Next(p *Point) {
 		}
 		if d.homes[d.currentHomeIndex].HasMoreMeasurements() {
 			homeFound = true
-
+			break
 		}
 		d.currentHomeIndex++
 		homesSeen++
@@ -90,7 +91,11 @@ func (d *IotSimulator) Next(p *Point) {
 		}
 		d.currentHomeIndex = 0
 	}
-	d.homes[d.currentHomeIndex].NextMeasurementToPoint(p)
-	d.madePoints++
-	d.currentHomeIndex++
+	sm := d.homes[d.currentHomeIndex].NextMeasurementToPoint(p)
+	if sm != nil {
+		d.madePoints++
+		d.currentHomeIndex++
+	} else {
+		panic(fmt.Sprintf("Null point: home %d, room: %d, home measurement: %d", d.currentHomeIndex, d.homes[d.currentHomeIndex].currentRoom, d.homes[d.currentHomeIndex].currentMeasurement))
+	}
 }

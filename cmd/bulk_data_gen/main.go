@@ -10,20 +10,21 @@
 // Supported use cases:
 // Devops: scale_var is the number of hosts to simulate, with log messages
 //         every 10 seconds.
-package bulk_data_gen
+package main
 
 import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"io"
 	"log"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 )
 
 // Output data format choices:
@@ -59,11 +60,11 @@ var (
 func init() {
 	flag.StringVar(&format, "format", formatChoices[0], fmt.Sprintf("Format to emit. (choices: %s)", strings.Join(formatChoices, ", ")))
 
-	flag.StringVar(&useCase, "use-case", useCaseChoices[0], "Use case to model. (choices: devops, iot)")
+	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 
-	flag.StringVar(&timestampStartStr, "timestamp-start", "2016-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
-	flag.StringVar(&timestampEndStr, "timestamp-end", "2016-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
+	flag.StringVar(&timestampStartStr, "timestamp-start", "2018-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
+	flag.StringVar(&timestampEndStr, "timestamp-end", "2018-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1, 2) (default 0).")
@@ -123,6 +124,14 @@ func main() {
 			End:   timestampEnd,
 
 			HostCount: scaleVar,
+		}
+		sim = cfg.ToSimulator()
+	case "iot":
+		cfg := &iot.IotSimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			SmartHomeCount: scaleVar,
 		}
 		sim = cfg.ToSimulator()
 	default:

@@ -16,8 +16,8 @@ var (
 
 	// Tag fields common to all inside sensors:
 	SensorHomeTagKeys = [][]byte{
-		[]byte("home_id"),
 		[]byte("sensor_id"),
+		[]byte("home_id"),
 	}
 )
 
@@ -97,8 +97,8 @@ func (h *SmartHome) NewRoom(id int, start time.Time) *room {
 	windowsNum := int(rand.Int63n(3) + 1)
 	sm := make([]SimulatedMeasurement, 0, windowsNum*2+3)
 	for w := 0; w < windowsNum; w++ {
-		sm = append(sm, NewWindowMeasurement(start, []byte{byte(w)}, NewSensorId()),
-			NewRadiatorValveRoomMeasurement(start, []byte{byte(w)}, NewSensorId()))
+		sm = append(sm, NewWindowMeasurement(start, []byte(fmt.Sprintf("%d", w+1)), NewSensorId()),
+			NewRadiatorValveRoomMeasurement(start, []byte(fmt.Sprintf("%d", w+1)), NewSensorId()))
 	}
 	sm = append(sm, NewAirConditionRoomMeasurement(start, NewSensorId()))
 	sm = append(sm, NewAirQualityRoomMeasurement(start, NewSensorId()))
@@ -123,8 +123,8 @@ func (h *SmartHome) NewSmartHomeMeasurements(start time.Time) {
 		NewHomeConfigMeasurement(start, NewSensorId()),
 		NewCameraDetectionMeasurement(start, NewSensorId()),
 		NewWaterLevelMeasurement(start, NewSensorId()),
-		NewWaterLeakageRoomMeasurement(start, []byte{byte(rand.Int63n(roomsNum) + 1)}, NewSensorId()),
-		NewWaterLeakageRoomMeasurement(start, []byte{byte(rand.Int63n(roomsNum) + 1)}, NewSensorId()),
+		NewWaterLeakageRoomMeasurement(start, []byte(fmt.Sprintf("%d", rand.Int63n(roomsNum)+1)), NewSensorId()),
+		NewWaterLeakageRoomMeasurement(start, []byte(fmt.Sprintf("%d", rand.Int63n(roomsNum)+1)), NewSensorId()),
 	}
 	for i := 0; i < int(doorsNum); i++ {
 		h.SimulatedMeasurements = append(h.SimulatedMeasurements, NewDoorMeasurement(start, []byte(fmt.Sprintf("%d", i)), NewSensorId()))
@@ -159,16 +159,23 @@ func (h *SmartHome) NextMeasurementToPoint(p *Point) SimulatedMeasurement {
 	if !h.HasMoreMeasurements() {
 		return nil
 	}
-	if h.currentRoom < len(h.Rooms) {
+	for h.currentRoom < len(h.Rooms) {
 		r := h.Rooms[h.currentRoom]
-		sm = r.NextMeasurementToPoint(p)
-	} else {
+		if r.HasMoreMeasurements() {
+			sm = r.NextMeasurementToPoint(p)
+			break
+		} else {
+			h.currentRoom++
+		}
+
+	}
+	if h.currentRoom == len(h.Rooms) {
 		sm = h.SimulatedMeasurements[h.currentMeasurement]
 		h.currentMeasurement++
 		sm.ToPoint(p)
 	}
 	if sm != nil {
-		p.AppendTag(SensorHomeTagKeys[0], h.HomeId)
+		p.AppendTag(SensorHomeTagKeys[1], h.HomeId)
 		h.totalMeasurementsGiven++
 	}
 	return sm
