@@ -56,8 +56,12 @@ type IotSimulator struct {
 	timestampEnd   time.Time
 }
 
-func (g *IotSimulator) Seen() int64 {
+func (g *IotSimulator) SeenPoints() int64 {
 	return g.madePoints
+}
+
+func (g *IotSimulator) SeenValues() int64 {
+	return g.madeValues
 }
 
 func (g *IotSimulator) Total() int64 {

@@ -22,8 +22,12 @@ type DevopsSimulator struct {
 	timestampEnd   time.Time
 }
 
-func (g *DevopsSimulator) Seen() int64 {
+func (g *DevopsSimulator) SeenPoints() int64 {
 	return g.madePoints
+}
+
+func (g *DevopsSimulator) SeenValues() int64 {
+	return g.madeValues
 }
 
 func (g *DevopsSimulator) Total() int64 {
