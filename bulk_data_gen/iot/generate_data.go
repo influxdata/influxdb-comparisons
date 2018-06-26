@@ -27,6 +27,7 @@ func (d *IotSimulatorConfig) ToSimulator() *IotSimulator {
 	maxPoints := epochs * measNum
 	dg := &IotSimulator{
 		madePoints: 0,
+		madeValues: 0,
 		maxPoints:  maxPoints,
 
 		currentHomeIndex: 0,
@@ -45,6 +46,7 @@ func (d *IotSimulatorConfig) ToSimulator() *IotSimulator {
 type IotSimulator struct {
 	madePoints int64
 	maxPoints  int64
+	madeValues int64
 
 	currentHomeIndex int
 	homes            []*SmartHome
@@ -95,6 +97,7 @@ func (d *IotSimulator) Next(p *Point) {
 	if sm != nil {
 		d.madePoints++
 		d.currentHomeIndex++
+		d.madeValues += int64(len(p.FieldValues))
 	} else {
 		panic(fmt.Sprintf("Null point: home %d, room: %d, home measurement: %d", d.currentHomeIndex, d.homes[d.currentHomeIndex].currentRoom, d.homes[d.currentHomeIndex].currentMeasurement))
 	}
