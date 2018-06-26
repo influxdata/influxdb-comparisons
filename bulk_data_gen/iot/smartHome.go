@@ -50,8 +50,10 @@ func NewSensorId() []byte {
 	return []byte(fmt.Sprintf("%013d", LastSensorId))
 }
 
+const SmartHomeIdFormat = "%013d"
+
 func NewSmartHome(id int, start time.Time) *SmartHome {
-	h := &SmartHome{HomeId: []byte(fmt.Sprintf("%013d", id))}
+	h := &SmartHome{HomeId: []byte(fmt.Sprintf(SmartHomeIdFormat, id))}
 	h.NewSmartHomeMeasurements(start)
 	return h
 }
