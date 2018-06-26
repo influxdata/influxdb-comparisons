@@ -72,7 +72,7 @@ func NewCameraDetectionMeasurement(start time.Time, id []byte) *CameraDetectionM
 func (m *CameraDetectionMeasurement) Tick(d time.Duration) {
 	m.timestamp = m.timestamp.Add(d)
 	object := rand.Int63n(int64(len(DetectionObjects)))
-	m.object = Animals[object]
+	m.object = DetectionObjects[object]
 	switch object {
 	case 0: //animal
 		m.kind = Animals[rand.Int63n(int64(len(Animals)))]
