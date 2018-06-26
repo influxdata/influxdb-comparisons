@@ -54,7 +54,10 @@ func genRandomString() []byte {
 	len := int((rand.Int63n(10) + 10) * 1024)
 	buff := make([]byte, len)
 	for i := 0; i < len; i++ {
-		buff[i] = byte(rand.Int63n(95) + 32)
+		buff[i] = byte(rand.Int63n(87) + 40)
+		for buff[i] == 92 {
+			buff[i] = byte(rand.Int63n(87) + 40)
+		}
 	}
 	return buff
 }

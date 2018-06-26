@@ -102,7 +102,7 @@ func (p *Point) SerializeInfluxBulk(w io.Writer) (err error) {
 		buf = append(buf, '=')
 
 		v := p.FieldValues[i]
-		buf = fastFormatAppend(v, buf)
+		buf = fastFormatAppend(v, buf, false)
 
 		// Influx uses 'i' to indicate integers:
 		switch v.(type) {
@@ -116,7 +116,7 @@ func (p *Point) SerializeInfluxBulk(w io.Writer) (err error) {
 	}
 
 	buf = append(buf, ' ')
-	buf = fastFormatAppend(p.Timestamp.UTC().UnixNano(), buf)
+	buf = fastFormatAppend(p.Timestamp.UTC().UnixNano(), buf, true)
 	buf = append(buf, '\n')
 	_, err = w.Write(buf)
 
@@ -172,7 +172,7 @@ func (p *Point) SerializeESBulk(w io.Writer) error {
 		buf = append(buf, "\": "...)
 
 		v := p.FieldValues[i]
-		buf = fastFormatAppend(v, buf)
+		buf = fastFormatAppend(v, buf, false)
 	}
 
 	if len(p.TagKeys) > 0 || len(p.FieldKeys) > 0 {
@@ -180,7 +180,7 @@ func (p *Point) SerializeESBulk(w io.Writer) error {
 	}
 	// Timestamps in ES must be millisecond precision:
 	buf = append(buf, "\"timestamp\": "...)
-	buf = fastFormatAppend(p.Timestamp.UTC().UnixNano()/1e6, buf)
+	buf = fastFormatAppend(p.Timestamp.UTC().UnixNano()/1e6, buf, true)
 	buf = append(buf, " }\n"...)
 
 	_, err := w.Write(buf)
@@ -230,7 +230,7 @@ func (p *Point) SerializeCassandra(w io.Writer) (err error) {
 		buf = append(buf, ", "...)
 		buf = append(buf, []byte(fmt.Sprintf("%d, ", timestampNanos))...)
 
-		buf = fastFormatAppend(v, buf)
+		buf = fastFormatAppend(v, buf, true)
 
 		buf = append(buf, []byte(")\n")...)
 
@@ -449,7 +449,7 @@ func (p *Point) SerializeTimeScale(w io.Writer) (err error) {
 	for i := 0; i < len(p.FieldValues); i++ {
 		buf = append(buf, ","...)
 		v := p.FieldValues[i]
-		buf = fastFormatAppend(v, buf)
+		buf = fastFormatAppend(v, buf, true)
 	}
 	buf = append(buf, []byte(");\n")...)
 
@@ -548,7 +548,11 @@ func typeNameForCassandra(v interface{}) string {
 	}
 }
 
-func fastFormatAppend(v interface{}, buf []byte) []byte {
+func fastFormatAppend(v interface{}, buf []byte, singleQuotesForString bool) []byte {
+	var quotationChar = "\""
+	if singleQuotesForString {
+		quotationChar = "'"
+	}
 	switch v.(type) {
 	case int:
 		return strconv.AppendInt(buf, int64(v.(int)), 10)
@@ -561,10 +565,14 @@ func fastFormatAppend(v interface{}, buf []byte) []byte {
 	case bool:
 		return strconv.AppendBool(buf, v.(bool))
 	case []byte:
+		buf = append(buf, quotationChar...)
 		buf = append(buf, v.([]byte)...)
+		buf = append(buf, quotationChar...)
 		return buf
 	case string:
+		buf = append(buf, quotationChar...)
 		buf = append(buf, v.(string)...)
+		buf = append(buf, quotationChar...)
 		return buf
 	default:
 		panic(fmt.Sprintf("unknown field type for %#v", v))

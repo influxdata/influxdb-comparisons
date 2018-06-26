@@ -31,7 +31,7 @@ func NewAirQualityRoomMeasurement(start time.Time, id []byte) *AirQualityRoomMea
 	//co_level
 	distributions[1] = MUDWD(ND(0.001, 0.0001), 0, 10, 0)
 	//battery_voltage
-	distributions[2] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[2] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &AirQualityRoomMeasurement{
 		timestamp:     start,

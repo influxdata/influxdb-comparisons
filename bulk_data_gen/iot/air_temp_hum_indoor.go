@@ -31,7 +31,7 @@ func NewAirConditionRoomMeasurement(start time.Time, id []byte) *AirConditionRoo
 	//humidity
 	distributions[1] = MUDWD(ND(0, 1), 25, 60, 40)
 	//battery_voltage
-	distributions[2] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[2] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &AirConditionRoomMeasurement{
 		timestamp:     start,

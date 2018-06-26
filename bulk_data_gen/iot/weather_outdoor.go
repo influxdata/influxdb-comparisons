@@ -37,7 +37,7 @@ func NewWeatherOutdoorMeasurement(start time.Time, id []byte) *WeatherOutdoorMea
 	//precipitation
 	distributions[3] = MUDWD(ND(0, 1), 5, 95, 80)
 	//battery_voltage
-	distributions[4] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[4] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &WeatherOutdoorMeasurement{
 		timestamp:     start,

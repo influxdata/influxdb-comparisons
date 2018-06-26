@@ -63,8 +63,8 @@ func init() {
 	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 
-	flag.StringVar(&timestampStartStr, "timestamp-start", "2018-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
-	flag.StringVar(&timestampEndStr, "timestamp-end", "2018-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
+	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
+	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1, 2) (default 0).")

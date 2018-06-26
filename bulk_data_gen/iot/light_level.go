@@ -28,7 +28,7 @@ func NewLightLevelRoomMeasurement(start time.Time, id []byte) *LightLevelRoomMea
 	//level
 	distributions[0] = MUDWD(ND(0, 1), 0.00001, 1e5, 10000)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[1] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &LightLevelRoomMeasurement{
 		timestamp:     start,
