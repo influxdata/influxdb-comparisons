@@ -29,7 +29,7 @@ func NewWaterLeakageRoomMeasurement(start time.Time, roomId []byte, sensorId []b
 	//state
 	distributions[0] = TSD(0, 1, 0)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[1] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &WaterLeakageRoomMeasurement{
 		timestamp:     start,

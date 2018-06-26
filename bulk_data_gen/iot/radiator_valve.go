@@ -30,7 +30,7 @@ func NewRadiatorValveRoomMeasurement(start time.Time, randiatorId []byte, sensor
 	//opening_level
 	distributions[0] = CWD(ND(0, 1), 0.0, 100, 0)
 	//battery_voltage
-	distributions[1] = MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	distributions[1] = MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &RadiatorValveRoomMeasurement{
 		timestamp:     start,

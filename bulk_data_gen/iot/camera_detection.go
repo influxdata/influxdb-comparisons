@@ -60,7 +60,7 @@ type CameraDetectionMeasurement struct {
 func NewCameraDetectionMeasurement(start time.Time, id []byte) *CameraDetectionMeasurement {
 
 	//battery_voltage
-	batteryDist := MUDWD(ND(1, 0.5), 1, 3.2, 3.2)
+	batteryDist := MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
 	return &CameraDetectionMeasurement{
 		timestamp:   start,
