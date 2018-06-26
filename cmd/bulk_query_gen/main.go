@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	bulkQueryGen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/cassandra"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/elasticsearch"
@@ -27,6 +28,8 @@ const (
 	DevOpsOneHostTwelveHours = "1-host-12-hr"
 	DevOpsEightHostsOneHour  = "8-host-1-hr"
 	DevOpsGroupBy            = "groupby"
+	Iot                      = "iot"
+	IotOneHomeTwelveHours    = "1-home-12-hours"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -62,6 +65,11 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"es-http":     elasticsearch.NewElasticSearchDevopsGroupBy,
 			"influx-http": influxdb.NewInfluxDevopsGroupBy,
 			"timescaledb": timescaledb.NewTimescaleDevopsGroupby,
+		},
+	},
+	Iot: {
+		IotOneHomeTwelveHours: {
+			"influx-http": influxdb.NewInfluxIotSingleHost,
 		},
 	},
 }
@@ -117,8 +125,8 @@ func init() {
 
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database for influx to use (ignored for ElasticSearch).")
 
-	flag.StringVar(&timestampStartStr, "timestamp-start", "2016-01-01T00:00:00Z", "Beginning timestamp (RFC3339).")
-	flag.StringVar(&timestampEndStr, "timestamp-end", "2016-01-01T06:00:00Z", "Ending timestamp (RFC3339).")
+	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
+	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1) (default 0).")
