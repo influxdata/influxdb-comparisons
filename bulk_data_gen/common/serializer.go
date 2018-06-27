@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 )
 
@@ -11,9 +12,13 @@ type Serializer interface {
 	SerializeSize(w io.Writer, points int64, values int64) error
 }
 
+const DatasetSizeMarker = "dataset-size:"
+
+var DatasetSizeMarkerRE = regexp.MustCompile(DatasetSizeMarker + `(\d+),(\d+)`)
+
 func serializeSizeInText(w io.Writer, points int64, values int64) error {
 	buf := scratchBufPool.Get().([]byte)
-	buf = append(buf, fmt.Sprintf("%d,%d\n", points, values)...)
+	buf = append(buf, fmt.Sprintf("%s%d,%d\n", DatasetSizeMarker, points, values)...)
 	_, err := w.Write(buf)
 	if err != nil {
 		return err
