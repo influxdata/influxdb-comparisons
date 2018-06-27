@@ -184,7 +184,7 @@ func main() {
 	if n != sim.SeenPoints() {
 		panic(fmt.Sprintf("Logic error, written %d points, generated %d points", n, sim.SeenPoints()))
 	}
-	//serializer.SerializeSize(out, sim.SeenPoints(),sim.SeenValues())
+	serializer.SerializeSize(out, sim.SeenPoints(), sim.SeenValues())
 	err := out.Flush()
 	dur := time.Now().Sub(t)
 	log.Printf("Written %d points, %d values, took %0f seconds\n", n, sim.SeenValues(), dur.Seconds())
