@@ -83,5 +83,6 @@ func (m *SerializerOpenTSDB) SerializePoint(w io.Writer, p *Point) (err error) {
 }
 
 func (s *SerializerOpenTSDB) SerializeSize(w io.Writer, points int64, values int64) error {
-	return serializeSizeInText(w, points, values)
+	//return serializeSizeInText(w, points, values)
+	return nil
 }

@@ -143,5 +143,6 @@ func (t *SerializerTimescaleBin) SerializePoint(w io.Writer, p *Point) (err erro
 }
 
 func (s *SerializerTimescaleBin) SerializeSize(w io.Writer, points int64, values int64) error {
-	return serializeSizeInText(w, points, values)
+	//return serializeSizeInText(w, points, values)
+	return nil
 }

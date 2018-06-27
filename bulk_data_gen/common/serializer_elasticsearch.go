@@ -77,5 +77,6 @@ func (s *SerializerElastic) SerializePoint(w io.Writer, p *Point) error {
 }
 
 func (s *SerializerElastic) SerializeSize(w io.Writer, points int64, values int64) error {
-	return serializeSizeInText(w, points, values)
+	//return serializeSizeInText(w, points, values)
+	return nil
 }

@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 	"io"
 )
@@ -66,7 +67,7 @@ var (
 var formatChoices = []string{"timescaledb-sql", "timescaledb-copyFrom"}
 
 var processes = map[string]struct {
-	scan    func(int, io.Reader) (int64, int64)
+	scan    func(int, io.Reader) (int64, int64, int64)
 	process func(*pgx.Conn) int64
 }{
 	formatChoices[0]:           {scan, processBatches},
@@ -195,7 +196,7 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead := procs.scan(batchSize, sourceReader)
+	itemsRead, bytesRead, valuesRead := procs.scan(batchSize, sourceReader)
 
 	<-inputDone
 	close(batchChan)
@@ -207,7 +208,7 @@ func main() {
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 
-	valuesRate := itemsRate * ValuesPerMeasurement
+	valuesRate := float64(valuesRead) / float64(took.Seconds())
 
 	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 	if file != "" {
@@ -243,15 +244,34 @@ func main() {
 }
 
 // scan reads lines from stdin. It expects input in the postgresql sql format.
-func scan(itemsPerBatch int, reader io.Reader) (int64, int64) {
+func scan(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 	var n int
 	var linesRead, bytesRead int64
+	var totalPoints, totalValues int64
 
 	buff := bufPool.Get().(*bytes.Buffer)
 	newline := []byte("\n")
 
 	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
 	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, common.DatasetSizeMarker) {
+			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+			if parts == nil || len(parts[0]) != 3 {
+				log.Fatalf("Incorrent number of matched groups: %#v", parts)
+			}
+			if i, err := strconv.Atoi(parts[0][1]); err == nil {
+				totalPoints = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			if i, err := strconv.Atoi(parts[0][2]); err == nil {
+				totalValues = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			continue
+		}
 		linesRead++
 
 		buff.Write(scanner.Bytes())
@@ -278,22 +298,44 @@ func scan(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
+	if linesRead != totalPoints {
+		log.Fatalf("Incorrent number of read points: %d, expected: %d:", linesRead, totalPoints)
+	}
+
 	// The timescaledb format uses 1 line per item:
 	itemsRead := linesRead
 
-	return itemsRead, bytesRead
+	return itemsRead, bytesRead, totalValues
 }
 
 // scan reads lines from stdin. It expects input in the postgresql sql format.
-func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64) {
+func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 	var n int
 	var linesRead, bytesRead int64
+	var totalPoints, totalValues int64
 
 	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
 	var buff = make([]string, 0, itemsPerBatch)
 	for scanner.Scan() {
-		linesRead++
 		line := scanner.Text()
+		if strings.HasPrefix(line, common.DatasetSizeMarker) {
+			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+			if parts == nil || len(parts[0]) != 3 {
+				log.Fatalf("Incorrent number of matched groups: %#v", parts)
+			}
+			if i, err := strconv.Atoi(parts[0][1]); err == nil {
+				totalPoints = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			if i, err := strconv.Atoi(parts[0][2]); err == nil {
+				totalValues = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			continue
+		}
+		linesRead++
 		buff = append(buff, line)
 		bytesRead += int64(len(line))
 		n++
@@ -316,14 +358,18 @@ func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64) {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
+	if linesRead != totalPoints {
+		log.Fatalf("Incorrent number of read points: %d, expected: %d:", linesRead, totalPoints)
+	}
+
 	// The timescaledb format uses 1 line per item:
 	itemsRead := linesRead
 
-	return itemsRead, bytesRead
+	return itemsRead, bytesRead, totalValues
 }
 
 // scan reads data from stdin. It expects gop encoded points
-func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64) {
+func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64, int64) {
 
 	var n int
 	var itemsRead, bytesRead int64
@@ -426,7 +472,7 @@ func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64) {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	return itemsRead, bytesRead
+	return itemsRead, bytesRead, int64(float64(itemsRead) * ValuesPerMeasurement)
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
