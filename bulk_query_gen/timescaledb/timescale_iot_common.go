@@ -64,7 +64,7 @@ func (d *TimescaleIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, 
 	q.HumanLabel = []byte(humanLabel)
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
 
-	q.QuerySQL = []byte(fmt.Sprintf("select time_bucket(3600000000000,time) as time1hour,max(temperature) from air_condition_room where (%s) and time >=%d and time < %d group by time1min order by time1min ", combinedHomesClause, interval.StartUnixNano(), interval.EndUnixNano()))
+	q.QuerySQL = []byte(fmt.Sprintf("select time_bucket(3600000000000,time) as time1hour,max(temperature) from air_condition_room where (%s) and time >=%d and time < %d group by time1hour order by time1hour ", combinedHomesClause, interval.StartUnixNano(), interval.EndUnixNano()))
 
 }
 
