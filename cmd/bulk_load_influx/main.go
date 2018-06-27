@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/pkg/profile"
 	"github.com/valyala/fasthttp"
@@ -247,7 +248,7 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead := scan(batchSize)
+	itemsRead, bytesRead, valuesRead := scan(batchSize)
 
 	<-inputDone
 	close(batchChan)
@@ -261,10 +262,10 @@ func main() {
 
 	end := time.Now()
 	took := end.Sub(start)
+
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
-
-	valuesRate := itemsRate * ValuesPerMeasurement
+	valuesRate := float64(valuesRead) / float64(took.Seconds())
 
 	if telemetryHost != "" {
 		close(telemetryChanPoints)
@@ -306,11 +307,13 @@ func main() {
 
 // scan reads one item at a time from stdin. 1 item = 1 line.
 // When the requested number of items per batch is met, send a batch over batchChan for the workers to write.
-func scan(itemsPerBatch int) (int64, int64) {
+func scan(itemsPerBatch int) (int64, int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
 	var n int
 	var itemsRead, bytesRead int64
+	var totalPoints, totalValues int64
+
 	newline := []byte("\n")
 	var deadline time.Time
 	if timeLimit >= 0 {
@@ -326,6 +329,24 @@ outer:
 			break
 		}
 
+		line := scanner.Text()
+		if strings.HasPrefix(line, common.DatasetSizeMarker) {
+			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+			if parts == nil || len(parts[0]) != 3 {
+				log.Fatalf("Incorrent number of matched groups: %#v", parts)
+			}
+			if i, err := strconv.Atoi(parts[0][1]); err == nil {
+				totalPoints = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			if i, err := strconv.Atoi(parts[0][2]); err == nil {
+				totalValues = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			continue
+		}
 		itemsRead++
 		batchItemCount++
 
@@ -361,7 +382,11 @@ outer:
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	return itemsRead, bytesRead
+	if itemsRead != totalPoints {
+		log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+	}
+
+	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
