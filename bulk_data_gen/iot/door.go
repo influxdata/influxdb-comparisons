@@ -7,7 +7,7 @@ import (
 
 var (
 	DoorByteString = []byte("door_state") // heap optimization
-	DoorTagKey     = []byte("door")
+	DoorTagKey     = []byte("door_id")
 )
 
 var (

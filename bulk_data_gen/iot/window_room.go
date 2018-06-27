@@ -7,7 +7,7 @@ import (
 
 var (
 	WindowByteString = []byte("window_state_room") // heap optimization
-	WindowTagKey     = []byte("window")
+	WindowTagKey     = []byte("window_id")
 )
 
 var (

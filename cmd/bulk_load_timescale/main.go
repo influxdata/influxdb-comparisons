@@ -552,7 +552,7 @@ func processBatchesBin(conn *pgx.Conn) int64 {
 const createDatabaseSql = "create database " + DatabaseName + ";"
 const createExtensionSql = "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
 
-var createTableSql = []string{
+var DevopsCreateTableSql = []string{
 	"CREATE table cpu(time bigint not null,hostname TEXT,region TEXT,datacenter TEXT,rack TEXT,os TEXT,arch TEXT,team TEXT,service TEXT,service_version TEXT,service_environment TEXT,usage_user float8,usage_system float8,usage_idle float8,usage_nice float8,usage_iowait float8,usage_irq float8,usage_softirq float8,usage_steal float8,usage_guest float8,usage_guest_nice float8);",
 	"CREATE table diskio(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, serial TEXT, reads bigint, writes bigint, read_bytes bigint, write_bytes bigint, read_time bigint, write_time bigint, io_time bigint );",
 	"CREATE table disk(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, path TEXT, fstype TEXT, total bigint, free bigint, used bigint, used_percent bigint, inodes_total bigint, inodes_free bigint, inodes_used bigint);",
@@ -564,7 +564,23 @@ var createTableSql = []string{
 	"CREATE table redis(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, uptime_in_seconds bigint, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint, connected_clients bigint, used_memory bigint, used_memory_rss bigint, used_memory_peak bigint, used_memory_lua bigint, rdb_changes_since_last_save bigint, sync_full bigint, sync_partial_ok bigint, sync_partial_err bigint, pubsub_channels bigint, pubsub_patterns bigint, latest_fork_usec bigint, connected_slaves bigint, master_repl_offset bigint, repl_backlog_active bigint, repl_backlog_size bigint, repl_backlog_histlen bigint, mem_fragmentation_ratio bigint, used_cpu_sys bigint, used_cpu_user bigint, used_cpu_sys_children bigint, used_cpu_user_children bigint );",
 }
 
-var createHypertableSql = []string{
+var IotCreateTableSql = []string{
+	"CREATE TABLE air_quality_room (time bigint not null,room_id TEXT,sensor_id TEXT,home_id TEXT, co2_level float8,co_level float8,battery_voltage float8 )",
+	"CREATE TABLE air_condition_room (time bigint not null,room_id TEXT,sensor_id TEXT,home_id TEXT, temperature float8,humidity float8,battery_voltage float8 )",
+	"CREATE TABLE air_condition_outdoor (time bigint not null,sensor_id TEXT,home_id TEXT, temperature float8,humidity float8,battery_voltage float8 )",
+	"CREATE TABLE camera_detection (time bigint not null,sensor_id TEXT,home_id TEXT, object_type TEXT,object_kind TEXT,battery_voltage float8 )",
+	"CREATE TABLE door_state (time bigint not null,door_id TEXT,sensor_id TEXT,	home_id TEXT, state float8,battery_voltage float8 )",
+	"CREATE TABLE home_config (time bigint not null,sensor_id TEXT,home_id TEXT, config_string TEXT)",
+	"CREATE TABLE home_state (time bigint not null,sensor_id TEXT,home_id TEXT, state BIGINT,state_string TEXT)",
+	"CREATE TABLE light_level_room (time bigint not null,room_id TEXT,sensor_id TEXT,home_id TEXT, level float8,battery_voltage float8 )",
+	"CREATE TABLE radiator_valve_room (time bigint not null,room_id TEXT,radiator TEXT,sensor_id TEXT,home_id TEXT, opening_level float8,battery_voltage float8 )",
+	"CREATE TABLE water_leakage_room (time bigint not null,sensor_id TEXT,room_id TEXT,home_id TEXT, leakage float8,battery_voltage float8 )",
+	"CREATE TABLE water_level (time bigint not null,sensor_id TEXT,home_id TEXT, level float8,battery_voltage float8 )",
+	"CREATE TABLE weather_outdoor (time bigint not null,sensor_id TEXT,home_id TEXT, pressure float8,wind_speed float8,wind_direction float8,precipitation float8,battery_voltage float8 )",
+	"CREATE TABLE window_state_room (time bigint not null,room_id TEXT,sensor_id TEXT,window_id TEXT,home_id TEXT, state float8,battery_voltage float8 )",
+}
+
+var devopsCreateHypertableSql = []string{
 	"select create_hypertable('cpu','time', chunk_time_interval => %d);",
 	"select create_hypertable('diskio','time', chunk_time_interval => %d);",
 	"select create_hypertable('disk','time', chunk_time_interval => %d);",
@@ -576,7 +592,23 @@ var createHypertableSql = []string{
 	"select create_hypertable('redis','time', chunk_time_interval => %d);",
 }
 
-var createIndexSql = []string{
+var iotCreateHypertableSql = []string{
+	"select create_hypertable('air_quality_room','time', chunk_time_interval => %d);",
+	"select create_hypertable('air_condition_room','time', chunk_time_interval => %d);",
+	"select create_hypertable('air_condition_outdoor','time', chunk_time_interval => %d);",
+	"select create_hypertable('camera_detection','time', chunk_time_interval => %d);",
+	"select create_hypertable('door_state','time', chunk_time_interval => %d);",
+	"select create_hypertable('home_config','time', chunk_time_interval => %d);",
+	"select create_hypertable('home_state','time', chunk_time_interval => %d);",
+	"select create_hypertable('light_level_room','time', chunk_time_interval => %d);",
+	"select create_hypertable('radiator_valve_room','time', chunk_time_interval => %d);",
+	"select create_hypertable('water_leakage_room','time', chunk_time_interval => %d);",
+	"select create_hypertable('water_level','time', chunk_time_interval => %d);",
+	"select create_hypertable('weather_outdoor','time', chunk_time_interval => %d);",
+	"select create_hypertable('window_state_room','time', chunk_time_interval => %d);",
+}
+
+var devopsCreateIndexSql = []string{
 	"CREATE index cpu_hostname_index on cpu(hostname, time DESC);",
 	"CREATE index diskio_hostname_index on diskio(hostname, time DESC);",
 	"CREATE index disk_hostname_index on disk(hostname, time DESC);",
@@ -586,6 +618,22 @@ var createIndexSql = []string{
 	"CREATE index nginx_hostname_index on nginx(hostname, time DESC);",
 	"CREATE index postgresl_hostname_index on postgresl(hostname, time DESC);",
 	"CREATE index redis_hostname_index on redis(hostname, time DESC);",
+}
+
+var iotCreateIndexSql = []string{
+	"CREATE index air_quality_room_home_index on air_quality_room(home_id, time DESC);",
+	"CREATE index air_condition_room_home_index on air_condition_room(home_id, time DESC);",
+	"CREATE index air_condition_outdoor_home_index on air_condition_outdoor(home_id, time DESC);",
+	"CREATE index camera_detection_home_index on camera_detection(home_id, time DESC);",
+	"CREATE index door_state_home_index on door_state(home_id, time DESC);",
+	"CREATE index home_config_home_index on home_config(home_id, time DESC);",
+	"CREATE index home_state_home_index on home_state(home_id, time DESC);",
+	"CREATE index light_level_room_home_index on light_level_room(home_id, time DESC);",
+	"CREATE index radiator_valve_room_home_index on radiator_valve_room(home_id, time DESC);",
+	"CREATE index water_leakage_room_home_index on water_leakage_room(home_id, time DESC);",
+	"CREATE index water_level_home_index on water_level(home_id, time DESC);",
+	"CREATE index weather_outdoor_home_index on weather_outdoor(home_id, time DESC);",
+	"CREATE index window_state_room_home_index on window_state_room(home_id, time DESC);",
 }
 
 func createDatabase(daemon_url string) {
@@ -621,19 +669,38 @@ func createDatabase(daemon_url string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, sql := range createTableSql {
+	//TODO create only use-case specific schema
+	for _, sql := range DevopsCreateTableSql {
 		_, err = conn.Exec(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-	for _, sql := range createIndexSql {
+	for _, sql := range IotCreateTableSql {
 		_, err = conn.Exec(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-	for _, sql := range createHypertableSql {
+	for _, sql := range devopsCreateIndexSql {
+		_, err = conn.Exec(sql)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	for _, sql := range iotCreateIndexSql {
+		_, err = conn.Exec(sql)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	for _, sql := range devopsCreateHypertableSql {
+		_, err = conn.Exec(fmt.Sprintf(sql, chunkDuration.Nanoseconds()))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	for _, sql := range iotCreateHypertableSql {
 		_, err = conn.Exec(fmt.Sprintf(sql, chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)

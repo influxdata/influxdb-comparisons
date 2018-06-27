@@ -12,7 +12,7 @@ var (
 	EpochDuration = 60 * time.Second
 
 	// Tag fields common to all inside sensors:
-	RoomTagKey = []byte("room")
+	RoomTagKey = []byte("room_id")
 
 	// Tag fields common to all inside sensors:
 	SensorHomeTagKeys = [][]byte{

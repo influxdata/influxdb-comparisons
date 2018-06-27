@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	WaterLevelByteString = []byte("light_level_room") // heap optimization
+	WaterLevelByteString = []byte("water_level") // heap optimization
 )
 
 var (

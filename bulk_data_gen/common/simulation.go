@@ -10,7 +10,8 @@ const (
 // Simulator simulates a use case.
 type Simulator interface {
 	Total() int64
-	Seen() int64
+	SeenPoints() int64
+	SeenValues() int64
 	Finished() bool
 	Next(*Point)
 }

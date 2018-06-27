@@ -1,14 +1,15 @@
 package devops
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 // A DevopsSimulator generates data similar to telemetry from Telegraf.
 // It fulfills the Simulator interface.
 type DevopsSimulator struct {
 	madePoints int64
+	madeValues int64
 	maxPoints  int64
 
 	simulatedMeasurementIndex int
@@ -21,8 +22,12 @@ type DevopsSimulator struct {
 	timestampEnd   time.Time
 }
 
-func (g *DevopsSimulator) Seen() int64 {
+func (g *DevopsSimulator) SeenPoints() int64 {
 	return g.madePoints
+}
+
+func (g *DevopsSimulator) SeenValues() int64 {
+	return g.madeValues
 }
 
 func (g *DevopsSimulator) Total() int64 {
@@ -51,6 +56,7 @@ func (d *DevopsSimulatorConfig) ToSimulator() *DevopsSimulator {
 	maxPoints := epochs * (d.HostCount * NHostSims)
 	dg := &DevopsSimulator{
 		madePoints: 0,
+		madeValues: 0,
 		maxPoints:  maxPoints,
 
 		simulatedMeasurementIndex: 0,
@@ -101,6 +107,7 @@ func (d *DevopsSimulator) Next(p *Point) {
 
 	d.madePoints++
 	d.hostIndex++
+	d.madeValues += int64(len(p.FieldValues))
 
 	return
 }

@@ -19,7 +19,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
-	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -138,22 +137,22 @@ func main() {
 		panic("unreachable")
 	}
 
-	var serializer func(*common.Point, io.Writer) error
+	var serializer common.Serializer
 	switch format {
 	case "influx-bulk":
-		serializer = (*common.Point).SerializeInfluxBulk
+		serializer = common.NewSerializerInflux()
 	case "es-bulk":
-		serializer = (*common.Point).SerializeESBulk
+		serializer = common.NewSerializerElastic()
 	case "cassandra":
-		serializer = (*common.Point).SerializeCassandra
+		serializer = common.NewSerializerCassandra()
 	case "mongo":
-		serializer = (*common.Point).SerializeMongo
+		serializer = common.NewSerializerMongo()
 	case "opentsdb":
-		serializer = (*common.Point).SerializeOpenTSDBBulk
+		serializer = common.NewSerializerOpenTSDB()
 	case "timescaledb-sql":
-		serializer = (*common.Point).SerializeTimeScale
+		serializer = common.NewSerializerTimescaleSql()
 	case "timescaledb-copyFrom":
-		serializer = (*common.Point).SerializeTimeScaleBin
+		serializer = common.NewSerializerTimescaleBin()
 	default:
 		panic("unreachable")
 	}
@@ -162,14 +161,14 @@ func main() {
 
 	t := time.Now()
 	point := common.MakeUsablePoint()
-	n := 0
+	n := int64(0)
 	for !sim.Finished() {
 		sim.Next(point)
 		n++
 		// in the default case this is always true
 		if currentInterleavedGroup == interleavedGenerationGroupID {
 			//println("printing")
-			err := serializer(point, out)
+			err := serializer.SerializePoint(out, point)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -182,10 +181,13 @@ func main() {
 			currentInterleavedGroup = 0
 		}
 	}
-
+	if n != sim.SeenPoints() {
+		panic(fmt.Sprintf("Logic error, written %d points, generated %d points", n, sim.SeenPoints()))
+	}
+	//serializer.SerializeSize(out, sim.SeenPoints(),sim.SeenValues())
 	err := out.Flush()
 	dur := time.Now().Sub(t)
-	log.Printf("Written %d points, took %0f seconds\n", n, dur.Seconds())
+	log.Printf("Written %d points, %d values, took %0f seconds\n", n, sim.SeenValues(), dur.Seconds())
 	if err != nil {
 		log.Fatal(err.Error())
 	}
