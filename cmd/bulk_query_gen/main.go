@@ -70,6 +70,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 	Iot: {
 		IotOneHomeTwelveHours: {
 			"influx-http": influxdb.NewInfluxIotSingleHost,
+			"timescaledb": timescaledb.NewTimescaleIotSingleHost,
 		},
 	},
 }
