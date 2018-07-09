@@ -47,11 +47,12 @@ func (m *AirConditionOutdoorMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *AirConditionOutdoorMeasurement) ToPoint(p *Point) {
+func (m *AirConditionOutdoorMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(AirConditionOutdoorByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(AirConditionOutdoorFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

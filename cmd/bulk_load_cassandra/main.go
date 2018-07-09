@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"strconv"
 	"strings"
@@ -113,16 +114,19 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead := scan(session, batchSize)
+	itemsRead, bytesRead, valuesRead := scan(session, batchSize)
 
 	<-inputDone
 	close(batchChan)
 	workersGroup.Wait()
 	end := time.Now()
 	took := end.Sub(start)
-	rate := float64(itemsRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean value rate %f/sec)\n", itemsRead, took.Seconds(), workers, rate)
+	//itemsRate := float64(itemsRead) / float64(took.Seconds())
+	bytesRate := float64(bytesRead) / float64(took.Seconds())
+	valuesRate := float64(valuesRead) / float64(took.Seconds())
+
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, valuesRate, bytesRate/(1<<20))
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
@@ -144,7 +148,7 @@ func main() {
 			IsGzip:    false,
 			BatchSize: batchSize,
 		}
-		err := report.ReportLoadResult(reportParams, itemsRead, rate, -1, took)
+		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
 
 		if err != nil {
 			log.Fatal(err)
@@ -153,17 +157,38 @@ func main() {
 }
 
 // scan reads lines from stdin. It expects input in the Cassandra CQL format.
-func scan(session *gocql.Session, itemsPerBatch int) int64 {
+func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
 	var batch *gocql.Batch
 	if doLoad {
 		batch = session.NewBatch(gocql.LoggedBatch)
 	}
 
 	var n int
-	var linesRead int64
+	var itemsRead, bytesRead int64
+	var totalPoints, totalValues int64
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		linesRead++
+		line := scanner.Text()
+		if strings.HasPrefix(line, common.DatasetSizeMarker) {
+			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+			if parts == nil || len(parts[0]) != 3 {
+				log.Fatalf("Incorrent number of matched groups: %#v", parts)
+			}
+			if i, err := strconv.Atoi(parts[0][1]); err == nil {
+				totalPoints = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			if i, err := strconv.Atoi(parts[0][2]); err == nil {
+				totalValues = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			continue
+		}
+		itemsRead++
+		bytesRead += int64(len(scanner.Bytes()))
 
 		if !doLoad {
 			continue
@@ -190,11 +215,12 @@ func scan(session *gocql.Session, itemsPerBatch int) int64 {
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
+	//cassandra's schema stores each value separately, point is represented in series_id
+	if itemsRead != totalValues {
+		log.Fatalf("Incorrent number of read items: %d, expected: %d:", itemsRead, totalPoints)
+	}
 
-	// The Cassandra query format uses 1 line per item:
-	itemsRead := linesRead
-
-	return itemsRead
+	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.

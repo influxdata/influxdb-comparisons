@@ -46,7 +46,7 @@ func (m *WaterLeakageRoomMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *WaterLeakageRoomMeasurement) ToPoint(p *Point) {
+func (m *WaterLeakageRoomMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(WaterLeakageRoomByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
@@ -54,4 +54,5 @@ func (m *WaterLeakageRoomMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(WaterLeakageRoomFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

@@ -44,9 +44,10 @@ func (d *IotSimulatorConfig) ToSimulator() *IotSimulator {
 // A IotSimulator generates data similar to telemetry from Telegraf.
 // It fulfills the Simulator interface.
 type IotSimulator struct {
-	madePoints int64
-	maxPoints  int64
-	madeValues int64
+	madePoints    int64
+	maxPoints     int64
+	madeValues    int64
+	skippedPoints int64
 
 	currentHomeIndex int
 	homes            []*SmartHome
@@ -69,40 +70,47 @@ func (g *IotSimulator) Total() int64 {
 }
 
 func (g *IotSimulator) Finished() bool {
-	return g.madePoints >= g.maxPoints
+	return (g.madePoints + g.skippedPoints) >= g.maxPoints
 }
 
 // Next advances a Point to the next state in the generator.
-func (d *IotSimulator) Next(p *Point) {
+func (g *IotSimulator) Next(p *Point) {
+	for {
+		//find home which has not send measurement
+		homeFound := false
+		homesSeen := 0
+		for homesSeen < len(g.homes) {
+			if g.currentHomeIndex == len(g.homes) {
+				g.currentHomeIndex = 0
+			}
+			if g.homes[g.currentHomeIndex].HasMoreMeasurements() {
+				homeFound = true
+				break
+			}
+			g.currentHomeIndex++
+			homesSeen++
+		}
 
-	//find home which has not send measurement
-	homeFound := false
-	homesSeen := 0
-	for homesSeen < len(d.homes) {
-		if d.currentHomeIndex == len(d.homes) {
-			d.currentHomeIndex = 0
+		if !homeFound {
+			for i := 0; i < len(g.homes); i++ {
+				g.homes[i].TickAll(EpochDuration)
+				g.homes[i].ResetMeasurementCounter()
+			}
+			g.currentHomeIndex = 0
 		}
-		if d.homes[d.currentHomeIndex].HasMoreMeasurements() {
-			homeFound = true
-			break
+		sm := g.homes[g.currentHomeIndex].NextMeasurement(p)
+		if sm == nil {
+			panic(fmt.Sprintf("Null point: home %d, room: %d, home measurement: %d", g.currentHomeIndex, g.homes[g.currentHomeIndex].currentRoomIndex, g.homes[g.currentHomeIndex].currentMeasurement))
 		}
-		d.currentHomeIndex++
-		homesSeen++
-	}
+		g.currentHomeIndex++
 
-	if !homeFound {
-		for i := 0; i < len(d.homes); i++ {
-			d.homes[i].TickAll(EpochDuration)
-			d.homes[i].ResetMeasurementCounter()
+		if !sm.ToPoint(p) {
+			p.Reset()
+			g.skippedPoints++
+			continue
 		}
-		d.currentHomeIndex = 0
-	}
-	sm := d.homes[d.currentHomeIndex].NextMeasurementToPoint(p)
-	if sm != nil {
-		d.madePoints++
-		d.currentHomeIndex++
-		d.madeValues += int64(len(p.FieldValues))
-	} else {
-		panic(fmt.Sprintf("Null point: home %d, room: %d, home measurement: %d", d.currentHomeIndex, d.homes[d.currentHomeIndex].currentRoom, d.homes[d.currentHomeIndex].currentMeasurement))
+		g.madePoints++
+		g.madeValues += int64(len(p.FieldValues))
+		break
 	}
 }

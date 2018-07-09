@@ -1,10 +1,10 @@
 package devops
 
 import (
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
@@ -66,7 +66,7 @@ func NewMemMeasurement(start time.Time) *MemMeasurement {
 		},
 	}
 	return &MemMeasurement{
-		timestamp:   start,
+		timestamp: start,
 
 		bytesTotal:        bytesTotal,
 		bytesUsedDist:     bytesUsedDist,
@@ -83,7 +83,7 @@ func (m *MemMeasurement) Tick(d time.Duration) {
 	m.bytesBufferedDist.Advance()
 }
 
-func (m *MemMeasurement) ToPoint(p *Point) {
+func (m *MemMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(MemoryByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -101,4 +101,5 @@ func (m *MemMeasurement) ToPoint(p *Point) {
 	p.AppendField(MemoryFieldKeys[6], 100.0*(used/float64(total)))
 	p.AppendField(MemoryFieldKeys[7], 100.0*(float64(total)-used)/float64(total))
 	p.AppendField(MemoryFieldKeys[8], 100.0*(float64(total)-buffered)/float64(total))
+	return true
 }

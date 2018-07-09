@@ -44,11 +44,12 @@ func (m *LightLevelRoomMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *LightLevelRoomMeasurement) ToPoint(p *Point) {
+func (m *LightLevelRoomMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(LightLevelRoomByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(LightLevelRoomFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }
