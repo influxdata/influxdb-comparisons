@@ -105,6 +105,7 @@ func (g *IotSimulator) Next(p *Point) {
 		g.currentHomeIndex++
 
 		if !sm.ToPoint(p) {
+			p.Reset()
 			g.skippedPoints++
 			continue
 		}
