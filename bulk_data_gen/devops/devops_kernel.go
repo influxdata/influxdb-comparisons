@@ -1,15 +1,15 @@
 package devops
 
 import (
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
-	KernelByteString = []byte("kernel") // heap optimization
+	KernelByteString   = []byte("kernel") // heap optimization
 	BootTimeByteString = []byte("boot_time")
-	KernelFields = []LabeledDistributionMaker{
+	KernelFields       = []LabeledDistributionMaker{
 		{[]byte("interrupts"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("context_switches"), func() Distribution { return MWD(ND(5, 1), 0) }},
 		{[]byte("processes_forked"), func() Distribution { return MWD(ND(5, 1), 0) }},
@@ -18,13 +18,12 @@ var (
 	}
 )
 
-
 type KernelMeasurement struct {
 	timestamp time.Time
 
-	bootTime int64
-	uptime           time.Duration
-	distributions    []Distribution
+	bootTime      int64
+	uptime        time.Duration
+	distributions []Distribution
 }
 
 func NewKernelMeasurement(start time.Time) *KernelMeasurement {
@@ -50,7 +49,7 @@ func (m *KernelMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *KernelMeasurement) ToPoint(p *Point) {
+func (m *KernelMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(KernelByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -58,4 +57,5 @@ func (m *KernelMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(KernelFields[i].Label, int64(m.distributions[i].Get()))
 	}
+	return true
 }

@@ -43,10 +43,11 @@ func (m *HomeStateMeasurement) Tick(d time.Duration) {
 	m.state = rand.Int63n(int64(len(HomeStates)))
 }
 
-func (m *HomeStateMeasurement) ToPoint(p *Point) {
+func (m *HomeStateMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(HomeStateByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	p.AppendField(HomeStateFieldKeys[0], m.state)
 	p.AppendField(HomeStateFieldKeys[1], HomeStates[m.state])
+	return true
 }

@@ -53,11 +53,12 @@ func (m *WeatherOutdoorMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *WeatherOutdoorMeasurement) ToPoint(p *Point) {
+func (m *WeatherOutdoorMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(WeatherOutdoorByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(WeatherOutdoorFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

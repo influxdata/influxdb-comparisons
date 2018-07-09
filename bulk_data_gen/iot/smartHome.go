@@ -38,7 +38,7 @@ type SmartHome struct {
 	//last generated room id
 	lastRoomId int64
 	//point generation variables
-	currentRoom            int
+	currentRoomIndex       int
 	currentMeasurement     int
 	totalMeasurementsGiven int
 }
@@ -73,14 +73,13 @@ func (r *room) HasMoreMeasurements() bool {
 	return r.currentMeasurement < len(r.SimulatedMeasurements)
 }
 
-func (r *room) NextMeasurementToPoint(p *Point) SimulatedMeasurement {
+func (r *room) NextMeasurement(p *Point) SimulatedMeasurement {
 	if !r.HasMoreMeasurements() {
 		return nil
 	}
 	p.AppendTag(RoomTagKey, r.RoomId)
 	sm := r.SimulatedMeasurements[r.currentMeasurement]
 	r.currentMeasurement++
-	sm.ToPoint(p)
 	return sm
 }
 
@@ -146,7 +145,7 @@ func (h *SmartHome) TickAll(d time.Duration) {
 func (h *SmartHome) ResetMeasurementCounter() {
 	h.totalMeasurementsGiven = 0
 	h.currentMeasurement = 0
-	h.currentRoom = 0
+	h.currentRoomIndex = 0
 	for _, room := range h.Rooms {
 		room.ResetMeasurementCounter()
 	}
@@ -156,25 +155,24 @@ func (h *SmartHome) HasMoreMeasurements() bool {
 	return h.totalMeasurementsGiven < h.NumMeasurements()
 }
 
-func (h *SmartHome) NextMeasurementToPoint(p *Point) SimulatedMeasurement {
+func (h *SmartHome) NextMeasurement(p *Point) SimulatedMeasurement {
 	var sm SimulatedMeasurement
 	if !h.HasMoreMeasurements() {
 		return nil
 	}
-	for h.currentRoom < len(h.Rooms) {
-		r := h.Rooms[h.currentRoom]
+	for h.currentRoomIndex < len(h.Rooms) {
+		r := h.Rooms[h.currentRoomIndex]
 		if r.HasMoreMeasurements() {
-			sm = r.NextMeasurementToPoint(p)
+			sm = r.NextMeasurement(p)
 			break
 		} else {
-			h.currentRoom++
+			h.currentRoomIndex++
 		}
 
 	}
-	if h.currentRoom == len(h.Rooms) {
+	if h.currentRoomIndex == len(h.Rooms) {
 		sm = h.SimulatedMeasurements[h.currentMeasurement]
 		h.currentMeasurement++
-		sm.ToPoint(p)
 	}
 	if sm != nil {
 		p.AppendTag(SensorHomeTagKeys[1], h.HomeId)

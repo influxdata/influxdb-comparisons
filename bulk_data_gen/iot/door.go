@@ -47,7 +47,7 @@ func (m *DoorMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *DoorMeasurement) ToPoint(p *Point) {
+func (m *DoorMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(DoorByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(DoorTagKey, m.doorId)
@@ -55,4 +55,5 @@ func (m *DoorMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(DoorFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

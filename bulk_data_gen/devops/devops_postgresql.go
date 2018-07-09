@@ -1,13 +1,13 @@
 package devops
 
 import (
-	"time"
 	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"time"
 )
 
 var (
 	PostgresqlByteString = []byte("postgresl") // heap optimization
-	PostgresqlFields = []LabeledDistributionMaker{
+	PostgresqlFields     = []LabeledDistributionMaker{
 		{[]byte("numbackends"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("xact_commit"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
 		{[]byte("xact_rollback"), func() Distribution { return CWD(ND(5, 1), 0, 1000, 0) }},
@@ -27,10 +27,9 @@ var (
 	}
 )
 
-
 type PostgresqlMeasurement struct {
-	timestamp time.Time
-	distributions    []Distribution
+	timestamp     time.Time
+	distributions []Distribution
 }
 
 func NewPostgresqlMeasurement(start time.Time) *PostgresqlMeasurement {
@@ -53,12 +52,12 @@ func (m *PostgresqlMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *PostgresqlMeasurement) ToPoint(p *Point) {
+func (m *PostgresqlMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(PostgresqlByteString)
 	p.SetTimestamp(&m.timestamp)
 
 	for i := range m.distributions {
 		p.AppendField(PostgresqlFields[i].Label, int64(m.distributions[i].Get()))
 	}
+	return true
 }
-

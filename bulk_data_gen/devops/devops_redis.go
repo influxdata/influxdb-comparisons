@@ -2,9 +2,9 @@ package devops
 
 import (
 	"fmt"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 type LabeledDistributionMaker struct {
@@ -95,7 +95,7 @@ func (m *RedisMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *RedisMeasurement) ToPoint(p *Point) {
+func (m *RedisMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(RedisByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -106,4 +106,5 @@ func (m *RedisMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(RedisFields[i].Label, int64(m.distributions[i].Get()))
 	}
+	return true
 }

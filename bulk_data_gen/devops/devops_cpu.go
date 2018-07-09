@@ -1,9 +1,9 @@
 package devops
 
 import (
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
@@ -46,7 +46,7 @@ func NewCPUMeasurement(start time.Time) *CPUMeasurement {
 		}
 	}
 	return &CPUMeasurement{
-		timestamp:   start,
+		timestamp:     start,
 		distributions: distributions,
 	}
 }
@@ -58,11 +58,12 @@ func (m *CPUMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *CPUMeasurement) ToPoint(p *Point) {
+func (m *CPUMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(CPUByteString)
 	p.SetTimestamp(&m.timestamp)
 
 	for i := range m.distributions {
 		p.AppendField(CPUFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

@@ -42,11 +42,12 @@ func (m *HomeConfigMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *HomeConfigMeasurement) ToPoint(p *Point) {
+func (m *HomeConfigMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(HomeConfigByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	p.AppendField(HomeConfigFieldKeys[0], m.config)
+	return true
 }
 
 func genRandomString() []byte {

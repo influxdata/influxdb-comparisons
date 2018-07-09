@@ -2,9 +2,9 @@ package devops
 
 import (
 	"fmt"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 const OneTerabyte = 1 << 40
@@ -56,7 +56,7 @@ func (m *DiskMeasurement) Tick(d time.Duration) {
 	m.freeBytesDist.Advance()
 }
 
-func (m *DiskMeasurement) ToPoint(p *Point) {
+func (m *DiskMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(DiskByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -82,4 +82,5 @@ func (m *DiskMeasurement) ToPoint(p *Point) {
 	p.AppendField(INodesTotalByteString, inodesTotal)
 	p.AppendField(INodesFreeByteString, inodesFree)
 	p.AppendField(INodesUsedByteString, inodesUsed)
+	return true
 }

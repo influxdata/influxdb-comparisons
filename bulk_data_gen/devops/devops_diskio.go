@@ -2,9 +2,9 @@ package devops
 
 import (
 	"fmt"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
@@ -25,8 +25,8 @@ var (
 type DiskIOMeasurement struct {
 	timestamp time.Time
 
-	serial []byte
-	distributions    []Distribution
+	serial        []byte
+	distributions []Distribution
 }
 
 func NewDiskIOMeasurement(start time.Time) *DiskIOMeasurement {
@@ -37,7 +37,7 @@ func NewDiskIOMeasurement(start time.Time) *DiskIOMeasurement {
 
 	serial := []byte(fmt.Sprintf("%03d-%03d-%03d", rand.Intn(1000), rand.Intn(1000), rand.Intn(1000)))
 	return &DiskIOMeasurement{
-		serial:       serial,
+		serial: serial,
 
 		timestamp:     start,
 		distributions: distributions,
@@ -52,7 +52,7 @@ func (m *DiskIOMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *DiskIOMeasurement) ToPoint(p *Point) {
+func (m *DiskIOMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(DiskIOByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -61,4 +61,5 @@ func (m *DiskIOMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(DiskIOFields[i].Label, int64(m.distributions[i].Get()))
 	}
+	return true
 }

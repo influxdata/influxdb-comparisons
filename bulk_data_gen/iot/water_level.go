@@ -44,11 +44,12 @@ func (m *WaterLevelMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *WaterLevelMeasurement) ToPoint(p *Point) {
+func (m *WaterLevelMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(WaterLevelByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(SensorHomeTagKeys[0], m.sensorId)
 	for i := range m.distributions {
 		p.AppendField(WaterLevelFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }

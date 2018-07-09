@@ -2,9 +2,9 @@ package devops
 
 import (
 	"fmt"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 var (
@@ -56,7 +56,7 @@ func (m *NetMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *NetMeasurement) ToPoint(p *Point) {
+func (m *NetMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(NetByteString)
 	p.SetTimestamp(&m.timestamp)
 
@@ -65,4 +65,5 @@ func (m *NetMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(RedisFields[i].Label, int64(m.distributions[i].Get()))
 	}
+	return true
 }

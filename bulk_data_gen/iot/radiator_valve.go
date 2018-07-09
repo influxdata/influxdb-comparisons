@@ -47,7 +47,7 @@ func (m *RadiatorValveRoomMeasurement) Tick(d time.Duration) {
 	}
 }
 
-func (m *RadiatorValveRoomMeasurement) ToPoint(p *Point) {
+func (m *RadiatorValveRoomMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(RadiatorValveRoomByteString)
 	p.SetTimestamp(&m.timestamp)
 	p.AppendTag(RadiatorTagKey, m.randiatorId)
@@ -55,4 +55,5 @@ func (m *RadiatorValveRoomMeasurement) ToPoint(p *Point) {
 	for i := range m.distributions {
 		p.AppendField(RadiatorValveRoomFieldKeys[i], m.distributions[i].Get())
 	}
+	return true
 }
