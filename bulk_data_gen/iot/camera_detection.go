@@ -62,15 +62,16 @@ func NewCameraDetectionMeasurement(start time.Time, id []byte) *CameraDetectionM
 	//battery_voltage
 	batteryDist := MUDWD(ND(0.01, 0.005), 1, 3.2, 3.2)
 
-	return &CameraDetectionMeasurement{
+	cd := &CameraDetectionMeasurement{
 		timestamp:   start,
 		batteryDist: batteryDist,
 		sensorId:    id,
 	}
+	cd.newDetection()
+	return cd
 }
 
-func (m *CameraDetectionMeasurement) Tick(d time.Duration) {
-	m.timestamp = m.timestamp.Add(d)
+func (m *CameraDetectionMeasurement) newDetection() {
 	object := rand.Int63n(int64(len(DetectionObjects)))
 	m.object = DetectionObjects[object]
 	switch object {
@@ -85,9 +86,13 @@ func (m *CameraDetectionMeasurement) Tick(d time.Duration) {
 		break
 	case 3: //uknown
 		m.kind = []byte("uknown")
-
 	}
+}
+
+func (m *CameraDetectionMeasurement) Tick(d time.Duration) {
+	m.timestamp = m.timestamp.Add(d)
 	m.batteryDist.Advance()
+	m.newDetection()
 }
 
 func (m *CameraDetectionMeasurement) ToPoint(p *Point) bool {
