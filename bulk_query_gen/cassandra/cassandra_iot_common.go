@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"fmt"
+	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
 	"time"
@@ -45,8 +46,8 @@ func (d *CassandraIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, 
 	tagSets := [][]string{}
 	tagSet := []string{}
 	for _, n := range nn {
-		hostname := fmt.Sprintf("host_%d", n)
-		tag := fmt.Sprintf("hostname=%s", hostname)
+		home := fmt.Sprintf(bulkDataGenIot.SmartHomeIdFormat, n)
+		tag := fmt.Sprintf("home_id = %s", home)
 		tagSet = append(tagSet, tag)
 	}
 	tagSets = append(tagSets, tagSet)
