@@ -62,6 +62,7 @@ var (
 	reportUser           string
 	reportPassword       string
 	reportTagsCSV        string
+	file                 string
 )
 
 // Helpers for choice-like flags:
@@ -84,12 +85,14 @@ var (
 	reportTags      [][2]string
 	reportHostname  string
 	reportQueryStat StatGroup
+	sourceReader    *os.File
 )
 
 type statsMap map[string]*StatGroup
 
 // Parse args:
 func init() {
+	flag.StringVar(&file, "file", "", "Input file")
 	flag.StringVar(&daemonUrl, "url", "localhost:9042", "Cassandra URL.")
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.StringVar(&aggrPlanLabel, "aggregation-plan", "", "Aggregation plan (choices: server, client)")
@@ -135,6 +138,17 @@ func init() {
 			}
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
+	}
+
+	if file != "" {
+		if f, err := os.Open(file); err == nil {
+			sourceReader = f
+		} else {
+			log.Fatalf("Error opening %s: %v\n", file, err)
+		}
+	}
+	if sourceReader == nil {
+		sourceReader = os.Stdin
 	}
 }
 
@@ -184,7 +198,7 @@ func main() {
 	}
 
 	// Read in jobs, closing the job channel when done:
-	input := bufio.NewReaderSize(os.Stdin, 1<<20)
+	input := bufio.NewReaderSize(sourceReader, 1<<20)
 	wallStart := time.Now()
 	scan(input)
 	close(hlQueryChan)
