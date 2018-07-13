@@ -51,7 +51,7 @@ func (m *SerializerCassandra) SerializePoint(w io.Writer, p *Point) (err error) 
 		buf = append(buf, ", "...)
 		buf = append(buf, []byte(fmt.Sprintf("%d, ", timestampNanos))...)
 
-		buf = fastFormatAppend(v, buf, true)
+		buf = fastFormatAppendCassandra(v, buf, true)
 
 		buf = append(buf, []byte(")\n")...)
 
@@ -62,6 +62,18 @@ func (m *SerializerCassandra) SerializePoint(w io.Writer, p *Point) (err error) 
 	}
 
 	return nil
+}
+
+func fastFormatAppendCassandra(v interface{}, buf []byte, singleQuotesForString bool) []byte {
+	switch v.(type) {
+	case []byte, string:
+		buf = append(buf, []byte("textasblob(")...)
+		buf = fastFormatAppend(v, buf, singleQuotesForString)
+		buf = append(buf, []byte(")")...)
+		return buf
+	default:
+		return fastFormatAppend(v, buf, singleQuotesForString)
+	}
 }
 
 func typeNameForCassandra(v interface{}) string {
