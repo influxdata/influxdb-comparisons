@@ -47,7 +47,7 @@ func (d *CassandraIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, 
 	tagSet := []string{}
 	for _, n := range nn {
 		home := fmt.Sprintf(bulkDataGenIot.SmartHomeIdFormat, n)
-		tag := fmt.Sprintf("home_id = %s", home)
+		tag := fmt.Sprintf("home_id=%s", home)
 		tagSet = append(tagSet, tag)
 	}
 	tagSets = append(tagSets, tagSet)
