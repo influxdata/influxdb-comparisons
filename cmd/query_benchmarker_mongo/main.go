@@ -267,7 +267,7 @@ func oneQuery(session *mgo.Session, q *Query) (float64, error) {
 			Id struct {
 				TimeBucket int64 `bson:"time_bucket"`
 			} `bson:"_id"`
-			Value float64 `bson:"max_value"`
+			Value float64 `bson:"agg_value"`
 		}
 
 		result := Result{}

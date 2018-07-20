@@ -114,7 +114,7 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, scale
 		{
 			"$group": M{
 				"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
-				"max_value": M{"$max": "$value"},
+				"agg_value": M{"$max": "$value"},
 			},
 		},
 		{
