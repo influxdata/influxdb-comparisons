@@ -1,22 +1,11 @@
 package mongodb
 
 import (
-	"encoding/gob"
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
 	"time"
 )
-
-type S []interface{}
-type M map[string]interface{}
-
-func init() {
-	// needed for serializing the mongo query to gob
-	gob.Register(S{})
-	gob.Register(M{})
-	gob.Register([]M{})
-}
 
 // MongoDevops produces Mongo-specific queries for the devops use case.
 type MongoDevops struct {
