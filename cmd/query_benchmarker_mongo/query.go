@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
+)
 
 // Query holds Mongo BSON request data, typically decoded from the program's
 // input.
@@ -9,7 +12,7 @@ type Query struct {
 	HumanDescription []byte
 	DatabaseName     []byte
 	CollectionName   []byte
-	BsonDoc          []M
+	BsonDoc          []mongodb.M
 	ID               int64
 }
 

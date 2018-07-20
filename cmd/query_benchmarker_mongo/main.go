@@ -11,17 +11,17 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
+	"github.com/influxdata/influxdb-comparisons/util/report"
+	"gopkg.in/mgo.v2"
 	"io"
 	"log"
 	"os"
 	"runtime/pprof"
 	"sort"
+	"strings"
 	"sync"
 	"time"
-
-	"github.com/influxdata/influxdb-comparisons/util/report"
-	"gopkg.in/mgo.v2"
-	"strings"
 )
 
 // Program option vars:
@@ -55,8 +55,6 @@ var (
 	reportHostname string
 )
 
-type S []interface{}
-type M map[string]interface{}
 type statsMap map[string]*StatGroup
 
 const allQueriesLabel = "all queries"
@@ -64,9 +62,9 @@ const allQueriesLabel = "all queries"
 // Parse args:
 func init() {
 	// needed for deserializing the mongo query from gob
-	gob.Register(S{})
-	gob.Register(M{})
-	gob.Register([]M{})
+	gob.Register(mongodb.S{})
+	gob.Register(mongodb.M{})
+	gob.Register([]mongodb.M{})
 
 	flag.StringVar(&daemonUrl, "url", "mongodb://localhost:27017", "Daemon URL.")
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
