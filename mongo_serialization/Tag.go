@@ -22,6 +22,10 @@ func (rcv *Tag) Init(buf []byte, i flatbuffers.UOffsetT) {
 	rcv._tab.Pos = i
 }
 
+func (rcv *Tag) Table() flatbuffers.Table {
+	return rcv._tab
+}
+
 func (rcv *Tag) Key(j int) byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {

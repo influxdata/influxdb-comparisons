@@ -72,6 +72,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http": influxdb.NewInfluxIotSingleHost,
 			"timescaledb": timescaledb.NewTimescaleIotSingleHost,
 			"cassandra":   cassandra.NewCassandraIotSingleHost,
+			"mongo":       mongodb.NewMongoIotSingleHost,
 		},
 	},
 }

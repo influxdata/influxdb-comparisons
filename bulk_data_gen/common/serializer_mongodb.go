@@ -64,6 +64,14 @@ func (s *SerializerMongo) SerializePoint(w io.Writer, p *Point) (err error) {
 		measurementNameOffset := builder.CreateByteVector(p.MeasurementName)
 		fieldNameOffset := builder.CreateByteVector(fieldName)
 
+		var stringOffset flatbuffers.UOffsetT
+		switch v := genericValue.(type) {
+		case string:
+			stringOffset = builder.CreateString(v)
+		case []byte:
+			stringOffset = builder.CreateByteVector(v)
+		}
+
 		mongo_serialization.ItemStart(builder)
 		mongo_serialization.ItemAddTimestampNanos(builder, timestampNanos)
 		mongo_serialization.ItemAddMeasurementName(builder, measurementNameOffset)
@@ -84,6 +92,9 @@ func (s *SerializerMongo) SerializePoint(w io.Writer, p *Point) (err error) {
 		case float64:
 			mongo_serialization.ItemAddValueType(builder, mongo_serialization.ValueTypeDouble)
 			mongo_serialization.ItemAddDoubleValue(builder, v)
+		case string, []byte:
+			mongo_serialization.ItemAddValueType(builder, mongo_serialization.ValueTypeString)
+			mongo_serialization.ItemAddStringValue(builder, stringOffset)
 		default:
 			panic(fmt.Sprintf("logic error in mongo serialization, %s", reflect.TypeOf(v)))
 		}

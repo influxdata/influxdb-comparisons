@@ -289,6 +289,7 @@ func processBatches(session *mgo.Session) {
 		// a private union-like section
 		longValue   int64
 		doubleValue float64
+		stringValue string
 	}
 	pPool := &sync.Pool{New: func() interface{} { return &Point{} }}
 	pvs := []interface{}{}
@@ -336,6 +337,9 @@ func processBatches(session *mgo.Session) {
 			case mongo_serialization.ValueTypeDouble:
 				x.doubleValue = item.DoubleValue()
 				x.Value = &x.doubleValue
+			case mongo_serialization.ValueTypeString:
+				x.stringValue = unsafeBytesToString(item.StringValueBytes())
+				x.Value = &x.stringValue
 			default:
 				panic("logic error")
 			}

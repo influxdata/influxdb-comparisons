@@ -22,6 +22,10 @@ func (rcv *Item) Init(buf []byte, i flatbuffers.UOffsetT) {
 	rcv._tab.Pos = i
 }
 
+func (rcv *Item) Table() flatbuffers.Table {
+	return rcv._tab
+}
+
 func (rcv *Item) SeriesId(j int) byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -78,9 +82,6 @@ func (rcv *Item) Tags(obj *Tag, j int) bool {
 		x := rcv._tab.Vector(o)
 		x += flatbuffers.UOffsetT(j) * 4
 		x = rcv._tab.Indirect(x)
-		if obj == nil {
-			obj = new(Tag)
-		}
 		obj.Init(rcv._tab.Bytes, x)
 		return true
 	}
@@ -168,8 +169,33 @@ func (rcv *Item) MutateDoubleValue(n float64) bool {
 	return rcv._tab.MutateFloat64Slot(18, n)
 }
 
+func (rcv *Item) StringValue(j int) byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(20))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
+	}
+	return 0
+}
+
+func (rcv *Item) StringValueLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(20))
+	if o != 0 {
+		return rcv._tab.VectorLen(o)
+	}
+	return 0
+}
+
+func (rcv *Item) StringValueBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(20))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
 func ItemStart(builder *flatbuffers.Builder) {
-	builder.StartObject(8)
+	builder.StartObject(9)
 }
 func ItemAddSeriesId(builder *flatbuffers.Builder, seriesId flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(seriesId), 0)
@@ -206,6 +232,12 @@ func ItemAddLongValue(builder *flatbuffers.Builder, longValue int64) {
 }
 func ItemAddDoubleValue(builder *flatbuffers.Builder, doubleValue float64) {
 	builder.PrependFloat64Slot(7, doubleValue, 0.0)
+}
+func ItemAddStringValue(builder *flatbuffers.Builder, stringValue flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(8, flatbuffers.UOffsetT(stringValue), 0)
+}
+func ItemStartStringValueVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+	return builder.StartVector(1, numElems, 1)
 }
 func ItemEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

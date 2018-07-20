@@ -1,10 +1,21 @@
 package mongodb
 
 import (
+	"encoding/gob"
 	"fmt"
 	"sync"
 	"time"
 )
+
+type S []interface{}
+type M map[string]interface{}
+
+func init() {
+	// needed for serializing the mongo query to gob
+	gob.Register(S{})
+	gob.Register(M{})
+	gob.Register([]M{})
+}
 
 // MongoQuery encodes a Mongo request. This will be serialized for use
 // by the query_benchmarker program.

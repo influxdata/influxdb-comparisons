@@ -3,12 +3,13 @@
 package mongo_serialization
 
 const (
-	ValueTypeLong = 0
+	ValueTypeLong   = 0
 	ValueTypeDouble = 1
+	ValueTypeString = 2
 )
 
 var EnumNamesValueType = map[int]string{
-	ValueTypeLong:"Long",
-	ValueTypeDouble:"Double",
+	ValueTypeLong:   "Long",
+	ValueTypeDouble: "Double",
+	ValueTypeString: "String",
 }
-

@@ -3,7 +3,7 @@ table Tag {
   key:[ubyte];
   val:[ubyte];
 }
-enum ValueType:byte { Long = 0, Double = 1 }
+enum ValueType:byte { Long = 0, Double = 1, String = 2 }
 table Item {
   seriesId:[ubyte];
 
@@ -16,5 +16,6 @@ table Item {
   value_type:ValueType;
   long_value:long;
   double_value:double;
+  string_value:[ubyte];
 }
 root_type Item;
