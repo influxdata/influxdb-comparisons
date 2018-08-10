@@ -24,7 +24,7 @@ func newInfluxDevopsCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, 
 	}
 
 	return &InfluxDevops{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig["database-bname"]),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig["database-name"]),
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }
