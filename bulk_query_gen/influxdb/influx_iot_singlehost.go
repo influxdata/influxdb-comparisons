@@ -8,8 +8,15 @@ type InfluxIotSingleHost struct {
 	InfluxIot
 }
 
-func NewInfluxIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewInfluxIotCommon(dbConfig, start, end).(*InfluxIot)
+func NewInfluxQLIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := NewInfluxIotCommon(InfluxQL, dbConfig, start, end).(*InfluxIot)
+	return &InfluxIotSingleHost{
+		InfluxIot: *underlying,
+	}
+}
+
+func NewFluxIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := NewInfluxIotCommon(Flux, dbConfig, start, end).(*InfluxIot)
 	return &InfluxIotSingleHost{
 		InfluxIot: *underlying,
 	}

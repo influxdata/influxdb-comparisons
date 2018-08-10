@@ -8,8 +8,15 @@ type InfluxDevops8Hosts struct {
 	InfluxDevops
 }
 
-func NewInfluxDevops8Hosts(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(dbConfig, start, end).(*InfluxDevops)
+func NewInfluxQLDevops8Hosts(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, start, end).(*InfluxDevops)
+	return &InfluxDevops8Hosts{
+		InfluxDevops: *underlying,
+	}
+}
+
+func NewFluxDevops8Hosts(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(Flux, dbConfig, start, end).(*InfluxDevops)
 	return &InfluxDevops8Hosts{
 		InfluxDevops: *underlying,
 	}

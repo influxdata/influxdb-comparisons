@@ -39,7 +39,8 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		DevOpsOneHostOneHour: {
 			"cassandra":   cassandra.NewCassandraDevopsSingleHost,
 			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost,
-			"influx-http": influxdb.NewInfluxDevopsSingleHost,
+			"influx-flux-http": influxdb.NewFluxDevopsSingleHost,
+			"influx-http": influxdb.NewInfluxQLDevopsSingleHost,
 			"mongo":       mongodb.NewMongoDevopsSingleHost,
 			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost,
 			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost,
@@ -47,7 +48,8 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		DevOpsOneHostTwelveHours: {
 			"cassandra":   cassandra.NewCassandraDevopsSingleHost12hr,
 			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost12hr,
-			"influx-http": influxdb.NewInfluxDevopsSingleHost12hr,
+			"influx-flux-http": influxdb.NewFluxDevopsSingleHost12hr,
+			"influx-http": influxdb.NewInfluxQLDevopsSingleHost12hr,
 			"mongo":       mongodb.NewMongoDevopsSingleHost12hr,
 			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost12hr,
 			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost12hr,
@@ -55,7 +57,8 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		DevOpsEightHostsOneHour: {
 			"cassandra":   cassandra.NewCassandraDevops8Hosts,
 			"es-http":     elasticsearch.NewElasticSearchDevops8Hosts,
-			"influx-http": influxdb.NewInfluxDevops8Hosts,
+			"influx-flux-http": influxdb.NewFluxDevops8Hosts,
+			"influx-http": influxdb.NewInfluxQLDevops8Hosts,
 			"mongo":       mongodb.NewMongoDevops8Hosts1Hr,
 			"opentsdb":    opentsdb.NewOpenTSDBDevops8Hosts,
 			"timescaledb": timescaledb.NewTimescaleDevops8Hosts1Hr,
@@ -63,13 +66,15 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		DevOpsGroupBy: {
 			"cassandra":   cassandra.NewCassandraDevopsGroupBy,
 			"es-http":     elasticsearch.NewElasticSearchDevopsGroupBy,
-			"influx-http": influxdb.NewInfluxDevopsGroupBy,
+			"influx-flux-http": influxdb.NewFluxDevopsGroupBy,
+			"influx-http": influxdb.NewInfluxQLDevopsGroupBy,
 			"timescaledb": timescaledb.NewTimescaleDevopsGroupby,
 		},
 	},
 	Iot: {
 		IotOneHomeTwelveHours: {
-			"influx-http": influxdb.NewInfluxIotSingleHost,
+			"influx-flux-http": influxdb.NewFluxIotSingleHost,
+			"influx-http": influxdb.NewInfluxQLIotSingleHost,
 			"timescaledb": timescaledb.NewTimescaleIotSingleHost,
 			"cassandra":   cassandra.NewCassandraIotSingleHost,
 			"mongo":       mongodb.NewMongoIotSingleHost,
@@ -140,7 +145,7 @@ func init() {
 	flag.Parse()
 
 	if queryType == DevOpsEightHostsOneHour && scaleVar < 8 {
-		log.Fatal("\"scale-var\" must be grater than the hosts grouping number")
+		log.Fatal("\"scale-var\" must be greater than the hosts grouping number")
 	}
 
 	if !(interleavedGenerationGroupID < interleavedGenerationGroups) {
@@ -185,7 +190,7 @@ func init() {
 	}
 
 	if duration.Nanoseconds()/time.Hour.Nanoseconds() < int64(hourGroupInterval) {
-		log.Fatal("Time interval must be grather than the grouping interval")
+		log.Fatal("Time interval must be greater than the grouping interval")
 	}
 
 	// the default seed is the current timestamp:
