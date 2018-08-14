@@ -92,19 +92,26 @@ func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err e
 
 		// Pretty print JSON responses, if applicable:
 		if opts.PrettyPrintResponses {
-			// Assumes the response is JSON! This holds for Influx
-			// and Elastic.
+			// InfluxQL responses are in JSON and can be pretty-printed here.
+			// Flux responses are just simple CSV.
 
-			var pretty bytes.Buffer
 			prefix := fmt.Sprintf("ID %d: ", q.ID)
-			err = json.Indent(&pretty, resp.Body(), prefix, "  ")
-			if err != nil {
-				return
-			}
+			if json.Valid(resp.Body()) {
+				var pretty bytes.Buffer
+				err = json.Indent(&pretty, resp.Body(), prefix, "  ")
+				if err != nil {
+					return
+				}
 
-			_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty.Bytes())
-			if err != nil {
-				return
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty)
+				if err != nil {
+					return
+				}
+			} else {
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, resp.Body())
+				if err != nil {
+					return
+				}
 			}
 		}
 	}

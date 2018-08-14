@@ -8,8 +8,16 @@ type InfluxDevopsGroupby struct {
 	InfluxDevops
 }
 
-func NewInfluxDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(dbConfig, start, end).(*InfluxDevops)
+func NewInfluxQLDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, start, end).(*InfluxDevops)
+	return &InfluxDevopsGroupby{
+		InfluxDevops: *underlying,
+	}
+
+}
+
+func NewFluxDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(Flux, dbConfig, start, end).(*InfluxDevops)
 	return &InfluxDevopsGroupby{
 		InfluxDevops: *underlying,
 	}

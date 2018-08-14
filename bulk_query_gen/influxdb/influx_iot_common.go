@@ -5,19 +5,18 @@ import (
 	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
-	"net/url"
 	"strings"
 	"time"
 )
 
 // InfluxDevops produces Influx-specific queries for all the devops query types.
 type InfluxIot struct {
-	DatabaseName string
+	InfluxCommon
 	AllInterval  bulkQuerygen.TimeInterval
 }
 
 // NewInfluxDevops makes an InfluxDevops object ready to generate Queries.
-func NewInfluxIotCommon(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
+func NewInfluxIotCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
 	if !start.Before(end) {
 		panic("bad time order")
 	}
@@ -26,7 +25,7 @@ func NewInfluxIotCommon(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Ti
 	}
 
 	return &InfluxIot{
-		DatabaseName: dbConfig["database-name"],
+		InfluxCommon: *newInfluxCommon(lang, dbConfig["database-name"]),
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }
@@ -55,22 +54,33 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, sca
 
 	homeClauses := []string{}
 	for _, s := range homes {
-		homeClauses = append(homeClauses, fmt.Sprintf("home_id = '%s'", s))
+		if d.language == InfluxQL {
+			homeClauses = append(homeClauses, fmt.Sprintf("home_id = '%s'", s))
+		} else {
+			homeClauses = append(homeClauses, fmt.Sprintf(`r.home_id == "%s"`, s))
+		}
 	}
 
 	combinedHomesClause := strings.Join(homeClauses, " or ")
 
-	v := url.Values{}
-	v.Set("db", d.DatabaseName)
-	v.Set("q", fmt.Sprintf("SELECT mean(temperature) from air_condition_room where (%s) and time >= '%s' and time < '%s' group by time(1h)", combinedHomesClause, interval.StartString(), interval.EndString()))
+	var query string
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT mean(temperature) from air_condition_room where (%s) and time >= '%s' and time < '%s' group by time(1h)", combinedHomesClause, interval.StartString(), interval.EndString())
+	} else {
+		query = fmt.Sprintf(`from(db:"%s") ` +
+			`|> range(start:%s, stop:%s) ` +
+			`|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature") ` +
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) ` +
+			`|> window(every:1h) ` +
+			`|> mean() ` +
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString())
+	}
 
-	humanLabel := fmt.Sprintf("Influx mean temperature, rand %4d homes, rand %s by 1h", nHomes, timeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) mean temperature, rand %4d homes, rand %s by 1h", d.language.String(), nHomes, timeRange)
 	q := qi.(*bulkQuerygen.HTTPQuery)
-	q.HumanLabel = []byte(humanLabel)
-	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
-	q.Method = []byte("GET")
-	q.Path = []byte(fmt.Sprintf("/query?%s", v.Encode()))
-	q.Body = nil
+	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
 //func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi Query, _ int) {
