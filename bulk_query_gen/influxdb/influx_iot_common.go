@@ -69,13 +69,14 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, sca
 	} else {
 		query = fmt.Sprintf(`from(db:"%s") ` +
 			`|> range(start:%s, stop:%s) ` +
-			`|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature") ` +
+			`|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature" and (%s)) ` +
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) ` +
 			`|> window(every:1h) ` +
 			`|> mean() ` +
 			`|> yield()`,
 			d.DatabaseName,
-			interval.StartString(), interval.EndString())
+			interval.StartString(), interval.EndString(),
+			combinedHomesClause)
 	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) mean temperature, rand %4d homes, rand %s by 1h", d.language.String(), nHomes, timeRange)
