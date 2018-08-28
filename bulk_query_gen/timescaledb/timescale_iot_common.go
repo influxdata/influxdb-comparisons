@@ -20,12 +20,12 @@ func NewTimescaleIotCommon(dbConfig bulkQuerygen.DatabaseConfig, start, end time
 	if !start.Before(end) {
 		panic("bad time order")
 	}
-	if _, ok := dbConfig["database-name"]; !ok {
+	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
 
 	return &TimescaleIot{
-		DatabaseName: dbConfig["database-name"],
+		DatabaseName: dbConfig[bulkQuerygen.DatabaseName],
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }

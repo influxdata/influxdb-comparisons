@@ -20,7 +20,7 @@ func newCassandraDevopsCommon(dbConfig bulkQuerygen.DatabaseConfig, start, end t
 	}
 
 	return &CassandraDevops{
-		KeyspaceName: dbConfig["database-name"],
+		KeyspaceName: dbConfig[bulkQuerygen.DatabaseName],
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }

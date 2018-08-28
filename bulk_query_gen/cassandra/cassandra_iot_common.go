@@ -21,7 +21,7 @@ func newCassandraIotCommon(dbConfig bulkQuerygen.DatabaseConfig, start, end time
 	}
 
 	return &CassandraIot{
-		KeyspaceName: dbConfig["database-name"],
+		KeyspaceName: dbConfig[bulkQuerygen.DatabaseName],
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }

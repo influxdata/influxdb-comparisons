@@ -11,7 +11,7 @@ import (
 // InfluxDevops produces Influx-specific queries for all the devops query types.
 type InfluxDevops struct {
 	InfluxCommon
-	AllInterval  bulkQuerygen.TimeInterval
+	AllInterval bulkQuerygen.TimeInterval
 }
 
 // NewInfluxDevops makes an InfluxDevops object ready to generate Queries.
@@ -19,12 +19,12 @@ func newInfluxDevopsCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, 
 	if !start.Before(end) {
 		panic("bad time order")
 	}
-	if _, ok := dbConfig["database-name"]; !ok {
+	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
 
 	return &InfluxDevops{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig["database-name"]),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName]),
 		AllInterval:  bulkQuerygen.NewTimeInterval(start, end),
 	}
 }
@@ -90,12 +90,12 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, scal
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT max(usage_user) from cpu where (%s) and time >= '%s' and time < '%s' group by time(1m)", combinedHostnameClause, interval.StartString(), interval.EndString())
 	} else { // Flux
-		query = fmt.Sprintf(`from(db:"%s") ` +
-			`|> range(start:%s, stop:%s) ` +
-			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) ` +
-			`|> keep(columns:["_start", "_stop", "_time", "_value"]) ` +
-			`|> window(period:1m) ` +
-			`|> max() ` +
+		query = fmt.Sprintf(`from(db:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
+			`|> window(period:1m) `+
+			`|> max() `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
@@ -117,14 +117,14 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT mean(usage_user) from cpu where time >= '%s' and time < '%s' group by time(1h),hostname", interval.StartString(), interval.EndString())
 	} else {
-		query = fmt.Sprintf(`from(db:"%s") ` +
-			`|> range(start:%s, stop:%s) ` +
-			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") ` +
-			`|> keep(columns:["_start", "_stop", "hostname", "_value", "_time"]) ` +
-			`|> window(every:1h) ` +
-			`|> mean() ` +
-			`|> group(by:["hostname"]) ` +
-			`|> keep(columns:["_start", "hostname", "_value"]) ` +
+		query = fmt.Sprintf(`from(db:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") `+
+			`|> keep(columns:["_start", "_stop", "hostname", "_value", "_time"]) `+
+			`|> window(every:1h) `+
+			`|> mean() `+
+			`|> group(by:["hostname"]) `+
+			`|> keep(columns:["_start", "hostname", "_value"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString())
