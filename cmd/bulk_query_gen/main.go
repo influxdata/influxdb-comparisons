@@ -28,6 +28,7 @@ const (
 	DevOpsOneHostTwelveHours = "1-host-12-hr"
 	DevOpsEightHostsOneHour  = "8-host-1-hr"
 	DevOpsGroupBy            = "groupby"
+	DevOpsDashboard          = "dashboard"
 	Iot                      = "iot"
 	IotOneHomeTwelveHours    = "1-home-12-hours"
 )
@@ -37,47 +38,50 @@ const (
 var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGeneratorMaker{
 	DevOps: {
 		DevOpsOneHostOneHour: {
-			"cassandra":   cassandra.NewCassandraDevopsSingleHost,
-			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost,
+			"cassandra":        cassandra.NewCassandraDevopsSingleHost,
+			"es-http":          elasticsearch.NewElasticSearchDevopsSingleHost,
 			"influx-flux-http": influxdb.NewFluxDevopsSingleHost,
-			"influx-http": influxdb.NewInfluxQLDevopsSingleHost,
-			"mongo":       mongodb.NewMongoDevopsSingleHost,
-			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost,
-			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost,
+			"influx-http":      influxdb.NewInfluxQLDevopsSingleHost,
+			"mongo":            mongodb.NewMongoDevopsSingleHost,
+			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost,
+			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost,
 		},
 		DevOpsOneHostTwelveHours: {
-			"cassandra":   cassandra.NewCassandraDevopsSingleHost12hr,
-			"es-http":     elasticsearch.NewElasticSearchDevopsSingleHost12hr,
+			"cassandra":        cassandra.NewCassandraDevopsSingleHost12hr,
+			"es-http":          elasticsearch.NewElasticSearchDevopsSingleHost12hr,
 			"influx-flux-http": influxdb.NewFluxDevopsSingleHost12hr,
-			"influx-http": influxdb.NewInfluxQLDevopsSingleHost12hr,
-			"mongo":       mongodb.NewMongoDevopsSingleHost12hr,
-			"opentsdb":    opentsdb.NewOpenTSDBDevopsSingleHost12hr,
-			"timescaledb": timescaledb.NewTimescaleDevopsSingleHost12hr,
+			"influx-http":      influxdb.NewInfluxQLDevopsSingleHost12hr,
+			"mongo":            mongodb.NewMongoDevopsSingleHost12hr,
+			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost12hr,
+			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost12hr,
 		},
 		DevOpsEightHostsOneHour: {
-			"cassandra":   cassandra.NewCassandraDevops8Hosts,
-			"es-http":     elasticsearch.NewElasticSearchDevops8Hosts,
+			"cassandra":        cassandra.NewCassandraDevops8Hosts,
+			"es-http":          elasticsearch.NewElasticSearchDevops8Hosts,
 			"influx-flux-http": influxdb.NewFluxDevops8Hosts,
-			"influx-http": influxdb.NewInfluxQLDevops8Hosts,
-			"mongo":       mongodb.NewMongoDevops8Hosts1Hr,
-			"opentsdb":    opentsdb.NewOpenTSDBDevops8Hosts,
-			"timescaledb": timescaledb.NewTimescaleDevops8Hosts1Hr,
+			"influx-http":      influxdb.NewInfluxQLDevops8Hosts,
+			"mongo":            mongodb.NewMongoDevops8Hosts1Hr,
+			"opentsdb":         opentsdb.NewOpenTSDBDevops8Hosts,
+			"timescaledb":      timescaledb.NewTimescaleDevops8Hosts1Hr,
 		},
 		DevOpsGroupBy: {
-			"cassandra":   cassandra.NewCassandraDevopsGroupBy,
-			"es-http":     elasticsearch.NewElasticSearchDevopsGroupBy,
+			"cassandra":        cassandra.NewCassandraDevopsGroupBy,
+			"es-http":          elasticsearch.NewElasticSearchDevopsGroupBy,
 			"influx-flux-http": influxdb.NewFluxDevopsGroupBy,
-			"influx-http": influxdb.NewInfluxQLDevopsGroupBy,
-			"timescaledb": timescaledb.NewTimescaleDevopsGroupby,
+			"influx-http":      influxdb.NewInfluxQLDevopsGroupBy,
+			"timescaledb":      timescaledb.NewTimescaleDevopsGroupby,
+		},
+		DevOpsDashboard: {
+			"influx-http": influxdb.NewInfluxQLDevopsDashboard,
 		},
 	},
 	Iot: {
 		IotOneHomeTwelveHours: {
 			"influx-flux-http": influxdb.NewFluxIotSingleHost,
-			"influx-http": influxdb.NewInfluxQLIotSingleHost,
-			"timescaledb": timescaledb.NewTimescaleIotSingleHost,
-			"cassandra":   cassandra.NewCassandraIotSingleHost,
-			"mongo":       mongodb.NewMongoIotSingleHost,
+			"influx-http":      influxdb.NewInfluxQLIotSingleHost,
+			"timescaledb":      timescaledb.NewTimescaleIotSingleHost,
+			"cassandra":        cassandra.NewCassandraIotSingleHost,
+			"mongo":            mongodb.NewMongoIotSingleHost,
 		},
 	},
 }
@@ -130,7 +134,6 @@ func init() {
 
 	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scalevar used for data generation).")
 	flag.IntVar(&queryCount, "queries", 1000, "Number of queries to generate.")
-
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database for influx to use (ignored for ElasticSearch).")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
@@ -203,9 +206,8 @@ func init() {
 func main() {
 	rand.Seed(seed)
 
-	// TODO(rw): Parse this from the CLI (maybe).
 	dbConfig := bulkQueryGen.DatabaseConfig{
-		"database-name": dbName,
+		bulkQueryGen.DatabaseName: dbName,
 	}
 
 	// Make the query generator:
