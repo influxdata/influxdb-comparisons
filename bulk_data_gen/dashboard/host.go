@@ -12,6 +12,8 @@ const NHostSims = 11
 
 var ClusterSizes = []int{5, 6, 7, 8, 9, 10, 11, 12, 13}
 
+var ClusterIdTagkey = []byte("cluster_id")
+
 // Type Host models a machine being monitored by Telegraf.
 type Host struct {
 	SimulatedMeasurements []SimulatedMeasurement

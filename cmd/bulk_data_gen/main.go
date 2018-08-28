@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
@@ -30,7 +31,7 @@ import (
 var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
 
 // Use case choices:
-var useCaseChoices = []string{"devops", "iot"}
+var useCaseChoices = []string{"devops", "iot", "dashboard"}
 
 // Program option vars:
 var (
@@ -117,7 +118,7 @@ func main() {
 	var sim common.Simulator
 
 	switch useCase {
-	case "devops":
+	case useCaseChoices[0]:
 		cfg := &devops.DevopsSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
@@ -125,7 +126,15 @@ func main() {
 			HostCount: scaleVar,
 		}
 		sim = cfg.ToSimulator()
-	case "iot":
+	case useCaseChoices[2]:
+		cfg := &dashboard.DashboardSimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			HostCount: scaleVar,
+		}
+		sim = cfg.ToSimulator()
+	case useCaseChoices[1]:
 		cfg := &iot.IotSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
