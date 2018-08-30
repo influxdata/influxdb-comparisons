@@ -34,6 +34,6 @@ func (m *StatusMeasurement) Tick(d time.Duration) {
 func (m *StatusMeasurement) ToPoint(p *Point) bool {
 	p.SetMeasurementName(StatusByteString)
 	p.SetTimestamp(&m.timestamp)
-	p.AppendField(ServiceUpFieldKey, m.serviceUp.Get())
+	p.AppendField(ServiceUpFieldKey, int(m.serviceUp.Get()))
 	return true
 }
