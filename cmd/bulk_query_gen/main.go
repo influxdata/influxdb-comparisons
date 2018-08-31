@@ -23,14 +23,32 @@ import (
 )
 
 const (
-	DevOps                   = "devops"
-	DevOpsOneHostOneHour     = "1-host-1-hr"
-	DevOpsOneHostTwelveHours = "1-host-12-hr"
-	DevOpsEightHostsOneHour  = "8-host-1-hr"
-	DevOpsGroupBy            = "groupby"
-	DevOpsDashboard          = "dashboard"
-	Iot                      = "iot"
-	IotOneHomeTwelveHours    = "1-home-12-hours"
+	DevOps                          = "devops"
+	DevOpsOneHostOneHour            = "1-host-1-hr"
+	DevOpsOneHostTwelveHours        = "1-host-12-hr"
+	DevOpsEightHostsOneHour         = "8-host-1-hr"
+	DevOpsGroupBy                   = "groupby"
+	Iot                             = "iot"
+	IotOneHomeTwelveHours           = "1-home-12-hours"
+	Dashboard                       = "dashboard"
+	DashboardAll                    = "all"
+	DashboardCpuNum                 = "cpu-num"
+	DashboardCpuUtilization         = "cpu-utilization"
+	DashboardDiskAllocated          = "disk-allocated"
+	DashboardDiskUsage              = "disk-usage"
+	DashboardDiskUtilization        = "disk-utilization"
+	DashboardHttpRequestDuration    = "http-request-duration"
+	DashboardHttpRequests           = "http-requests"
+	DashboardKapaCpu                = "kapa-cpu"
+	DashboardKapaLoad               = "kapa-load"
+	DashboardKapaRam                = "kapa-ram"
+	DashboardMemoryTotal            = "memory-total"
+	DashboardMemoryUtilization      = "memory-utilization"
+	DashboardNginxRequests          = "nginx-requests"
+	DashboardQueueBytes             = "queue-bytes"
+	DashboardRedisMemoryUtilization = "redis-memory-utilization"
+	DashboardSystemLoad             = "system-load"
+	DashboardThroughput             = "throughput"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -71,9 +89,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLDevopsGroupBy,
 			"timescaledb":      timescaledb.NewTimescaleDevopsGroupby,
 		},
-		DevOpsDashboard: {
-			"influx-http": influxdb.NewInfluxQLDevopsDashboard,
-		},
 	},
 	Iot: {
 		IotOneHomeTwelveHours: {
@@ -83,6 +98,27 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"cassandra":        cassandra.NewCassandraIotSingleHost,
 			"mongo":            mongodb.NewMongoIotSingleHost,
 		},
+	},
+	Dashboard: {
+		DashboardCpuNum: {
+			"influx-http": influxdb.NewInfluxQLDashboardCpuNum,
+		},
+		DashboardCpuUtilization:         {"influx-http": influxdb.NewInfluxQLDashboardCpuUtilization},
+		DashboardDiskAllocated:          {"influx-http": influxdb.NewInfluxQLDashboardDiskAllocated},
+		DashboardDiskUsage:              {"influx-http": influxdb.NewInfluxQLDashboardDiskUsage},
+		DashboardDiskUtilization:        {"influx-http": influxdb.NewInfluxQLDashboardDiskUtilization},
+		DashboardHttpRequestDuration:    {"influx-http": influxdb.NewInfluxQLDashboardHttpRequestDuration},
+		DashboardHttpRequests:           {"influx-http": influxdb.NewInfluxQLDashboardHttpRequests},
+		DashboardKapaCpu:                {"influx-http": influxdb.NewInfluxQLDashboardKapaCpu},
+		DashboardKapaLoad:               {"influx-http": influxdb.NewInfluxQLDashboardKapaLoad},
+		DashboardKapaRam:                {"influx-http": influxdb.NewInfluxQLDashboardKapaRam},
+		DashboardMemoryTotal:            {"influx-http": influxdb.NewInfluxQLDashboardMemoryTotal},
+		DashboardMemoryUtilization:      {"influx-http": influxdb.NewInfluxQLDashboardMemoryUtilization},
+		DashboardNginxRequests:          {"influx-http": influxdb.NewInfluxQLDashboardNginxRequests},
+		DashboardQueueBytes:             {"influx-http": influxdb.NewInfluxQLDashboardQueueBytes},
+		DashboardRedisMemoryUtilization: {"influx-http": influxdb.NewInfluxQLDashboardRedisMemoryUtilization},
+		DashboardSystemLoad:             {"influx-http": influxdb.NewInfluxQLDashboardSystemLoad},
+		DashboardThroughput:             {"influx-http": influxdb.NewInfluxQLDashboardThroughput},
 	},
 }
 
@@ -102,6 +138,7 @@ var (
 
 	timestampStart time.Time
 	timestampEnd   time.Time
+	queryInterval  time.Duration
 
 	seed  int64
 	debug int
@@ -138,6 +175,7 @@ func init() {
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
+	flag.DurationVar(&queryInterval, "query-interval", bulkQueryGen.DefaultQueryInterval, "Time interval query should ask for.")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1) (default 0).")
@@ -212,7 +250,8 @@ func main() {
 
 	// Make the query generator:
 	maker := useCaseMatrix[useCase][queryType][format]
-	var generator bulkQueryGen.QueryGenerator = maker(dbConfig, timestampStart, timestampEnd)
+	interval := bulkQueryGen.NewTimeInterval(timestampStart, timestampEnd)
+	var generator = maker(dbConfig, interval, queryInterval, scaleVar)
 
 	// Set up bookkeeping:
 	stats := make(map[string]int64)
@@ -228,7 +267,7 @@ func main() {
 
 	enc := gob.NewEncoder(out)
 	for i := 0; i < queryCount; i++ {
-		q := generator.Dispatch(i, scaleVar)
+		q := generator.Dispatch(i)
 
 		if currentInterleavedGroup == interleavedGenerationGroupID {
 			err := enc.Encode(q)
