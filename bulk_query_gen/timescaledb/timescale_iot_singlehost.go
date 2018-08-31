@@ -8,15 +8,15 @@ type TimescaleIotSingleHost struct {
 	TimescaleIot
 }
 
-func NewTimescaleIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewTimescaleIotCommon(dbConfig, start, end).(*TimescaleIot)
+func NewTimescaleIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewTimescaleIotCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*TimescaleIot)
 	return &TimescaleIotSingleHost{
 		TimescaleIot: *underlying,
 	}
 }
 
-func (d *TimescaleIotSingleHost) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *TimescaleIotSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := NewSQLQuery() // from pool
-	d.AverageTemperatureDayByHourOneHome(q, scaleVar)
+	d.AverageTemperatureDayByHourOneHome(q)
 	return q
 }

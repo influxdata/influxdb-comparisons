@@ -10,35 +10,32 @@ import (
 
 // MongoIot produces Mongo-specific queries for the devops use case.
 type MongoIot struct {
-	AllInterval bulkQuerygen.TimeInterval
+	bulkQuerygen.CommonParams
 }
 
 // NewMongoIot makes an MongoIot object ready to generate Queries.
-func NewMongoIot(_ bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	if !start.Before(end) {
-		panic("bad time order")
-	}
+func NewMongoIot(interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	return &MongoIot{
-		AllInterval: bulkQuerygen.NewTimeInterval(start, end),
+		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
 	}
 }
 
 // Dispatch fulfills the QueryGenerator interface.
-func (d *MongoIot) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *MongoIot) Dispatch(i int) bulkQuerygen.Query {
 	q := NewMongoQuery() // from pool
-	bulkQuerygen.IotDispatchAll(d, i, q, scaleVar)
+	bulkQuerygen.IotDispatchAll(d, i, q, d.ScaleVar)
 	return q
 }
 
 // AverageTemperatureDayByHourOneHome populates a Query for getting the average temperature
 // for one home over the course of a half a day.
-func (d *MongoIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query, scaleVar int) {
-	d.averageTemperatureDayByHourNHomes(q.(*MongoQuery), scaleVar, 1, 12*time.Hour)
+func (d *MongoIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query) {
+	d.averageTemperatureDayByHourNHomes(q.(*MongoQuery), 1, 12*time.Hour)
 }
 
-func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, scaleVar, nHomes int, timeRange time.Duration) {
+func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHomes int, timeRange time.Duration) {
 	interval := d.AllInterval.RandWindow(timeRange)
-	nn := rand.Perm(scaleVar)[:nHomes]
+	nn := rand.Perm(d.ScaleVar)[:nHomes]
 
 	homes := []string{}
 	for _, n := range nn {

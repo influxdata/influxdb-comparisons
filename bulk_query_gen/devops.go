@@ -2,20 +2,20 @@ package bulk_query_gen
 
 // Devops describes a devops query generator.
 type Devops interface {
-	MaxCPUUsageHourByMinuteOneHost(Query, int)
-	MaxCPUUsageHourByMinuteTwoHosts(Query, int)
-	MaxCPUUsageHourByMinuteFourHosts(Query, int)
-	MaxCPUUsageHourByMinuteEightHosts(Query, int)
-	MaxCPUUsageHourByMinuteSixteenHosts(Query, int)
-	MaxCPUUsageHourByMinuteThirtyTwoHosts(Query, int)
+	MaxCPUUsageHourByMinuteOneHost(Query)
+	MaxCPUUsageHourByMinuteTwoHosts(Query)
+	MaxCPUUsageHourByMinuteFourHosts(Query)
+	MaxCPUUsageHourByMinuteEightHosts(Query)
+	MaxCPUUsageHourByMinuteSixteenHosts(Query)
+	MaxCPUUsageHourByMinuteThirtyTwoHosts(Query)
 
-	MaxCPUUsage12HoursByMinuteOneHost(Query, int)
+	MaxCPUUsage12HoursByMinuteOneHost(Query)
 
-	MeanCPUUsageDayByHourAllHostsGroupbyHost(Query, int)
+	MeanCPUUsageDayByHourAllHostsGroupbyHost(Query)
 
-	//CountCPUUsageDayByHourAllHostsGroupbyHost(Query, int)
+	//CountCPUUsageDayByHourAllHostsGroupbyHost(Query)
 
-	Dispatch(int, int) Query
+	Dispatch(int) Query
 }
 
 // devopsDispatchAll round-robins through the different devops queries.
@@ -42,17 +42,17 @@ func DevopsDispatchAll(d Devops, iteration int, q Query, scaleVar int) {
 
 	switch iteration % mod {
 	case 0:
-		d.MaxCPUUsageHourByMinuteOneHost(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteOneHost(q)
 	case 1:
-		d.MaxCPUUsageHourByMinuteTwoHosts(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteTwoHosts(q)
 	case 2:
-		d.MaxCPUUsageHourByMinuteFourHosts(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteFourHosts(q)
 	case 3:
-		d.MaxCPUUsageHourByMinuteEightHosts(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteEightHosts(q)
 	case 4:
-		d.MaxCPUUsageHourByMinuteSixteenHosts(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteSixteenHosts(q)
 	case 5:
-		d.MaxCPUUsageHourByMinuteThirtyTwoHosts(q, scaleVar)
+		d.MaxCPUUsageHourByMinuteThirtyTwoHosts(q)
 	default:
 		panic("logic error in switch statement")
 	}

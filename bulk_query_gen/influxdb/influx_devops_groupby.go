@@ -8,24 +8,24 @@ type InfluxDevopsGroupby struct {
 	InfluxDevops
 }
 
-func NewInfluxQLDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, start, end).(*InfluxDevops)
+func NewInfluxQLDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, interval, duration, scaleVar).(*InfluxDevops)
 	return &InfluxDevopsGroupby{
 		InfluxDevops: *underlying,
 	}
 
 }
 
-func NewFluxDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(Flux, dbConfig, start, end).(*InfluxDevops)
+func NewFluxDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDevops)
 	return &InfluxDevopsGroupby{
 		InfluxDevops: *underlying,
 	}
 
 }
 
-func (d *InfluxDevopsGroupby) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *InfluxDevopsGroupby) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q, scaleVar)
+	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q)
 	return q
 }

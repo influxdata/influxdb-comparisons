@@ -8,15 +8,15 @@ type MongoIotSingleHost struct {
 	MongoIot
 }
 
-func NewMongoIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewMongoIot(dbConfig, start, end).(*MongoIot)
+func NewMongoIotSingleHost(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewMongoIot(queriesFullRange, queryInterval, scaleVar).(*MongoIot)
 	return &MongoIotSingleHost{
 		MongoIot: *underlying,
 	}
 }
 
-func (d *MongoIotSingleHost) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *MongoIotSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := NewMongoQuery() // from pool
-	d.AverageTemperatureDayByHourOneHome(q, scaleVar)
+	d.AverageTemperatureDayByHourOneHome(q)
 	return q
 }

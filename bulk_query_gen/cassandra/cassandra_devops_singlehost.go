@@ -8,15 +8,15 @@ type CassandraDevopsSingleHost struct {
 	CassandraDevops
 }
 
-func NewCassandraDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newCassandraDevopsCommon(dbConfig, start, end).(*CassandraDevops)
+func NewCassandraDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newCassandraDevopsCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*CassandraDevops)
 	return &CassandraDevopsSingleHost{
 		CassandraDevops: *underlying,
 	}
 }
 
-func (d *CassandraDevopsSingleHost) Dispatch(_, scaleVar int) bulkQuerygen.Query {
+func (d *CassandraDevopsSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := NewCassandraQuery() // from pool
-	d.MaxCPUUsageHourByMinuteOneHost(q, scaleVar)
+	d.MaxCPUUsageHourByMinuteOneHost(q)
 	return q
 }

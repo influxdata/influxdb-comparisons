@@ -8,15 +8,15 @@ type ElasticSearchDevopsSingleHost12hr struct {
 	ElasticSearchDevops
 }
 
-func NewElasticSearchDevopsSingleHost12hr(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewElasticSearchDevops(dbConfig, start, end).(*ElasticSearchDevops)
+func NewElasticSearchDevopsSingleHost12hr(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewElasticSearchDevops(queriesFullRange, scaleVar).(*ElasticSearchDevops)
 	return &ElasticSearchDevopsSingleHost12hr{
 		ElasticSearchDevops: *underlying,
 	}
 }
 
-func (d *ElasticSearchDevopsSingleHost12hr) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *ElasticSearchDevopsSingleHost12hr) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.MaxCPUUsage12HoursByMinuteOneHost(q, scaleVar)
+	d.MaxCPUUsage12HoursByMinuteOneHost(q)
 	return q
 }

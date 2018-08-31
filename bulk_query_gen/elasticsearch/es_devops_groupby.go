@@ -8,15 +8,15 @@ type ElasticSearchDevopsGroupBy struct {
 	ElasticSearchDevops
 }
 
-func NewElasticSearchDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewElasticSearchDevops(dbConfig, start, end).(*ElasticSearchDevops)
+func NewElasticSearchDevopsGroupBy(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewElasticSearchDevops(queriesFullRange, scaleVar).(*ElasticSearchDevops)
 	return &ElasticSearchDevopsGroupBy{
 		ElasticSearchDevops: *underlying,
 	}
 }
 
-func (d *ElasticSearchDevopsGroupBy) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *ElasticSearchDevopsGroupBy) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q, scaleVar)
+	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q)
 	return q
 }

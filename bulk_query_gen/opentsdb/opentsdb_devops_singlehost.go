@@ -8,15 +8,15 @@ type OpenTSDBDevopsSingleHost struct {
 	OpenTSDBDevops
 }
 
-func NewOpenTSDBDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newOpenTSDBDevopsCommon(dbConfig, start, end).(*OpenTSDBDevops)
+func NewOpenTSDBDevopsSingleHost(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newOpenTSDBDevopsCommon(queriesFullRange, queryInterval, scaleVar).(*OpenTSDBDevops)
 	return &OpenTSDBDevopsSingleHost{
 		OpenTSDBDevops: *underlying,
 	}
 }
 
-func (d *OpenTSDBDevopsSingleHost) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *OpenTSDBDevopsSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.MaxCPUUsageHourByMinuteOneHost(q, scaleVar)
+	d.MaxCPUUsageHourByMinuteOneHost(q)
 	return q
 }

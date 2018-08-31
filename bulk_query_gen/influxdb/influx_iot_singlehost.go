@@ -8,22 +8,22 @@ type InfluxIotSingleHost struct {
 	InfluxIot
 }
 
-func NewInfluxQLIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewInfluxIotCommon(InfluxQL, dbConfig, start, end).(*InfluxIot)
+func NewInfluxQLIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewInfluxIotCommon(InfluxQL, dbConfig, queriesFullRange, queryInterval, scaleVar).(*InfluxIot)
 	return &InfluxIotSingleHost{
 		InfluxIot: *underlying,
 	}
 }
 
-func NewFluxIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := NewInfluxIotCommon(Flux, dbConfig, start, end).(*InfluxIot)
+func NewFluxIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewInfluxIotCommon(Flux, dbConfig, queriesFullRange, queryInterval, scaleVar).(*InfluxIot)
 	return &InfluxIotSingleHost{
 		InfluxIot: *underlying,
 	}
 }
 
-func (d *InfluxIotSingleHost) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *InfluxIotSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.AverageTemperatureDayByHourOneHome(q, scaleVar)
+	d.AverageTemperatureDayByHourOneHome(q)
 	return q
 }
