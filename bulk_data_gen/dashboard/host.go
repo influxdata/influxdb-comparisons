@@ -51,16 +51,21 @@ var (
 )
 
 func NewHost(i int, start time.Time) Host {
-	if curentClusterSize == 0 || currentHostIndex == curentClusterSize {
-		currentHostIndex = 0
-		curentClusterSize = ClusterSizes[rand.Intn(len(ClusterSizes))]
-		clusterId++
-	}
 	var hostname []byte
-	if currentHostIndex < 3 {
-		hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1))
+	if i > 0 {
+		if curentClusterSize == 0 || currentHostIndex == curentClusterSize {
+			currentHostIndex = 0
+			curentClusterSize = ClusterSizes[rand.Intn(len(ClusterSizes))]
+			clusterId++
+		}
+
+		if currentHostIndex < 3 {
+			hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1))
+		} else {
+			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2))
+		}
 	} else {
-		hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2))
+		hostname = []byte("kapacitor")
 	}
 	sm := NewHostMeasurements(start)
 
