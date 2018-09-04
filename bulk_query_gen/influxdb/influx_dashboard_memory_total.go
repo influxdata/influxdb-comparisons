@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardMemoryTotal produces Influx-specific queries for the dashboard single-host case.
@@ -34,10 +33,9 @@ func (d *InfluxDashboardMemoryTotal) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT last("max") from (SELECT max("total")/1073741824 FROM "telegraf"."default"."mem" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: and host =~ /.data./ GROUP BY time(1m), host)
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM mem WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./  group by time(1m), hostname)", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM mem WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./  group by time(1m), hostname)", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Memory (MB), rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
 

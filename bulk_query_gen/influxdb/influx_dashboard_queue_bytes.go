@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardQueueBytes produces Influx-specific queries for the dashboard single-host case.
@@ -34,10 +33,9 @@ func (d *InfluxDashboardQueueBytes) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT mean("queueBytes") FROM "telegraf"."default"."influxdb_hh_processor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host" fill(0)
-	query = fmt.Sprintf("SELECT mean(\"temp_files\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m), hostname, fill(0)", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT mean(\"temp_files\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m), hostname, fill(0)", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Hinted HandOff Queue Size (MB), rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
 

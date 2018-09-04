@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardCpuUtilization produces Influx-specific queries for the dashboard single-host case.
@@ -34,10 +33,9 @@ func (d *InfluxDashboardCpuUtilization) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//c "telegraf"."default"."cpu" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: GROUP BY host, time(1m)
-	query = fmt.Sprintf("SELECT mean(\"usage_user\") FROM cpu WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by hostname,time(1m)", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT mean(\"usage_user\") FROM cpu WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by hostname,time(1m)", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) CPU Utilization (Percent), rand cluster, %s by host, 1m", d.language.String(), d.queryTimeRange)
 

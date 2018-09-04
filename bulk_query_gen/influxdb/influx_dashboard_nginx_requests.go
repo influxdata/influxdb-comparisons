@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardNginxRequests produces Influx-specific queries for the dashboard single-host case.
@@ -34,10 +33,9 @@ func (d *InfluxDashboardNginxRequests) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT non_negative_derivative(mean("queriesExecuted"), 1s) FROM "telegraf"."default"."influxdb_queryExecutor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host"
-	query = fmt.Sprintf("SELECT non_negative_derivative(mean(\"accepts\"), 1s) FROM nginx WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m), \"hostname\"", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT non_negative_derivative(mean(\"accepts\"), 1s) FROM nginx WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m), \"hostname\"", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Queries Executed (Number)	, rand cluster, %s by 1m, host", d.language.String(), d.queryTimeRange)
 

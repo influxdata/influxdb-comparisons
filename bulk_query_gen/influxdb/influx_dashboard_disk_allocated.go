@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardDiskAllocated produces Influx-specific queries for the dashboard single-host case.
@@ -34,10 +33,9 @@ func (d *InfluxDashboardDiskAllocated) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT last("max") from (SELECT max("total")/1073741824 FROM "telegraf"."default"."disk" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: and host =~ /.data./ GROUP BY time(120s))
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM disk WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./ group by time(120s))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM disk WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./ group by time(120s))", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Disk Allocated (GB), rand cluster, %s by 120s", d.language.String(), d.queryTimeRange)
 
