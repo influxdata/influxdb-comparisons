@@ -37,9 +37,9 @@ func (d *InfluxDashboardAvailability) Dispatch(i int) bulkQuerygen.Query {
 	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT (sum("service_up") / count("service_up"))*100 AS "up_time" FROM "watcher"."autogen"."ping" WHERE cluster_id = :Cluster_Id: and time > :dashboardTime: FILL(linear)
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT (sum(\"service_up\") / count(\"service_up\"))*100 AS \"up_time\" FROM status WHERE cluster_id = '%s' and time >= '%s' and time < '%s' FILL(linear)", clusterId, interval.StartString(), interval.EndString())
 
-	humanLabel := fmt.Sprintf("InfluxDB (%s) max n_cpus, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) Availability (Percent), rand cluster in %s", d.language.String(), d.queryTimeRange)
 
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 	return q

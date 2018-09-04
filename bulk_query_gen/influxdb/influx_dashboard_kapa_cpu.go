@@ -4,7 +4,6 @@ import "time"
 import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
-	"math/rand"
 )
 
 // InfluxDashboardKapaCpu produces Influx-specific queries for the dashboard single-host case.
@@ -34,12 +33,11 @@ func (d *InfluxDashboardKapaCpu) Dispatch(i int) bulkQuerygen.Query {
 
 	interval := d.AllInterval.RandWindow(d.queryTimeRange)
 
-	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT 100 - "usage_idle" FROM "telegraf"."autogen"."cpu" WHERE time > now() - 15m AND "cpu"='cpu-total' AND "host"='kapacitor'
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT 100 - \"usage_idle\" FROM cpu WHERE hostname='kapacitor' and time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
 
-	humanLabel := fmt.Sprintf("InfluxDB (%s) max n_cpus, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) kapa cpu in %s", d.language.String(), d.queryTimeRange)
 
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 	return q

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const DefaultQueryInterval = time.Hour * 24 * 180
+const DefaultQueryInterval = time.Hour
 
 type Query interface {
 	Release()

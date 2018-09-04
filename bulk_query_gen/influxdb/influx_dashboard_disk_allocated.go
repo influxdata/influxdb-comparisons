@@ -37,9 +37,9 @@ func (d *InfluxDashboardDiskAllocated) Dispatch(i int) bulkQuerygen.Query {
 	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT last("max") from (SELECT max("total")/1073741824 FROM "telegraf"."default"."disk" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: and host =~ /.data./ GROUP BY time(120s))
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM disk WHERE cluster_id = '%s' and time >= '%s' and time < '%s' hostname =~ /.data./ group by time(120s))", clusterId, interval.StartString(), interval.EndString())
 
-	humanLabel := fmt.Sprintf("InfluxDB (%s) max n_cpus, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) Disk Allocated (GB), rand cluster, %s by 120s", d.language.String(), d.queryTimeRange)
 
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 	return q

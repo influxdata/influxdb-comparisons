@@ -37,9 +37,9 @@ func (d *InfluxDashboardMemoryTotal) Dispatch(i int) bulkQuerygen.Query {
 	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT last("max") from (SELECT max("total")/1073741824 FROM "telegraf"."default"."mem" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: and host =~ /.data./ GROUP BY time(1m), host)
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM mem WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./  group by time(1m), hostname)", clusterId, interval.StartString(), interval.EndString())
 
-	humanLabel := fmt.Sprintf("InfluxDB (%s) max n_cpus, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) Memory (MB), rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
 
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 	return q

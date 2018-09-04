@@ -37,9 +37,9 @@ func (d *InfluxDashboardRedisMemoryUtilization) Dispatch(i int) bulkQuerygen.Que
 	clusterId := fmt.Sprintf("%d", rand.Intn(15))
 	var query string
 	//SELECT mean("usage_percent") FROM "telegraf"."default"."docker_container_mem" WHERE "cluster_id" = :Cluster_Id: AND ("container_name" =~ /influxd.*/ OR "container_name" =~ /kap.*/) AND time > :dashboardTime: GROUP BY time(1m), "host", "container_name" fill(previous)
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m))", clusterId, interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT mean(\"used_memory\") FROM redis WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m),hostname, server fill(previous)", clusterId, interval.StartString(), interval.EndString())
 
-	humanLabel := fmt.Sprintf("InfluxDB (%s) max n_cpus, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
+	humanLabel := fmt.Sprintf("InfluxDB (%s) Memory Utilization, rand cluster, %s by 1m", d.language.String(), d.queryTimeRange)
 
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 	return q

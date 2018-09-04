@@ -32,6 +32,7 @@ const (
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	Dashboard                       = "dashboard"
 	DashboardAll                    = "all"
+	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
 	DashboardCpuUtilization         = "cpu-utilization"
 	DashboardDiskAllocated          = "disk-allocated"
@@ -100,8 +101,14 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		},
 	},
 	Dashboard: {
+		DashboardAll: {
+			"influx-http": influxdb.NewInfluxQLDashboardAll,
+		},
 		DashboardCpuNum: {
 			"influx-http": influxdb.NewInfluxQLDashboardCpuNum,
+		},
+		DashboardAvailability: {
+			"influx-http": influxdb.NewInfluxQLDashboardAvailability,
 		},
 		DashboardCpuUtilization:         {"influx-http": influxdb.NewInfluxQLDashboardCpuUtilization},
 		DashboardDiskAllocated:          {"influx-http": influxdb.NewInfluxQLDashboardDiskAllocated},
@@ -232,6 +239,9 @@ func init() {
 
 	if duration.Nanoseconds()/time.Hour.Nanoseconds() < int64(hourGroupInterval) {
 		log.Fatal("Time interval must be greater than the grouping interval")
+	}
+	if duration.Nanoseconds() < queryInterval.Nanoseconds() {
+		log.Fatal("Query interval must be greater than the grouping interval")
 	}
 
 	// the default seed is the current timestamp:
