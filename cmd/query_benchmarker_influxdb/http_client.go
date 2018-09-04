@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valyala/fasthttp"
+	"net/url"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -56,7 +57,10 @@ func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err e
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(w.uri)
 	req.SetBody(q.Body)
-
+	if opts.Debug > 0 {
+		values, _ := url.ParseQuery(string(q.Path))
+		fmt.Printf("debug: query - %s\n", values)
+	}
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
