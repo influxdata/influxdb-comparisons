@@ -18,7 +18,6 @@ type HTTPClient struct {
 	client     fasthttp.Client
 	Host       []byte
 	HostString string
-	uri        []byte
 	debug      int
 }
 
@@ -36,7 +35,6 @@ func NewHTTPClient(host string, debug int) *HTTPClient {
 		},
 		Host:       []byte(host),
 		HostString: host,
-		uri:        []byte{}, // heap optimization
 		debug:      debug,
 	}
 }
@@ -45,17 +43,17 @@ func NewHTTPClient(host string, debug int) *HTTPClient {
 // tries to minimize heap allocations.
 func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
 	// populate uri from the reusable byte slice:
-	w.uri = w.uri[:0]
-	w.uri = append(w.uri, w.Host...)
-	w.uri = append(w.uri, bytesSlash...)
-	w.uri = append(w.uri, q.Path...)
+	uri := make([]byte, 0, 100)
+	uri = append(uri, w.Host...)
+	uri = append(uri, bytesSlash...)
+	uri = append(uri, q.Path...)
 
 	// populate a request with data from the Query:
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 
 	req.Header.SetMethodBytes(q.Method)
-	req.Header.SetRequestURIBytes(w.uri)
+	req.Header.SetRequestURIBytes(uri)
 	req.SetBody(q.Body)
 	if opts.Debug > 0 {
 		values, _ := url.ParseQuery(string(q.Path))
