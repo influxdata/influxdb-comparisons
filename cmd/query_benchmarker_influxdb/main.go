@@ -321,15 +321,18 @@ loop:
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
 				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		} else {
 			stat := statMapping[allQueriesLabel]
 			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
 
 	// (Optional) create a memory profile:
