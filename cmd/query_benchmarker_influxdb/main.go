@@ -294,7 +294,14 @@ loop:
 	}
 
 	if reportHost != "" {
-		if useCase != "" {
+		found := false
+		for _, pair := range reportTags {
+			if pair[0] == "use_case" {
+				found = true
+				break
+			}
+		}
+		if useCase != "" && !found {
 			reportTags = append(reportTags, [2]string{"use_case", useCase})
 		}
 		reportTags = append(reportTags, [2]string{"batch_size", fmt.Sprintf("%d", batchSize)})
