@@ -31,7 +31,7 @@ const (
 	Iot                             = "iot"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	Dashboard                       = "dashboard"
-	DashboardAll                    = "all"
+	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
 	DashboardCpuUtilization         = "cpu-utilization"
