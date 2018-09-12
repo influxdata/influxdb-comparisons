@@ -212,3 +212,8 @@ func (d *TwoStateDistribution) Get() float64 {
 func TSD(low float64, high float64, state float64) *TwoStateDistribution {
 	return &TwoStateDistribution{Low: low, High: high, State: state}
 }
+
+func RandChoice(choices [][]byte) []byte {
+	idx := rand.Int63n(int64(len(choices)))
+	return choices[idx]
+}

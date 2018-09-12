@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -11,13 +12,13 @@ import (
 )
 
 var bytesSlash = []byte("/") // heap optimization
+var byteZero = []byte{0}     // heap optimization
 
 // HTTPClient is a reusable HTTP Client.
 type HTTPClient struct {
 	client     fasthttp.Client
 	Host       []byte
 	HostString string
-	uri        []byte
 	debug      int
 }
 
@@ -35,7 +36,6 @@ func NewHTTPClient(host string, debug int) *HTTPClient {
 		},
 		Host:       []byte(host),
 		HostString: host,
-		uri:        []byte{}, // heap optimization
 		debug:      debug,
 	}
 }
@@ -44,25 +44,29 @@ func NewHTTPClient(host string, debug int) *HTTPClient {
 // tries to minimize heap allocations.
 func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
 	// populate uri from the reusable byte slice:
-	w.uri = w.uri[:0]
-	w.uri = append(w.uri, w.Host...)
-	w.uri = append(w.uri, bytesSlash...)
-	w.uri = append(w.uri, q.Path...)
+	uri := make([]byte, 0, 100)
+	uri = append(uri, w.Host...)
+	uri = append(uri, bytesSlash...)
+	uri = append(uri, q.Path...)
 
 	// populate a request with data from the Query:
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 
 	req.Header.SetMethodBytes(q.Method)
-	req.Header.SetRequestURIBytes(w.uri)
+	req.Header.SetRequestURIBytes(uri)
 	req.SetBody(q.Body)
-
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
+
+	if err != nil || resp.StatusCode() != fasthttp.StatusOK {
+		values, _ := url.ParseQuery(string(uri))
+		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
+	}
 
 	// Check that the status code was 200 OK:
 	if err == nil {

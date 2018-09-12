@@ -8,16 +8,16 @@ type TimescaleDevopsGroupby struct {
 	TimescaleDevops
 }
 
-func NewTimescaleDevopsGroupby(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newTimescaleDevopsCommon(dbConfig, start, end).(*TimescaleDevops)
+func NewTimescaleDevopsGroupby(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newTimescaleDevopsCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*TimescaleDevops)
 	return &TimescaleDevopsGroupby{
 		TimescaleDevops: *underlying,
 	}
 
 }
 
-func (d *TimescaleDevopsGroupby) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *TimescaleDevopsGroupby) Dispatch(i int) bulkQuerygen.Query {
 	q := NewSQLQuery() // from pool
-	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q, scaleVar)
+	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q)
 	return q
 }

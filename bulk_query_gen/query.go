@@ -3,7 +3,10 @@ package bulk_query_gen
 import (
 	"fmt"
 	"sync"
+	"time"
 )
+
+const DefaultQueryInterval = time.Hour
 
 type Query interface {
 	Release()

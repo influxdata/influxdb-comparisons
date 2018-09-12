@@ -8,22 +8,22 @@ type InfluxDevopsSingleHost struct {
 	InfluxDevops
 }
 
-func NewInfluxQLDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, start, end).(*InfluxDevops)
+func NewInfluxQLDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(InfluxQL, dbConfig, interval, duration, scaleVar).(*InfluxDevops)
 	return &InfluxDevopsSingleHost{
 		InfluxDevops: *underlying,
 	}
 }
 
-func NewFluxDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDevopsCommon(Flux, dbConfig, start, end).(*InfluxDevops)
+func NewFluxDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newInfluxDevopsCommon(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDevops)
 	return &InfluxDevopsSingleHost{
 		InfluxDevops: *underlying,
 	}
 }
 
-func (d *InfluxDevopsSingleHost) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *InfluxDevopsSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	d.MaxCPUUsageHourByMinuteOneHost(q, scaleVar)
+	d.MaxCPUUsageHourByMinuteOneHost(q)
 	return q
 }

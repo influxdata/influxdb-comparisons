@@ -23,66 +23,63 @@ func init() {
 
 // ElasticSearchDevops produces ES-specific queries for the devops use case.
 type ElasticSearchDevops struct {
-	AllInterval bulkQuerygen.TimeInterval
+	bulkQuerygen.CommonParams
 }
 
 // NewElasticSearchDevops makes an ElasticSearchDevops object ready to generate Queries.
-func NewElasticSearchDevops(_ bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	if !start.Before(end) {
-		panic("bad time order")
-	}
+func NewElasticSearchDevops(interval bulkQuerygen.TimeInterval, scaleVar int) bulkQuerygen.QueryGenerator {
 	return &ElasticSearchDevops{
-		AllInterval: bulkQuerygen.NewTimeInterval(start, end),
+		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
 	}
 }
 
 // Dispatch fulfills the QueryGenerator interface.
-func (d *ElasticSearchDevops) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *ElasticSearchDevops) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	bulkQuerygen.DevopsDispatchAll(d, i, q, scaleVar)
+	bulkQuerygen.DevopsDispatchAll(d, i, q, d.ScaleVar)
 	return q
 }
 
 // MaxCPUUsageHourByMinuteOneHost populates a Query for getting the maximum CPU
 // usage for one host over the course of an hour.
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteOneHost(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 1, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteOneHost(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 1, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteTwoHosts populates a Query for getting the maximum CPU
 // usage for two hosts over the course of an hour.
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteTwoHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 2, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteTwoHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 2, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteFourHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteFourHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 4, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteFourHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 4, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteEightHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteEightHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 8, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteEightHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 8, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteSixteenHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteSixteenHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 16, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteSixteenHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 16, time.Hour)
 }
 
-func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteThirtyTwoHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 32, time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsageHourByMinuteThirtyTwoHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 32, time.Hour)
 }
-func (d *ElasticSearchDevops) MaxCPUUsage12HoursByMinuteOneHost(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), scaleVar, 1, 12*time.Hour)
+func (d *ElasticSearchDevops) MaxCPUUsage12HoursByMinuteOneHost(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*bulkQuerygen.HTTPQuery), 1, 12*time.Hour)
 }
 
-func (d *ElasticSearchDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, scaleVar, nhosts int, timeRange time.Duration) {
+func (d *ElasticSearchDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhosts int, timeRange time.Duration) {
 	interval := d.AllInterval.RandWindow(timeRange)
-	nn := rand.Perm(scaleVar)[:nhosts]
+	nn := rand.Perm(d.ScaleVar)[:nhosts]
 
 	hostnames := []string{}
 	for _, n := range nn {
@@ -115,8 +112,8 @@ func (d *ElasticSearchDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Quer
 	q.Body = body.Bytes()
 }
 
-func (d *ElasticSearchDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.Query, scaleVar int) {
-	if scaleVar > 10000 {
+func (d *ElasticSearchDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.Query) {
+	if d.ScaleVar > 10000 {
 		panic("scaleVar > 10000 implies size > 10000, which is not supported on elasticsearch. see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-from-size.html")
 	}
 
@@ -128,7 +125,7 @@ func (d *ElasticSearchDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQu
 		End:           interval.EndString(),
 		Bucket:        "1h",
 		Field:         "usage_user",
-		HostnameCount: scaleVar,
+		HostnameCount: d.ScaleVar,
 	})
 
 	humanLabel := []byte("Elastic mean cpu, all hosts, rand 1day by 1hour")

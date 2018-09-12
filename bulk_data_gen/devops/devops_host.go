@@ -1,9 +1,10 @@
 package devops
+
 import (
 	"fmt"
+	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"math/rand"
 	"time"
-	. "github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
 const NHostSims = 9
@@ -14,7 +15,6 @@ const (
 	MachineServiceChoices           = 20
 	MachineServiceVersionChoices    = 2
 )
-
 
 type Region struct {
 	Name        []byte
@@ -128,9 +128,6 @@ var (
 	}
 )
 
-
-
-
 // Type Host models a machine being monitored by Telegraf.
 type Host struct {
 	SimulatedMeasurements []SimulatedMeasurement
@@ -166,20 +163,20 @@ func NewHost(i int, start time.Time) Host {
 	rackId := rand.Int63n(MachineRackChoicesPerDatacenter)
 	serviceId := rand.Int63n(MachineServiceChoices)
 	serviceVersionId := rand.Int63n(MachineServiceVersionChoices)
-	serviceEnvironment := randChoice(MachineServiceEnvironmentChoices)
+	serviceEnvironment := RandChoice(MachineServiceEnvironmentChoices)
 
 	h := Host{
 		// Tag Values that are static throughout the life of a Host:
 		Name:               []byte(fmt.Sprintf("host_%d", i)),
 		Region:             []byte(fmt.Sprintf("%s", region.Name)),
-		Datacenter:         randChoice(region.Datacenters),
+		Datacenter:         RandChoice(region.Datacenters),
 		Rack:               []byte(fmt.Sprintf("%d", rackId)),
-		Arch:               randChoice(MachineArchChoices),
-		OS:                 randChoice(MachineOSChoices),
+		Arch:               RandChoice(MachineArchChoices),
+		OS:                 RandChoice(MachineOSChoices),
 		Service:            []byte(fmt.Sprintf("%d", serviceId)),
 		ServiceVersion:     []byte(fmt.Sprintf("%d", serviceVersionId)),
 		ServiceEnvironment: serviceEnvironment,
-		Team:               randChoice(MachineTeamChoices),
+		Team:               RandChoice(MachineTeamChoices),
 
 		SimulatedMeasurements: sm,
 	}
@@ -192,10 +189,4 @@ func (h *Host) TickAll(d time.Duration) {
 	for i := range h.SimulatedMeasurements {
 		h.SimulatedMeasurements[i].Tick(d)
 	}
-}
-
-
-func randChoice(choices [][]byte) []byte {
-	idx := rand.Int63n(int64(len(choices)))
-	return choices[idx]
 }

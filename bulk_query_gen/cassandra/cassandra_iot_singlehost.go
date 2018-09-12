@@ -8,15 +8,15 @@ type CassandraIotSingleHost struct {
 	CassandraIot
 }
 
-func NewCassandraIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newCassandraIotCommon(dbConfig, start, end).(*CassandraIot)
+func NewCassandraIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newCassandraIotCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*CassandraIot)
 	return &CassandraIotSingleHost{
 		CassandraIot: *underlying,
 	}
 }
 
-func (d *CassandraIotSingleHost) Dispatch(_, scaleVar int) bulkQuerygen.Query {
+func (d *CassandraIotSingleHost) Dispatch(i int) bulkQuerygen.Query {
 	q := NewCassandraQuery() // from pool
-	d.AverageTemperatureDayByHourOneHome(q, scaleVar)
+	d.AverageTemperatureDayByHourOneHome(q)
 	return q
 }

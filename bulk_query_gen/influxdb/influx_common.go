@@ -2,15 +2,15 @@ package influxdb
 
 import (
 	"fmt"
-	"net/url"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
+	"net/url"
 )
 
 type Language bool
 
 const (
 	InfluxQL Language = false
-	Flux Language = true
+	Flux     Language = true
 )
 
 func (lang Language) String() string {
@@ -22,12 +22,16 @@ func (lang Language) String() string {
 }
 
 type InfluxCommon struct {
-	language Language
+	bulkQuerygen.CommonParams
+	language     Language
 	DatabaseName string
 }
 
-func newInfluxCommon(lang Language, dbName string) *InfluxCommon {
-	return &InfluxCommon{language: lang, DatabaseName: dbName}
+func newInfluxCommon(lang Language, dbName string, interval bulkQuerygen.TimeInterval, scaleVar int) *InfluxCommon {
+	return &InfluxCommon{
+		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
+		language:     lang,
+		DatabaseName: dbName}
 }
 
 // getHttpQuery gets the right kind of http request based on the language being used

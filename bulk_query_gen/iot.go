@@ -2,9 +2,9 @@ package bulk_query_gen
 
 // Devops describes a devops query generator.
 type Iot interface {
-	AverageTemperatureDayByHourOneHome(Query, int)
+	AverageTemperatureDayByHourOneHome(Query)
 
-	Dispatch(int, int) Query
+	Dispatch(int) Query
 }
 
 // devopsDispatchAll round-robins through the different devops queries.
@@ -31,7 +31,7 @@ func IotDispatchAll(d Iot, iteration int, q Query, scaleVar int) {
 
 	switch iteration % mod {
 	case 0:
-		d.AverageTemperatureDayByHourOneHome(q, scaleVar)
+		d.AverageTemperatureDayByHourOneHome(q)
 	//case 1:
 	//	d.MaxCPUUsageHourByMinuteTwoHosts(q, scaleVar)
 	//case 2:

@@ -9,67 +9,64 @@ import (
 
 // MongoDevops produces Mongo-specific queries for the devops use case.
 type MongoDevops struct {
-	AllInterval bulkQuerygen.TimeInterval
+	bulkQuerygen.CommonParams
 }
 
 // NewMongoDevops makes an MongoDevops object ready to generate Queries.
-func NewMongoDevops(_ bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	if !start.Before(end) {
-		panic("bad time order")
-	}
+func NewMongoDevops(interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	return &MongoDevops{
-		AllInterval: bulkQuerygen.NewTimeInterval(start, end),
+		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
 	}
 }
 
 // Dispatch fulfills the QueryGenerator interface.
-func (d *MongoDevops) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *MongoDevops) Dispatch(i int) bulkQuerygen.Query {
 	q := NewMongoQuery() // from pool
-	bulkQuerygen.DevopsDispatchAll(d, i, q, scaleVar)
+	bulkQuerygen.DevopsDispatchAll(d, i, q, d.ScaleVar)
 	return q
 }
 
 // MaxCPUUsageHourByMinuteOneHost populates a Query for getting the maximum CPU
 // usage for one host over the course of an hour.
-func (d *MongoDevops) MaxCPUUsageHourByMinuteOneHost(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 1, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteOneHost(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 1, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteTwoHosts populates a Query for getting the maximum CPU
 // usage for two hosts over the course of an hour.
-func (d *MongoDevops) MaxCPUUsageHourByMinuteTwoHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 2, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteTwoHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 2, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteFourHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *MongoDevops) MaxCPUUsageHourByMinuteFourHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 4, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteFourHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 4, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteEightHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *MongoDevops) MaxCPUUsageHourByMinuteEightHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 8, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteEightHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 8, time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteSixteenHosts populates a Query for getting the maximum CPU
 // usage for four hosts over the course of an hour.
-func (d *MongoDevops) MaxCPUUsageHourByMinuteSixteenHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 16, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteSixteenHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 16, time.Hour)
 }
 
-func (d *MongoDevops) MaxCPUUsageHourByMinuteThirtyTwoHosts(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 32, time.Hour)
+func (d *MongoDevops) MaxCPUUsageHourByMinuteThirtyTwoHosts(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 32, time.Hour)
 }
 
-func (d *MongoDevops) MaxCPUUsage12HoursByMinuteOneHost(q bulkQuerygen.Query, scaleVar int) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), scaleVar, 1, 12*time.Hour)
+func (d *MongoDevops) MaxCPUUsage12HoursByMinuteOneHost(q bulkQuerygen.Query) {
+	d.maxCPUUsageHourByMinuteNHosts(q.(*MongoQuery), 1, 12*time.Hour)
 }
 
-func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, scaleVar, nhosts int, timeRange time.Duration) {
+func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhosts int, timeRange time.Duration) {
 	interval := d.AllInterval.RandWindow(timeRange)
-	nn := rand.Perm(scaleVar)[:nhosts]
+	nn := rand.Perm(d.ScaleVar)[:nhosts]
 
 	hostnames := []string{}
 	for _, n := range nn {
@@ -136,7 +133,7 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, scale
 	q.GroupByDuration = time.Minute
 }
 
-func (d *MongoDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.Query, scaleVar int) {
+func (d *MongoDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.Query) {
 	//	if scaleVar > 10000 {
 	//		// TODO: does this apply to mongo?
 	//		panic("scaleVar > 10000 implies size > 10000, which is not supported on elasticsearch. see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-from-size.html")

@@ -8,15 +8,15 @@ type TimescaleDevops8Hosts1Hr struct {
 	TimescaleDevops
 }
 
-func NewTimescaleDevops8Hosts1Hr(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newTimescaleDevopsCommon(dbConfig, start, end).(*TimescaleDevops)
+func NewTimescaleDevops8Hosts1Hr(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newTimescaleDevopsCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*TimescaleDevops)
 	return &TimescaleDevops8Hosts1Hr{
 		TimescaleDevops: *underlying,
 	}
 }
 
-func (d *TimescaleDevops8Hosts1Hr) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *TimescaleDevops8Hosts1Hr) Dispatch(i int) bulkQuerygen.Query {
 	q := NewSQLQuery() // from pool
-	d.MaxCPUUsageHourByMinuteEightHosts(q, scaleVar)
+	d.MaxCPUUsageHourByMinuteEightHosts(q)
 	return q
 }

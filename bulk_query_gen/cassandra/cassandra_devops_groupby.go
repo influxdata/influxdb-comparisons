@@ -8,16 +8,16 @@ type CassandraDevopsGroupby struct {
 	CassandraDevops
 }
 
-func NewCassandraDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, start, end time.Time) bulkQuerygen.QueryGenerator {
-	underlying := newCassandraDevopsCommon(dbConfig, start, end).(*CassandraDevops)
+func NewCassandraDevopsGroupBy(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := newCassandraDevopsCommon(dbConfig, queriesFullRange, queryInterval, scaleVar).(*CassandraDevops)
 	return &CassandraDevopsGroupby{
 		CassandraDevops: *underlying,
 	}
 
 }
 
-func (d *CassandraDevopsGroupby) Dispatch(i, scaleVar int) bulkQuerygen.Query {
+func (d *CassandraDevopsGroupby) Dispatch(i int) bulkQuerygen.Query {
 	q := NewCassandraQuery() // from pool
-	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q, scaleVar)
+	d.MeanCPUUsageDayByHourAllHostsGroupbyHost(q)
 	return q
 }
