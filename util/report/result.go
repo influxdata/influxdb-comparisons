@@ -3,8 +3,8 @@ package report
 import (
 	"fmt"
 	"strconv"
-	"time"
 	"strings"
+	"time"
 )
 
 // ReportParams is holder for common parameters across load and query reports
@@ -102,7 +102,7 @@ func finishReport(c *Collector, p *Point) error {
 }
 
 //ReportQueryResult send result from bulk query benchmark to an influxdb according to the given parameters
-func ReportQueryResult(params *QueryReportParams, minQueryTime float64, meanQueryTime float64, maxQueryTime float64, totalQueries int64, queryDuration time.Duration) error {
+func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime float64, meanQueryTime float64, maxQueryTime float64, totalQueries int64, queryDuration time.Duration) error {
 
 	c, p, err := initReport(&params.ReportParams, "query_benchmarks")
 	if err != nil {
@@ -110,6 +110,7 @@ func ReportQueryResult(params *QueryReportParams, minQueryTime float64, meanQuer
 	}
 
 	p.AddTag("burn_in", strconv.Itoa(int(params.BurnIn)))
+	p.AddTag("query_name", queryName)
 
 	p.AddFloat64Field("min_time", minQueryTime)
 	p.AddFloat64Field("min_rate", 1000/minQueryTime)
