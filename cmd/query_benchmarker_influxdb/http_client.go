@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/valyala/fasthttp"
-	"net/url"
 )
 
 var bytesSlash = []byte("/") // heap optimization
+var byteZero = []byte{0}     // heap optimization
 
 // HTTPClient is a reusable HTTP Client.
 type HTTPClient struct {
@@ -55,16 +56,17 @@ func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err e
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
 	req.SetBody(q.Body)
-	if opts.Debug > 0 {
-		values, _ := url.ParseQuery(string(q.Path))
-		fmt.Printf("debug: query - %s\n", values)
-	}
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
+
+	if err != nil || resp.StatusCode() != fasthttp.StatusOK {
+		values, _ := url.ParseQuery(string(uri))
+		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
+	}
 
 	// Check that the status code was 200 OK:
 	if err == nil {
