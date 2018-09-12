@@ -294,6 +294,15 @@ loop:
 	}
 
 	if reportHost != "" {
+		if useCase != "" {
+			reportTags = append(reportTags, [2]string{"use_case", useCase})
+		}
+		reportTags = append(reportTags, [2]string{"batch_size", fmt.Sprintf("%d", batchSize)})
+		reportTags = append(reportTags, [2]string{"wait_interval", waitInterval.String()})
+		reportTags = append(reportTags, [2]string{"grad_workers_inc", fmt.Sprintf("%v", gradualWorkersIncrease)})
+		reportTags = append(reportTags, [2]string{"increase_interval", increaseInterval.String()})
+		reportTags = append(reportTags, [2]string{"benchmark_duration", testDuration.String()})
+		reportTags = append(reportTags, [2]string{"response_time_limit", responseTimeLimit.String()})
 		reportParams := &report.QueryReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
