@@ -98,7 +98,7 @@ func init() {
 	flag.StringVar(&consistency, "consistency", "all", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.IntVar(&ingestionRate, "ingestion-rate", -1, "Ingestion rate in values/s (-1 = no limit).")
+	flag.IntVar(&ingestionRate, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.Int64Var(&itemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
 	flag.DurationVar(&timeLimit, "time-limit", -1, "Maximum duration to run (-1 is the default: no limit).")
@@ -219,7 +219,7 @@ func main() {
 	backingOffChans = make([]chan bool, workers)
 	backingOffDones = make([]chan struct{}, workers)
 
-	if (ingestionRate > 0) {
+	if ingestionRate > 0 {
 		ingestionRateGran = (float32(ingestionRate) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
 		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.05)
