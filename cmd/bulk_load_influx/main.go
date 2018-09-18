@@ -28,7 +28,11 @@ import (
 )
 
 // TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 11.2222
+const ValuesPerMeasurement = 9.64 // 11.2222
+
+// TODO AP: Maybe useless
+const RateControlGranularity = 1000 // 1000 ms = 1s
+const RateControlMinBatchSize = 500
 
 // Program option vars:
 var (
@@ -39,6 +43,7 @@ var (
 	workers            int
 	itemLimit          int64
 	batchSize          int
+	ingestionRate      int
 	backoff            time.Duration
 	timeLimit          time.Duration
 	progressInterval   time.Duration
@@ -75,6 +80,7 @@ var (
 	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
+	ingestionRateGran     float32
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -92,6 +98,7 @@ func init() {
 	flag.StringVar(&consistency, "consistency", "all", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
+	flag.IntVar(&ingestionRate, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.Int64Var(&itemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
 	flag.DurationVar(&timeLimit, "time-limit", -1, "Maximum duration to run (-1 is the default: no limit).")
@@ -211,6 +218,24 @@ func main() {
 
 	backingOffChans = make([]chan bool, workers)
 	backingOffDones = make([]chan struct{}, workers)
+
+	if ingestionRate > 0 {
+		ingestionRateGran = (float32(ingestionRate) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
+		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
+		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.05)
+		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
+		if recommendedBatchSize < RateControlMinBatchSize {
+			recommendedBatchSize = RateControlMinBatchSize
+		} else if recommendedBatchSize > batchSize {
+			recommendedBatchSize = batchSize
+		}
+		if recommendedBatchSize != batchSize {
+			log.Printf("Adjusting batchSize from %v to %v", batchSize, recommendedBatchSize)
+			batchSize = recommendedBatchSize
+		}
+	} else {
+		log.Printf("Ingestion rate control is off")
+	}
 
 	if telemetryHost != "" {
 		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
@@ -366,7 +391,6 @@ outer:
 			if timeLimit >= 0 && time.Now().After(deadline) {
 				break outer
 			}
-
 		}
 	}
 
@@ -392,6 +416,15 @@ outer:
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	var batchesSeen int64
+
+	// Ingestion rate control vars
+	var gvCount float32
+	var gvStart time.Time
+
+	if ingestionRate > 0 {
+		gvStart = time.Now()
+	}
+
 	for batch := range batchChan {
 		batchesSeen++
 
@@ -425,6 +458,23 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 			if err != nil {
 				log.Fatalf("Error writing: %s\n", err.Error())
+			}
+		}
+
+		if ingestionRate > 0 {
+			gvCount += float32(batchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
+			if gvCount >= ingestionRateGran {
+				now := time.Now()
+				remaining := now.Sub(gvStart)
+				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6)
+				if remainingMs > 5 { // min sleep time 5 ms
+					time.Sleep(time.Duration(remainingMs) * time.Millisecond) // TODO discount 5 ms for syscalls (sleep & wakeup) overhead?
+					gvStart = time.Now()
+				} else {
+					// TODO log.Printf("Writing slower than expected (remaining time = %v ms out of %v ms)\n", remainingMs, RateControlGranularity)
+					gvStart = now
+				}
+				gvCount = 0
 			}
 		}
 
