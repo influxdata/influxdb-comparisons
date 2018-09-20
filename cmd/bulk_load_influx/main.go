@@ -28,11 +28,11 @@ import (
 )
 
 // TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.64 // 11.2222
+const ValuesPerMeasurement = 9.636 // dashboard use-case, original value was: 11.2222
 
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
-const RateControlMinBatchSize = 500
+const RateControlMinBatchSize = 100
 
 // Program option vars:
 var (
@@ -222,7 +222,7 @@ func main() {
 	if ingestionRate > 0 {
 		ingestionRateGran = (float32(ingestionRate) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.05)
+		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
@@ -230,7 +230,7 @@ func main() {
 			recommendedBatchSize = batchSize
 		}
 		if recommendedBatchSize != batchSize {
-			log.Printf("Adjusting batchSize from %v to %v", batchSize, recommendedBatchSize)
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize) * ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
 	} else {
@@ -420,6 +420,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	// Ingestion rate control vars
 	var gvCount float32
 	var gvStart time.Time
+	var ingestionRateDebt int64
 
 	if ingestionRate > 0 {
 		gvStart = time.Now()
@@ -466,15 +467,26 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
 				remaining := now.Sub(gvStart)
-				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6)
-				if remainingMs > 5 { // min sleep time 5 ms
+				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6) + ingestionRateDebt
+				ingestionRateDebt = 0
+				if remainingMs > 0 {
 					time.Sleep(time.Duration(remainingMs) * time.Millisecond) // TODO discount 5 ms for syscalls (sleep & wakeup) overhead?
 					gvStart = time.Now()
+					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6
+					if realDelay != remainingMs {
+						ingestionRateDebt = - (realDelay - remainingMs) // TODO how about spurios wakeups?
+					}
 				} else {
-					// TODO log.Printf("Writing slower than expected (remaining time = %v ms out of %v ms)\n", remainingMs, RateControlGranularity)
 					gvStart = now
+					ingestionRateDebt = remainingMs
 				}
-				gvCount = 0
+				if ingestionRateDebt != 0 {
+					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
+					if ingestionRateDebt < -RateControlGranularity { // trim to monitored period
+						ingestionRateDebt = -RateControlGranularity
+					}
+				}
+				gvCount -= ingestionRateGran
 			}
 		}
 
