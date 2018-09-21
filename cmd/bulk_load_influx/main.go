@@ -338,6 +338,7 @@ func scan(itemsPerBatch int) (int64, int64, int64) {
 	var n int
 	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
+	timeLimitElapsed := false
 
 	newline := []byte("\n")
 	var deadline time.Time
@@ -389,6 +390,7 @@ outer:
 			n = 0
 
 			if timeLimit >= 0 && time.Now().After(deadline) {
+				timeLimitElapsed = true
 				break outer
 			}
 		}
@@ -406,8 +408,12 @@ outer:
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	if itemsRead != totalPoints {
-		log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+		if !timeLimitElapsed {
+			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+		} else {
+			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
+		}
 	}
 
 	return itemsRead, bytesRead, totalValues
