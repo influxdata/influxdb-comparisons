@@ -184,7 +184,7 @@ func init() {
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
 	flag.DurationVar(&queryInterval, "query-interval", bulkQueryGen.DefaultQueryInterval, "Time interval query should ask for.")
-	flag.DurationVar(&timeWindowShift, "time-window-shift", -1, "Sliding time window shift. (Default -1 = disabled. When set to > 0s, queries option is ignored - number of queries is calculated.")
+	flag.DurationVar(&timeWindowShift, "time-window-shift", -1, "Sliding time window shift. (When set to > 0s, queries option is ignored - number of queries is calculated.")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
 	flag.IntVar(&debug, "debug", 0, "Debug printing (choices: 0, 1) (default 0).")
