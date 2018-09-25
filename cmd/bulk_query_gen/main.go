@@ -246,6 +246,10 @@ func init() {
 		log.Fatal("Query interval must be greater than the grouping interval")
 	}
 
+	if useCase == Dashboard && timeWindowShift == -1 { // when not set for dashboard, always use 5s default
+		timeWindowShift = 5 * time.Millisecond
+	}
+
 	if timeWindowShift > 0 {
 		bulkQueryGen.TimeWindowShift = timeWindowShift // global
 		queryCount = int(timestampEnd.Sub(timestampStart).Seconds() / timeWindowShift.Seconds())
