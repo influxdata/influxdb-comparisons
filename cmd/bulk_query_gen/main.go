@@ -246,6 +246,7 @@ func init() {
 		log.Fatal("Query interval must be greater than the grouping interval")
 	}
 
+	// TODO temporary for benchmarks
 	if useCase == Dashboard && timeWindowShift == -1 { // when not set for dashboard, always use 5s default
 		timeWindowShift = 5 * time.Second
 	}
