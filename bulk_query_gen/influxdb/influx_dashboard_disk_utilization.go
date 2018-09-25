@@ -26,10 +26,7 @@ func NewFluxDashboardDiskUtilization(dbConfig bulkQuerygen.DatabaseConfig, inter
 }
 
 func (d *InfluxDashboardDiskUtilization) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT max("used_percent") FROM "telegraf"."default"."disk" WHERE "cluster_id" = :Cluster_Id: AND "path" = '/influxdb/conf' AND time > :dashboardTime: AND host =~ /.data./ GROUP BY time(1m), "host"

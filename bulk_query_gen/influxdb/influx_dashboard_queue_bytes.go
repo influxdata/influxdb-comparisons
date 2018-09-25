@@ -26,10 +26,7 @@ func NewFluxDashboardQueueBytes(dbConfig bulkQuerygen.DatabaseConfig, interval b
 }
 
 func (d *InfluxDashboardQueueBytes) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT mean("queueBytes") FROM "telegraf"."default"."influxdb_hh_processor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host" fill(0)

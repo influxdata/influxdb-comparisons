@@ -26,10 +26,7 @@ func NewFluxDashboardNginxRequests(dbConfig bulkQuerygen.DatabaseConfig, interva
 }
 
 func (d *InfluxDashboardNginxRequests) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT non_negative_derivative(mean("queriesExecuted"), 1s) FROM "telegraf"."default"."influxdb_queryExecutor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host"

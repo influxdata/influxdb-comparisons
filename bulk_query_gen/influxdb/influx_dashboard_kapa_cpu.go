@@ -26,10 +26,7 @@ func NewFluxDashboardKapaCpu(dbConfig bulkQuerygen.DatabaseConfig, interval bulk
 }
 
 func (d *InfluxDashboardKapaCpu) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT 100 - "usage_idle" FROM "telegraf"."autogen"."cpu" WHERE time > now() - 15m AND "cpu"='cpu-total' AND "host"='kapacitor'

@@ -26,10 +26,7 @@ func NewFluxDashboardAvailability(dbConfig bulkQuerygen.DatabaseConfig, interval
 }
 
 func (d *InfluxDashboardAvailability) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT (sum("service_up") / count("service_up"))*100 AS "up_time" FROM "watcher"."autogen"."ping" WHERE cluster_id = :Cluster_Id: and time > :dashboardTime: FILL(linear)

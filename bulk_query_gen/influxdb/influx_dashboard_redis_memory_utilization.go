@@ -26,10 +26,7 @@ func NewFluxDashboardRedisMemoryUtilization(dbConfig bulkQuerygen.DatabaseConfig
 }
 
 func (d *InfluxDashboardRedisMemoryUtilization) Dispatch(i int) bulkQuerygen.Query {
-	q := bulkQuerygen.NewHTTPQuery() // from pool
-
-	//interval := d.AllInterval.RandWindow(d.queryTimeRange)
-	interval := d.TimeWindow.SlidingWindow(&d.AllInterval)
+	q, interval := d.InfluxDashboard.DispatchCommon(i)
 
 	var query string
 	//SELECT mean("usage_percent") FROM "telegraf"."default"."docker_container_mem" WHERE "cluster_id" = :Cluster_Id: AND ("container_name" =~ /influxd.*/ OR "container_name" =~ /kap.*/) AND time > :dashboardTime: GROUP BY time(1m), "host", "container_name" fill(previous)

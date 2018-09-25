@@ -38,6 +38,17 @@ func (d *InfluxDashboard) Dispatch(i int) bulkQuerygen.Query {
 	return q
 }
 
+func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQuerygen.TimeInterval) {
+	q := bulkQuerygen.NewHTTPQuery() // from pool
+	var interval bulkQuerygen.TimeInterval
+	if (bulkQuerygen.TimeWindowShift > 0) {
+		interval = d.TimeWindow.SlidingWindow(&d.AllInterval)
+	} else {
+		interval = d.AllInterval.RandWindow(d.Duration)
+	}
+	return q, &interval
+}
+
 func (d *InfluxDashboard) GetRandomClusterId() string {
 	return fmt.Sprintf("%d", rand.Intn(d.ClustersCount))
 }
