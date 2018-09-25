@@ -5,16 +5,18 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"time"
 )
 
 // InfluxDashboard produces Influx-specific queries for all the devops query types.
 type InfluxDashboard struct {
 	InfluxCommon
 	ClustersCount int
+	bulkQuerygen.TimeWindow
 }
 
 // NewInfluxDashboard makes an InfluxDashboard object ready to generate Queries.
-func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, scaleVar int) bulkQuerygen.QueryGenerator {
+func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
@@ -25,6 +27,7 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 	return &InfluxDashboard{
 		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
 		ClustersCount: clustersCount,
+		TimeWindow: bulkQuerygen.TimeWindow{interval.Start, duration},
 	}
 }
 
