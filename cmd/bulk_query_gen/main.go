@@ -247,7 +247,7 @@ func init() {
 	}
 
 	if useCase == Dashboard && timeWindowShift == -1 { // when not set for dashboard, always use 5s default
-		timeWindowShift = 5 * time.Millisecond
+		timeWindowShift = 5 * time.Second
 	}
 
 	if timeWindowShift > 0 {
