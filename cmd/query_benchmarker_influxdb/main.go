@@ -225,7 +225,7 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
-	initialWorkers := workers
+	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
@@ -237,10 +237,12 @@ func main() {
 	wallStart := time.Now()
 
 	scanRes := make(chan int)
+	scanClose := make(chan int)
+	responseTimeLimitReached := false
 	go func() {
 		for {
-			scan(qr)
-			if testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
+			scan(qr, scanClose)
+			if !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
 				qr = bytes.NewReader(queriesData)
 			} else {
 				scanRes <- 1
@@ -249,16 +251,19 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(increaseInterval)
-	defer ticker.Stop()
+	workersTicker := time.NewTicker(increaseInterval)
+	defer workersTicker.Stop()
+	responseTicker := time.NewTicker(time.Second)
+	defer responseTicker.Stop()
+
 loop:
 	for {
 		select {
 		case <-scanRes:
 			break loop
-		case <-ticker.C:
+		case <-workersTicker.C:
 			if gradualWorkersIncrease {
-				for i := 0; i < initialWorkers; i++ {
+				for i := 0; i < workersIncreaseStep; i++ {
 					fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
@@ -267,9 +272,16 @@ loop:
 					workers++
 				}
 			}
+		case <-responseTicker.C:
+			if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
+				responseTimeLimitReached = true
+				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
+				scanClose <- 1
+			}
 		}
 	}
 
+	close(scanClose)
 	close(scanRes)
 	close(queryChan)
 
@@ -316,6 +328,10 @@ loop:
 		reportTags = append(reportTags, [2]string{"increase_interval", increaseInterval.String()})
 		reportTags = append(reportTags, [2]string{"benchmark_duration", testDuration.String()})
 		reportTags = append(reportTags, [2]string{"response_time_limit", responseTimeLimit.String()})
+		if responseTimeLimitReached {
+			reportTags = append(reportTags, [2]string{"response_time_limit_reached", fmt.Sprintf("%v", responseTimeLimitReached)})
+		}
+
 		reportParams := &report.QueryReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -366,12 +382,13 @@ loop:
 var qind int64
 
 // scan reads encoded Queries and places them onto the workqueue.
-func scan(r io.Reader) {
+func scan(r io.Reader, closeChan chan int) {
 	dec := gob.NewDecoder(r)
 
 	batch := make([]*Query, 0, batchSize)
 
 	i := 0
+loop:
 	for {
 		if limit >= 0 && qind >= limit {
 			break
@@ -398,6 +415,12 @@ func scan(r io.Reader) {
 		}
 
 		qind++
+		select {
+		case <-closeChan:
+			fmt.Printf("Received finish request\n")
+			break loop
+		default:
+		}
 
 	}
 }
@@ -445,7 +468,7 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 				log.Fatal(err)
 			}
 		}
-		if useCase == Dashboard && waitInterval.Seconds() > 0 {
+		if waitInterval.Seconds() > 0 {
 			time.Sleep(waitInterval)
 		}
 	}
@@ -467,15 +490,6 @@ func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, tele
 	queryPool.Put(q)
 	if err != nil {
 		qerr := fmt.Errorf("Error during request of query %s: %s\n", q.String(), err.Error())
-		if errCh != nil {
-			errCh <- qerr
-			return nil
-		} else {
-			return qerr
-		}
-	}
-	if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(lagMillis*1e6) {
-		qerr := fmt.Errorf("Response time of query '%s' is above threshold: %.2fms > %.2fms\n", q.String(), lagMillis, responseTimeLimit.Seconds()*1e3)
 		if errCh != nil {
 			errCh <- qerr
 			return nil
