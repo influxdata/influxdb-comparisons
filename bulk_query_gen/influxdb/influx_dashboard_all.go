@@ -12,7 +12,7 @@ type InfluxDashboardAll struct {
 }
 
 func NewInfluxQLDashboardAll(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDashboard(InfluxQL, dbConfig, interval, scaleVar).(*InfluxDashboard)
+	underlying := newInfluxDashboard(InfluxQL, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardAll{
 		InfluxDashboard: *underlying,
 		Gens: []bulkQuerygen.QueryGenerator{
@@ -39,7 +39,7 @@ func NewInfluxQLDashboardAll(dbConfig bulkQuerygen.DatabaseConfig, interval bulk
 }
 
 func NewFluxDashboardAll(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDashboard(Flux, dbConfig, interval, scaleVar).(*InfluxDashboard)
+	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardAll{
 		InfluxDashboard: *underlying,
 	}
