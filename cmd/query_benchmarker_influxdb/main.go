@@ -73,6 +73,7 @@ var (
 	reportTags          [][2]string
 	reportHostname      string
 	batchSize           int
+	movingAverageStat   *TimedStatGroup
 )
 
 type statsMap map[string]*StatGroup
@@ -177,6 +178,7 @@ func init() {
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
+
 }
 
 func main() {
@@ -201,6 +203,7 @@ func main() {
 			}
 		},
 	}
+	movingAverageStat = NewTimedStatGroup(increaseInterval)
 	fmt.Println("Reading queries to buffer ")
 	queriesData, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
@@ -222,6 +225,7 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
+	initialWorkers := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
@@ -254,12 +258,14 @@ loop:
 			break loop
 		case <-ticker.C:
 			if gradualWorkersIncrease {
-				fmt.Printf("Adding worker %d\n", workers)
-				daemonUrl := daemonUrls[workers%len(daemonUrls)]
-				workersGroup.Add(1)
-				w := NewHTTPClient(daemonUrl, debug)
-				go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
-				workers++
+				for i := 0; i < initialWorkers; i++ {
+					fmt.Printf("Adding worker %d\n", workers)
+					daemonUrl := daemonUrls[workers%len(daemonUrls)]
+					workersGroup.Add(1)
+					w := NewHTTPClient(daemonUrl, debug)
+					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
+					workers++
+				}
 			}
 		}
 	}
@@ -327,14 +333,14 @@ loop:
 		}
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
-				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook)
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
 		} else {
 			stat := statMapping[allQueriesLabel]
-			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -498,6 +504,7 @@ func processStats() {
 		allQueriesLabel: &StatGroup{},
 	}
 
+	lastRefresh := time.Time{}
 	i := uint64(0)
 	for stat := range statChan {
 		if i < burnIn {
@@ -515,6 +522,7 @@ func processStats() {
 			statMapping[string(stat.Label)] = &StatGroup{}
 		}
 
+		movingAverageStat.Push(time.Now(), stat.Value)
 		statMapping[allQueriesLabel].Push(stat.Value)
 		statMapping[string(stat.Label)].Push(stat.Value)
 
@@ -522,6 +530,10 @@ func processStats() {
 
 		i++
 
+		if lastRefresh.Second() == 0 || time.Now().Sub(lastRefresh).Seconds() > 1 {
+			movingAverageStat.UpdateAvg()
+			lastRefresh = time.Now()
+		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
 			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i-burnIn, workers)
@@ -565,7 +577,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
