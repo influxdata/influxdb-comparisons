@@ -333,7 +333,11 @@ loop:
 		}
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
-				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook)
+				movingAvg := float64(-1)
+				if query == allQueriesLabel {
+					movingAvg = movingAverageStat.Avg()
+				}
+				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAvg, wallTook)
 				if err != nil {
 					log.Fatal(err)
 				}
