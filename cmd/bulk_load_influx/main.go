@@ -187,7 +187,7 @@ func init() {
 	if ingestRateLimit > 0 {
 		ingestionRateGran = (float32(ingestRateLimit) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.20)
+		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
@@ -195,7 +195,7 @@ func init() {
 			recommendedBatchSize = batchSize
 		}
 		if recommendedBatchSize != batchSize {
-			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize) * ValuesPerMeasurement)
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
 	} else {
@@ -341,7 +341,7 @@ func main() {
 		reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
 		reportTags = append(reportTags, [2]string{"consistency", consistency})
 		if endedPrematurely {
-			reportTags = append(reportTags, [2]string{"ended_prematurely", fmt.Sprintf("%v", endedPrematurely)})
+			reportTags = append(reportTags, [2]string{"premature_end_reason", prematureEndReason})
 		}
 		if timeLimit.Seconds() > 0 {
 			reportTags = append(reportTags, [2]string{"time_limit", timeLimit.String()})
@@ -529,7 +529,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					gvStart = time.Now()
 					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6
 					if realDelay != remainingMs {
-						ingestionRateDebt = - (realDelay - remainingMs) // TODO how about spurios wakeups?
+						ingestionRateDebt = -(realDelay - remainingMs) // TODO how about spurios wakeups?
 					}
 				} else {
 					gvStart = now
