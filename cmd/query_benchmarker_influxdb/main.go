@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/rpc"
 	"os"
 	"runtime/pprof"
 	"sort"
@@ -55,6 +56,7 @@ var (
 	testDuration           time.Duration
 	gradualWorkersIncrease bool
 	increaseInterval       time.Duration
+	notificationHostPort   string
 )
 
 // Global vars:
@@ -107,6 +109,7 @@ func init() {
 	flag.DurationVar(&increaseInterval, "increase-interval", time.Second*30, "Interval when number of workers will increase")
 	flag.DurationVar(&testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
+	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 
 	flag.Parse()
 
@@ -309,6 +312,20 @@ loop:
 		close(telemetryChanPoints)
 		<-telemetryChanDone
 		fmt.Println("done shutting down telemetry.")
+	}
+
+	if notificationHostPort != "" {
+		client, err := rpc.DialHTTP("tcp", notificationHostPort)
+		if err != nil {
+			log.Println("error: dialing:", err)
+		} else {
+			var res int
+			input := 0
+			call := client.Go("NotifyReceiver.Notify", input, &res, nil)
+			if call.Error != nil {
+				log.Println("error: calling:", call.Error)
+			}
+		}
 	}
 
 	if reportHost != "" {
