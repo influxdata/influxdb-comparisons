@@ -341,7 +341,7 @@ func main() {
 		reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
 		reportTags = append(reportTags, [2]string{"consistency", consistency})
 		if endedPrematurely {
-			reportTags = append(reportTags, [2]string{"premature_end_reason", prematureEndReason})
+			reportTags = append(reportTags, [2]string{"premature_end_reason", report.Escape(prematureEndReason)})
 		}
 		if timeLimit.Seconds() > 0 {
 			reportTags = append(reportTags, [2]string{"time_limit", timeLimit.String()})
