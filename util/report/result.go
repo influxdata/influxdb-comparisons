@@ -113,7 +113,7 @@ var escaper = strings.NewReplacer(
 	`=`, `\=`,
 )
 
-func escape(s string) string {
+func Escape(s string) string {
 	if strings.ContainsAny(s, escapes) {
 		return escaper.Replace(s)
 	} else {
@@ -130,7 +130,7 @@ func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime
 	}
 
 	p.AddTag("burn_in", strconv.Itoa(int(params.BurnIn)))
-	p.AddTag("query_name", escape(queryName))
+	p.AddTag("query_name", Escape(queryName))
 
 	p.AddFloat64Field("min_time", minQueryTime)
 	if minQueryTime > 0 {
