@@ -18,6 +18,7 @@ import (
 	"net/rpc"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -216,7 +217,13 @@ func notifyHandler(arg int) (int, error) {
 	return 0, e
 }
 
+func printInfo() {
+	fmt.Printf("SysInfo:\n")
+	fmt.Printf("  Current GOMAXPROCS: %d\n", runtime.GOMAXPROCS(-1))
+	fmt.Printf("  Num CPUs: %d\n", runtime.NumCPU())
+}
 func main() {
+	printInfo()
 	if memprofile {
 		p := profile.Start(profile.MemProfile)
 		defer p.Stop()
