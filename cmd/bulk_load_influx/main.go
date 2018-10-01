@@ -385,7 +385,7 @@ func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 
 	newline := []byte("\n")
 	var deadline time.Time
-	if timeLimit >= 0 {
+	if timeLimit > 0 {
 		deadline = time.Now().Add(timeLimit)
 	}
 
@@ -432,7 +432,7 @@ outer:
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
 
-			if timeLimit >= 0 && time.Now().After(deadline) {
+			if timeLimit > 0 && time.Now().After(deadline) {
 				endedPrematurely = true
 				prematureEndReason = "Timeout elapsed"
 				break outer
