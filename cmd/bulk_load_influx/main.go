@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,6 +57,7 @@ var (
 	useGzip                bool
 	doAbortOnExist         bool
 	memprofile             bool
+	cpuProfileFile         string
 	consistency            string
 	telemetryHost          string
 	telemetryStderr        bool
@@ -127,6 +129,7 @@ func init() {
 	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
 	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
+	flag.StringVar(&cpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
 
 	flag.Parse()
 
@@ -227,6 +230,16 @@ func main() {
 	if memprofile {
 		p := profile.Start(profile.MemProfile)
 		defer p.Stop()
+	}
+	if cpuProfileFile != "" {
+		f, err := os.Create(cpuProfileFile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
 	}
 	// check that there are no pre-existing databases
 	// this also test db connection
