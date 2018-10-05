@@ -245,7 +245,9 @@ func main() {
 	go func() {
 		for {
 			scan(qr, scanClose)
-			if !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
+			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration))
+			log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
+			if cont {
 				qr = bytes.NewReader(queriesData)
 			} else {
 				scanRes <- 1
