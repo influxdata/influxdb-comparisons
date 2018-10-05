@@ -21,7 +21,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -110,7 +109,7 @@ func init() {
 }
 
 func main() {
-	rand.Seed(seed)
+	common.Seed(seed)
 
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
 	defer out.Flush()
