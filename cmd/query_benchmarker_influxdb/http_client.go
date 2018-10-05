@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 	"github.com/valyala/fasthttp"
+	"net"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -28,10 +29,13 @@ type HTTPClientDoOptions struct {
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewHTTPClient(host string, debug int) *HTTPClient {
+func NewHTTPClient(host string, debug int, timeout time.Duration) *HTTPClient {
 	return &HTTPClient{
 		client: fasthttp.Client{
 			Name: "query_benchmarker",
+			Dial: func(addr string) (net.Conn, error) {
+				return fasthttp.DialTimeout(addr, timeout)
+			},
 		},
 		Host:       []byte(host),
 		HostString: host,
