@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"os"
 	"time"
-	"github.com/valyala/fasthttp"
 	"net"
+	"github.com/valyala/fasthttp"
 )
 
 var bytesSlash = []byte("/") // heap optimization
