@@ -113,7 +113,7 @@ var escaper = strings.NewReplacer(
 	`=`, `\=`,
 )
 
-func escape(s string) string {
+func Escape(s string) string {
 	if strings.ContainsAny(s, escapes) {
 		return escaper.Replace(s)
 	} else {
@@ -122,7 +122,7 @@ func escape(s string) string {
 }
 
 //ReportQueryResult send result from bulk query benchmark to an influxdb according to the given parameters
-func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime float64, meanQueryTime float64, maxQueryTime float64, totalQueries int64, queryDuration time.Duration) error {
+func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime float64, meanQueryTime float64, maxQueryTime float64, totalQueries int64, movingMean float64, queryDuration time.Duration) error {
 
 	c, p, err := initReport(&params.ReportParams, "query_benchmarks")
 	if err != nil {
@@ -130,7 +130,7 @@ func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime
 	}
 
 	p.AddTag("burn_in", strconv.Itoa(int(params.BurnIn)))
-	p.AddTag("query_name", escape(queryName))
+	p.AddTag("query_name", Escape(queryName))
 
 	p.AddFloat64Field("min_time", minQueryTime)
 	if minQueryTime > 0 {
@@ -150,6 +150,7 @@ func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime
 	} else {
 		p.AddFloat64Field("max_rate", -1)
 	}
+	p.AddFloat64Field("moving_mean_time", movingMean)
 	p.AddInt64Field("total_items", totalQueries)
 	p.AddFloat64Field("duration", queryDuration.Seconds())
 

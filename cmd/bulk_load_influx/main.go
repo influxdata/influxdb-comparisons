@@ -10,11 +10,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"net/rpc"
 	"net/url"
 	"os"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,41 +33,43 @@ import (
 )
 
 // TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.64 // 11.2222
+const ValuesPerMeasurement = 9.636 // dashboard use-case, original value was: 11.2222
 
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
-const RateControlMinBatchSize = 500
+const RateControlMinBatchSize = 100
 
 // Program option vars:
 var (
-	csvDaemonUrls      string
-	daemonUrls         []string
-	dbName             string
-	replicationFactor  int
-	workers            int
-	itemLimit          int64
-	batchSize          int
-	ingestionRate      int
-	backoff            time.Duration
-	timeLimit          time.Duration
-	progressInterval   time.Duration
-	doLoad             bool
-	doDBCreate         bool
-	useGzip            bool
-	doAbortOnExist     bool
-	memprofile         bool
-	consistency        string
-	telemetryHost      string
-	telemetryStderr    bool
-	telemetryBatchSize uint64
-	telemetryTagsCSV   string
-	telemetryBasicAuth string
-	reportDatabase     string
-	reportHost         string
-	reportUser         string
-	reportPassword     string
-	reportTagsCSV      string
+	csvDaemonUrls          string
+	daemonUrls             []string
+	dbName                 string
+	replicationFactor      int
+	workers                int
+	itemLimit              int64
+	batchSize              int
+	ingestRateLimit        int
+	backoff                time.Duration
+	timeLimit              time.Duration
+	progressInterval       time.Duration
+	doLoad                 bool
+	doDBCreate             bool
+	useGzip                bool
+	doAbortOnExist         bool
+	memprofile             bool
+	cpuProfileFile         string
+	consistency            string
+	telemetryHost          string
+	telemetryStderr        bool
+	telemetryBatchSize     uint64
+	telemetryTagsCSV       string
+	telemetryBasicAuth     string
+	reportDatabase         string
+	reportHost             string
+	reportUser             string
+	reportPassword         string
+	reportTagsCSV          string
+	notificationListenPort int
 )
 
 // Global vars
@@ -75,12 +82,15 @@ var (
 	backingOffDones       []chan struct{}
 	telemetryChanPoints   chan *report.Point
 	telemetryChanDone     chan struct{}
+	syncChanDone          chan int
 	telemetrySrcAddr      string
 	telemetryTags         [][2]string
 	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
 	ingestionRateGran     float32
+	endedPrematurely      bool
+	prematureEndReason    string
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -98,7 +108,7 @@ func init() {
 	flag.StringVar(&consistency, "consistency", "all", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.IntVar(&ingestionRate, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
+	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.Int64Var(&itemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
 	flag.DurationVar(&timeLimit, "time-limit", -1, "Maximum duration to run (-1 is the default: no limit).")
@@ -118,6 +128,8 @@ func init() {
 	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
 	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
 	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
+	flag.StringVar(&cpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
 
 	flag.Parse()
 
@@ -175,12 +187,59 @@ func init() {
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
+
+	if ingestRateLimit > 0 {
+		ingestionRateGran = (float32(ingestRateLimit) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
+		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
+		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
+		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
+		if recommendedBatchSize < RateControlMinBatchSize {
+			recommendedBatchSize = RateControlMinBatchSize
+		} else if recommendedBatchSize > batchSize {
+			recommendedBatchSize = batchSize
+		}
+		if recommendedBatchSize != batchSize {
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
+			batchSize = recommendedBatchSize
+		}
+	} else {
+		log.Printf("Ingestion rate control is off")
+	}
 }
 
+func notifyHandler(arg int) (int, error) {
+	var e error
+	if arg == 0 {
+		fmt.Println("Received external finish request")
+		endedPrematurely = true
+		prematureEndReason = "External notification"
+		syncChanDone <- 1
+	} else {
+		e = fmt.Errorf("unknown notification code: %d", arg)
+	}
+	return 0, e
+}
+
+func printInfo() {
+	fmt.Printf("SysInfo:\n")
+	fmt.Printf("  Current GOMAXPROCS: %d\n", runtime.GOMAXPROCS(-1))
+	fmt.Printf("  Num CPUs: %d\n", runtime.NumCPU())
+}
 func main() {
+	printInfo()
 	if memprofile {
 		p := profile.Start(profile.MemProfile)
 		defer p.Stop()
+	}
+	if cpuProfileFile != "" {
+		f, err := os.Create(cpuProfileFile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
 	}
 	// check that there are no pre-existing databases
 	// this also test db connection
@@ -215,31 +274,27 @@ func main() {
 
 	batchChan = make(chan *bytes.Buffer, workers)
 	inputDone = make(chan struct{})
+	syncChanDone = make(chan int)
 
 	backingOffChans = make([]chan bool, workers)
 	backingOffDones = make([]chan struct{}, workers)
 
-	if ingestionRate > 0 {
-		ingestionRateGran = (float32(ingestionRate) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
-		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement)* 0.05)
-		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
-		if recommendedBatchSize < RateControlMinBatchSize {
-			recommendedBatchSize = RateControlMinBatchSize
-		} else if recommendedBatchSize > batchSize {
-			recommendedBatchSize = batchSize
-		}
-		if recommendedBatchSize != batchSize {
-			log.Printf("Adjusting batchSize from %v to %v", batchSize, recommendedBatchSize)
-			batchSize = recommendedBatchSize
-		}
-	} else {
-		log.Printf("Ingestion rate control is off")
-	}
-
 	if telemetryHost != "" {
 		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
+	}
+
+	if notificationListenPort > 0 {
+		notif := new(bulk_load.NotifyReceiver)
+		rpc.Register(notif)
+		rpc.HandleHTTP()
+		bulk_load.RegisterHandler(notifyHandler)
+		l, e := net.Listen("tcp", fmt.Sprintf(":%d", notificationListenPort))
+		if e != nil {
+			log.Fatal("listen error:", e)
+		}
+		log.Println("Listening for incoming notification")
+		go http.Serve(l, nil)
 	}
 
 	for i := 0; i < workers; i++ {
@@ -273,10 +328,11 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead, valuesRead := scan(batchSize)
+	itemsRead, bytesRead, valuesRead := scan(batchSize, syncChanDone)
 
 	<-inputDone
 	close(batchChan)
+	close(syncChanDone)
 
 	workersGroup.Wait()
 
@@ -304,7 +360,15 @@ func main() {
 		reportTags = append(reportTags, [2]string{"replication_factor", strconv.Itoa(int(replicationFactor))})
 		reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
 		reportTags = append(reportTags, [2]string{"consistency", consistency})
-
+		if endedPrematurely {
+			reportTags = append(reportTags, [2]string{"premature_end_reason", report.Escape(prematureEndReason)})
+		}
+		if timeLimit.Seconds() > 0 {
+			reportTags = append(reportTags, [2]string{"time_limit", timeLimit.String()})
+		}
+		if ingestRateLimit > 0 {
+			reportTags = append(reportTags, [2]string{"ingest_rate_limit", strconv.Itoa(ingestRateLimit)})
+		}
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -332,7 +396,7 @@ func main() {
 
 // scan reads one item at a time from stdin. 1 item = 1 line.
 // When the requested number of items per batch is met, send a batch over batchChan for the workers to write.
-func scan(itemsPerBatch int) (int64, int64, int64) {
+func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
 	var n int
@@ -341,7 +405,7 @@ func scan(itemsPerBatch int) (int64, int64, int64) {
 
 	newline := []byte("\n")
 	var deadline time.Time
-	if timeLimit >= 0 {
+	if timeLimit > 0 {
 		deadline = time.Now().Add(timeLimit)
 	}
 
@@ -388,9 +452,16 @@ outer:
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
 
-			if timeLimit >= 0 && time.Now().After(deadline) {
+			if timeLimit > 0 && time.Now().After(deadline) {
+				endedPrematurely = true
+				prematureEndReason = "Timeout elapsed"
 				break outer
 			}
+		}
+		select {
+		case <-doneCh:
+			break outer
+		default:
 		}
 	}
 
@@ -406,8 +477,12 @@ outer:
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 
-	if itemsRead != totalPoints {
-		log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+		if !endedPrematurely {
+			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+		} else {
+			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
+		}
 	}
 
 	return itemsRead, bytesRead, totalValues
@@ -420,8 +495,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	// Ingestion rate control vars
 	var gvCount float32
 	var gvStart time.Time
+	var ingestionRateDebt int64
 
-	if ingestionRate > 0 {
+	if ingestRateLimit > 0 {
 		gvStart = time.Now()
 	}
 
@@ -461,20 +537,31 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 		}
 
-		if ingestionRate > 0 {
+		if ingestRateLimit > 0 {
 			gvCount += float32(batchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
 				remaining := now.Sub(gvStart)
-				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6)
-				if remainingMs > 5 { // min sleep time 5 ms
+				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6) + ingestionRateDebt
+				ingestionRateDebt = 0
+				if remainingMs > 0 {
 					time.Sleep(time.Duration(remainingMs) * time.Millisecond) // TODO discount 5 ms for syscalls (sleep & wakeup) overhead?
 					gvStart = time.Now()
+					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6
+					if realDelay != remainingMs {
+						ingestionRateDebt = -(realDelay - remainingMs) // TODO how about spurios wakeups?
+					}
 				} else {
-					// TODO log.Printf("Writing slower than expected (remaining time = %v ms out of %v ms)\n", remainingMs, RateControlGranularity)
 					gvStart = now
+					ingestionRateDebt = remainingMs
 				}
-				gvCount = 0
+				if ingestionRateDebt != 0 {
+					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
+					if ingestionRateDebt < -RateControlGranularity { // trim to monitored period
+						ingestionRateDebt = -RateControlGranularity
+					}
+				}
+				gvCount -= ingestionRateGran
 			}
 		}
 

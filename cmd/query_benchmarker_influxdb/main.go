@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/rpc"
 	"os"
 	"runtime/pprof"
 	"sort"
@@ -55,6 +56,7 @@ var (
 	testDuration           time.Duration
 	gradualWorkersIncrease bool
 	increaseInterval       time.Duration
+	notificationHostPort   string
 	dialTimeout            time.Duration
 )
 
@@ -74,6 +76,7 @@ var (
 	reportTags          [][2]string
 	reportHostname      string
 	batchSize           int
+	movingAverageStat   *TimedStatGroup
 )
 
 type statsMap map[string]*StatGroup
@@ -107,6 +110,7 @@ func init() {
 	flag.DurationVar(&increaseInterval, "increase-interval", time.Second*30, "Interval when number of workers will increase")
 	flag.DurationVar(&testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
+	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 
 	flag.Parse()
@@ -179,6 +183,7 @@ func init() {
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
+
 }
 
 func main() {
@@ -203,6 +208,7 @@ func main() {
 			}
 		},
 	}
+	movingAverageStat = NewTimedStatGroup(increaseInterval)
 	fmt.Println("Reading queries to buffer ")
 	queriesData, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
@@ -224,6 +230,7 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
+	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
@@ -235,10 +242,12 @@ func main() {
 	wallStart := time.Now()
 
 	scanRes := make(chan int)
+	scanClose := make(chan int)
+	responseTimeLimitReached := false
 	go func() {
 		for {
-			scan(qr)
-			if testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
+			scan(qr, scanClose)
+			if !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
 				qr = bytes.NewReader(queriesData)
 			} else {
 				scanRes <- 1
@@ -247,25 +256,37 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(increaseInterval)
-	defer ticker.Stop()
+	workersTicker := time.NewTicker(increaseInterval)
+	defer workersTicker.Stop()
+	responseTicker := time.NewTicker(time.Second)
+	defer responseTicker.Stop()
+
 loop:
 	for {
 		select {
 		case <-scanRes:
 			break loop
-		case <-ticker.C:
+		case <-workersTicker.C:
 			if gradualWorkersIncrease {
-				fmt.Printf("Adding worker %d\n", workers)
-				daemonUrl := daemonUrls[workers%len(daemonUrls)]
-				workersGroup.Add(1)
-				w := NewHTTPClient(daemonUrl, debug, dialTimeout)
-				go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
-				workers++
+				for i := 0; i < workersIncreaseStep; i++ {
+					fmt.Printf("Adding worker %d\n", workers)
+					daemonUrl := daemonUrls[workers%len(daemonUrls)]
+					workersGroup.Add(1)
+					w := NewHTTPClient(daemonUrl, debug, dialTimeout)
+					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
+					workers++
+				}
+			}
+		case <-responseTicker.C:
+			if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
+				responseTimeLimitReached = true
+				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
+				scanClose <- 1
 			}
 		}
 	}
 
+	close(scanClose)
 	close(scanRes)
 	close(queryChan)
 
@@ -295,6 +316,20 @@ loop:
 		fmt.Println("done shutting down telemetry.")
 	}
 
+	if notificationHostPort != "" {
+		client, err := rpc.DialHTTP("tcp", notificationHostPort)
+		if err != nil {
+			log.Println("error: dialing:", err)
+		} else {
+			var res int
+			input := 0
+			call := client.Go("NotifyReceiver.Notify", input, &res, nil)
+			if call.Error != nil {
+				log.Println("error: calling:", call.Error)
+			}
+		}
+	}
+
 	if reportHost != "" {
 		found := false
 		for _, pair := range reportTags {
@@ -312,6 +347,10 @@ loop:
 		reportTags = append(reportTags, [2]string{"increase_interval", increaseInterval.String()})
 		reportTags = append(reportTags, [2]string{"benchmark_duration", testDuration.String()})
 		reportTags = append(reportTags, [2]string{"response_time_limit", responseTimeLimit.String()})
+		if responseTimeLimitReached {
+			reportTags = append(reportTags, [2]string{"response_time_limit_reached", fmt.Sprintf("%v", responseTimeLimitReached)})
+		}
+
 		reportParams := &report.QueryReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -329,14 +368,18 @@ loop:
 		}
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
-				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+				movingAvg := float64(-1)
+				if query == allQueriesLabel {
+					movingAvg = movingAverageStat.Avg()
+				}
+				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAvg, wallTook)
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
 		} else {
 			stat := statMapping[allQueriesLabel]
-			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -358,12 +401,13 @@ loop:
 var qind int64
 
 // scan reads encoded Queries and places them onto the workqueue.
-func scan(r io.Reader) {
+func scan(r io.Reader, closeChan chan int) {
 	dec := gob.NewDecoder(r)
 
 	batch := make([]*Query, 0, batchSize)
 
 	i := 0
+loop:
 	for {
 		if limit >= 0 && qind >= limit {
 			break
@@ -390,6 +434,12 @@ func scan(r io.Reader) {
 		}
 
 		qind++
+		select {
+		case <-closeChan:
+			fmt.Printf("Received finish request\n")
+			break loop
+		default:
+		}
 
 	}
 }
@@ -437,7 +487,7 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 				log.Fatal(err)
 			}
 		}
-		if useCase == Dashboard && waitInterval.Seconds() > 0 {
+		if waitInterval.Seconds() > 0 {
 			time.Sleep(waitInterval)
 		}
 	}
@@ -459,15 +509,6 @@ func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, tele
 	queryPool.Put(q)
 	if err != nil {
 		qerr := fmt.Errorf("Error during request of query %s: %s\n", q.String(), err.Error())
-		if errCh != nil {
-			errCh <- qerr
-			return nil
-		} else {
-			return qerr
-		}
-	}
-	if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(lagMillis*1e6) {
-		qerr := fmt.Errorf("Response time of query '%s' is above threshold: %.2fms > %.2fms\n", q.String(), lagMillis, responseTimeLimit.Seconds()*1e3)
 		if errCh != nil {
 			errCh <- qerr
 			return nil
@@ -500,6 +541,7 @@ func processStats() {
 		allQueriesLabel: &StatGroup{},
 	}
 
+	lastRefresh := time.Time{}
 	i := uint64(0)
 	for stat := range statChan {
 		if i < burnIn {
@@ -517,6 +559,7 @@ func processStats() {
 			statMapping[string(stat.Label)] = &StatGroup{}
 		}
 
+		movingAverageStat.Push(time.Now(), stat.Value)
 		statMapping[allQueriesLabel].Push(stat.Value)
 		statMapping[string(stat.Label)].Push(stat.Value)
 
@@ -524,6 +567,10 @@ func processStats() {
 
 		i++
 
+		if lastRefresh.Second() == 0 || time.Now().Sub(lastRefresh).Seconds() > 1 {
+			movingAverageStat.UpdateAvg()
+			lastRefresh = time.Now()
+		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
 			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i-burnIn, workers)
@@ -567,7 +614,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
