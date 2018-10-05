@@ -228,7 +228,7 @@ func main() {
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := NewHTTPClient(daemonUrl, debug, dialTimeout)
+		w := NewHTTPClient(daemonUrl, debug)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 
@@ -259,7 +259,7 @@ loop:
 				fmt.Printf("Adding worker %d\n", workers)
 				daemonUrl := daemonUrls[workers%len(daemonUrls)]
 				workersGroup.Add(1)
-				w := NewHTTPClient(daemonUrl, debug, dialTimeout)
+				w := NewHTTPClient(daemonUrl, debug)
 				go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 				workers++
 			}
