@@ -65,7 +65,7 @@ func NewHost(i int, offset int, start time.Time) Host {
 			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2+offset))
 		}
 	} else {
-		hostname = []byte(fmt.Sprintf("kapacitor_%d", offset))
+		hostname = []byte(fmt.Sprintf("kapacitor_%d", 1+offset))
 	}
 	sm := NewHostMeasurements(start)
 
