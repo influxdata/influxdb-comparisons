@@ -50,7 +50,7 @@ var (
 	currentHostIndex  int
 )
 
-func NewHost(i int, start time.Time) Host {
+func NewHost(i int, offset int, start time.Time) Host {
 	var hostname []byte
 	if i > 0 {
 		if curentClusterSize == 0 || currentHostIndex == curentClusterSize {
@@ -60,12 +60,12 @@ func NewHost(i int, start time.Time) Host {
 		}
 
 		if currentHostIndex < 3 {
-			hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1))
+			hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1+offset))
 		} else {
-			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2))
+			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2+offset))
 		}
 	} else {
-		hostname = []byte("kapacitor")
+		hostname = []byte(fmt.Sprintf("kapacitor_%d", offset))
 	}
 	sm := NewHostMeasurements(start)
 
