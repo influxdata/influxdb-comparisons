@@ -12,6 +12,7 @@ type IotSimulatorConfig struct {
 	End   time.Time
 
 	SmartHomeCount int64
+	SmartHomeOffset int64
 }
 
 func (d *IotSimulatorConfig) ToSimulator() *IotSimulator {
@@ -19,7 +20,7 @@ func (d *IotSimulatorConfig) ToSimulator() *IotSimulator {
 	var measNum int64
 
 	for i := 0; i < len(homeInfos); i++ {
-		homeInfos[i] = NewSmartHome(i, d.Start)
+		homeInfos[i] = NewSmartHome(i, int(d.SmartHomeOffset), d.Start)
 		measNum += int64(homeInfos[i].NumMeasurements())
 	}
 
