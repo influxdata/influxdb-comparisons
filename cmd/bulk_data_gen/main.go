@@ -21,7 +21,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -42,6 +41,7 @@ var (
 	useCase string
 
 	scaleVar int64
+	scaleVarOffset int64
 
 	timestampStartStr string
 	timestampEndStr   string
@@ -62,6 +62,7 @@ func init() {
 
 	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
+	flag.Int64Var(&scaleVarOffset, "scale-var-offset", 0, "Scaling variable offset specific to the use case.")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
@@ -110,7 +111,7 @@ func init() {
 }
 
 func main() {
-	rand.Seed(seed)
+	common.Seed(seed)
 
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
 	defer out.Flush()
@@ -124,6 +125,7 @@ func main() {
 			End:   timestampEnd,
 
 			HostCount: scaleVar,
+			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
 	case useCaseChoices[2]:
@@ -132,6 +134,7 @@ func main() {
 			End:   timestampEnd,
 
 			HostCount: scaleVar,
+			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
 	case useCaseChoices[1]:
@@ -140,6 +143,7 @@ func main() {
 			End:   timestampEnd,
 
 			SmartHomeCount: scaleVar,
+			SmartHomeOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
 	default:

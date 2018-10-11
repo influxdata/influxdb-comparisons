@@ -26,6 +26,11 @@ func ND(mean, stddev float64) *NormalDistribution {
 // Unsynchronized random source
 var localRand = rand.New(rand.NewSource(1))
 
+// Seed uses the provided seed value to initialize the generator to a deterministic state.
+func Seed (seed int64) {
+	localRand.Seed(seed)
+}
+
 // Advance advances this distribution. Since a normal distribution is
 // stateless, this is just overwrites the internal cache value.
 func (d *NormalDistribution) Advance() {

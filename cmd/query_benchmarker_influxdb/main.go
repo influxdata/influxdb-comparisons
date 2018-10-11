@@ -57,6 +57,7 @@ var (
 	gradualWorkersIncrease bool
 	increaseInterval       time.Duration
 	notificationHostPort   string
+	dialTimeout            time.Duration
 )
 
 // Global vars:
@@ -110,6 +111,7 @@ func init() {
 	flag.DurationVar(&testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
+	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 
 	flag.Parse()
 
@@ -233,7 +235,7 @@ func main() {
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := NewHTTPClient(daemonUrl, debug)
+		w := NewHTTPClient(daemonUrl, debug, dialTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 
@@ -272,7 +274,7 @@ loop:
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := NewHTTPClient(daemonUrl, debug)
+					w := NewHTTPClient(daemonUrl, debug, dialTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
