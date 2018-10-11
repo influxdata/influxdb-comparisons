@@ -247,7 +247,9 @@ func main() {
 	go func() {
 		for {
 			scan(qr, scanClose)
-			if !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
+			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration))
+			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
+			if cont {
 				qr = bytes.NewReader(queriesData)
 			} else {
 				scanRes <- 1
@@ -269,7 +271,7 @@ loop:
 		case <-workersTicker.C:
 			if gradualWorkersIncrease {
 				for i := 0; i < workersIncreaseStep; i++ {
-					fmt.Printf("Adding worker %d\n", workers)
+					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
 					w := NewHTTPClient(daemonUrl, debug, dialTimeout)
