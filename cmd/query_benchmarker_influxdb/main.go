@@ -269,7 +269,7 @@ loop:
 		case <-workersTicker.C:
 			if gradualWorkersIncrease {
 				for i := 0; i < workersIncreaseStep; i++ {
-					fmt.Printf("Adding worker %d\n", workers)
+					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
 					w := NewHTTPClient(daemonUrl, debug)
