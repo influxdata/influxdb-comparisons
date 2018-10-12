@@ -240,7 +240,7 @@ func main() {
 		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
-time.Sleep(1*time.Hour)
+
 	wallStart := time.Now()
 
 	scanRes := make(chan int)

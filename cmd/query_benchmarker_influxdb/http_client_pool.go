@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/valyala/fasthttp"
 	"sync"
 	"time"
@@ -31,7 +30,6 @@ func InitPool(urls []string, debug int, timeout time.Duration) {
 		}
 		hp.Pool = &sync.Pool{
 			New: func()interface{} {
-				fmt.Printf("pool for %v depleted, adding new client", hp.Host)
 				return NewHTTPClient(hp.Host, hp.Debug, hp.Timeout)
 			},
 		}
