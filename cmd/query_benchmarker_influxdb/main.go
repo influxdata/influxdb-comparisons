@@ -565,7 +565,9 @@ func processStats() {
 			statMapping[string(stat.Label)] = &StatGroup{}
 		}
 
-		movingAverageStat.Push(time.Now(), stat.Value)
+		now := time.Now()
+
+		movingAverageStat.Push(now, stat.Value)
 		statMapping[allQueriesLabel].Push(stat.Value)
 		statMapping[string(stat.Label)].Push(stat.Value)
 
@@ -573,9 +575,9 @@ func processStats() {
 
 		i++
 
-		if lastRefresh.Second() == 0 || time.Now().Sub(lastRefresh).Seconds() > 1 {
+		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
 			movingAverageStat.UpdateAvg()
-			lastRefresh = time.Now()
+			lastRefresh = now
 		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
