@@ -82,9 +82,9 @@ func (m *TimedStatGroup) Avg() float64 {
 	return m.lastAvg
 }
 
-func (m *TimedStatGroup) UpdateAvg() float64 {
+func (m *TimedStatGroup) UpdateAvg(now time.Time) float64 {
 	newStats := make([]timedStat, 0, len(m.stats))
-	last := time.Now().Add(-m.maxDuraton)
+	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
 	c := 0
 	for _, ts := range m.stats {

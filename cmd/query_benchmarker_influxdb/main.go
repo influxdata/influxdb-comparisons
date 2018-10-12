@@ -594,7 +594,7 @@ func processStats() {
 		i++
 
 		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
-			movingAverageStat.UpdateAvg()
+			movingAverageStat.UpdateAvg(now)
 			lastRefresh = now
 		}
 		// print stats to stderr (if printInterval is greater than zero):
