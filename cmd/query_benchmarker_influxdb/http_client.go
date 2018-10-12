@@ -36,6 +36,7 @@ func NewHTTPClient(host string, debug int, timeout time.Duration) *HTTPClient {
 			Dial: func(addr string) (net.Conn, error) {
 				return fasthttp.DialTimeout(addr, timeout)
 			},
+			MaxIdleConnDuration: 1*time.Hour,
 		},
 		Host:       []byte(host),
 		HostString: host,
