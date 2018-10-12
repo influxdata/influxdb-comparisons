@@ -640,7 +640,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
