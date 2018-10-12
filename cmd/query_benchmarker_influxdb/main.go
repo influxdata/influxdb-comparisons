@@ -58,6 +58,7 @@ var (
 	increaseInterval       time.Duration
 	notificationHostPort   string
 	dialTimeout            time.Duration
+	initialHttpClients     int
 )
 
 // Global vars:
@@ -112,6 +113,7 @@ func init() {
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
+	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 
 	flag.Parse()
 
@@ -230,7 +232,9 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
-	InitPool(daemonUrls, debug, dialTimeout)
+	if initialHttpClients > 0 {
+		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout)
+	}
 
 	workersIncreaseStep := workers
 	// Launch the query processors:

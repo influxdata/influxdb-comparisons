@@ -1,43 +1,61 @@
 package main
 
 import (
+	"fmt"
 	"github.com/valyala/fasthttp"
-	"sync"
 	"time"
 )
 
 type HTTPClientPool struct {
-	Pool 	*sync.Pool
-	Host 	string
-	Debug 	int
-	Timeout time.Duration
+	Pool 			[]*HTTPClient
+	Host 			string
+	Debug 			int
+	Timeout 		time.Duration
+	Available		int
 }
 
-func (p *HTTPClientPool) CachedOrNewHTTPClient() *HTTPClient {
-	return p.Pool.Get().(*HTTPClient)
-}
-
-var ClientsPerHost = 512
 var clientsPools map[string]*HTTPClientPool
 
-func InitPool(urls []string, debug int, timeout time.Duration) {
+func (p *HTTPClientPool) CachedOrNewHTTPClient() *HTTPClient {
+	var c *HTTPClient
+	if p.Available > 0 {
+		c = p.Pool[p.Available - 1]
+		p.Available--
+	} else {
+		fmt.Printf("Pool [%v] depleted, creating new HTTPClient\n", p.Host)
+		c = NewHTTPClient(p.Host, p.Debug, p.Timeout)
+	}
+	return c
+}
+
+func CachedOrNewHTTPClient(host string, debug int, timeout time.Duration) *HTTPClient {
+	if clientsPools == nil {
+		return NewHTTPClient(host, debug, timeout)
+	}
+	return clientsPools[host].CachedOrNewHTTPClient()
+}
+
+func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Duration) {
+	if clientsPerHost <= 0 {
+		return
+	}
 	clientsPools = make(map[string]*HTTPClientPool)
 	for i := 0; i < len(urls); i++ {
+		fmt.Printf("Creating pool for %v...\n", urls[i])
 		hp := HTTPClientPool{
 			Host: urls[i],
 			Debug: debug,
 			Timeout: timeout,
 		}
-		hp.Pool = &sync.Pool{
-			New: func()interface{} {
-				return NewHTTPClient(hp.Host, hp.Debug, hp.Timeout)
-			},
-		}
-		for c := 0; c < ClientsPerHost; c++ {
-			c := hp.Pool.New().(*HTTPClient)
+		hp.Pool = make([]*HTTPClient, clientsPerHost)
+		for j := 0; j < clientsPerHost; j++ {
+			c := NewHTTPClient(urls[i], debug, timeout)
 			c.ping()
-			hp.Pool.Put(c)
+			hp.Pool[hp.Available] = c
+			hp.Available++
+			fmt.Printf(".")
 		}
+		fmt.Printf("\n")
 		clientsPools[hp.Host] = &hp
 	}
 }
@@ -51,9 +69,4 @@ func (w *HTTPClient) ping() {
 	defer fasthttp.ReleaseResponse(resp)
 	_ = w.client.Do(req, resp)
 }
-
-func CachedOrNewHTTPClient(host string, debug int, timeout time.Duration) *HTTPClient {
-	return clientsPools[host].CachedOrNewHTTPClient()
-}
-
 
