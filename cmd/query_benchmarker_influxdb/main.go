@@ -238,6 +238,7 @@ func main() {
 		w := NewHTTPClient(daemonUrl, debug, dialTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
+	fmt.Printf("Started querying with %d workers\n", workers)
 
 	wallStart := time.Now()
 
@@ -278,6 +279,7 @@ loop:
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
+				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
 			if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {

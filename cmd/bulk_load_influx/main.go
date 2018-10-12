@@ -312,6 +312,7 @@ func main() {
 		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], telemetryChanPoints, fmt.Sprintf("%d", i))
 		go processBackoffMessages(i, backingOffChans[i], backingOffDones[i])
 	}
+	fmt.Printf("Started load with %d workers\n", workers)
 
 	if progressInterval >= 0 {
 		go func() {
