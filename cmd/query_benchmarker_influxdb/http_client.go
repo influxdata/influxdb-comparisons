@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/valyala/fasthttp"
+	"net"
 	"net/url"
 	"os"
 	"time"
-	"net"
-	"github.com/valyala/fasthttp"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -66,7 +66,7 @@ func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err e
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
-	if err != nil || resp.StatusCode() != fasthttp.StatusOK && opts.Debug == 5 {
+	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}

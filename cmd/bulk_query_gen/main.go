@@ -143,9 +143,9 @@ var (
 	timestampStartStr string
 	timestampEndStr   string
 
-	timestampStart time.Time
-	timestampEnd   time.Time
-	queryInterval  time.Duration
+	timestampStart  time.Time
+	timestampEnd    time.Time
+	queryInterval   time.Duration
 	timeWindowShift time.Duration
 
 	seed  int64
@@ -247,17 +247,17 @@ func init() {
 	}
 
 	// TODO temporary for benchmarks
-	if useCase == Dashboard && timeWindowShift == -1 { // when not set for dashboard, always use 5s default
+	if useCase == Dashboard && timeWindowShift <= 0 { // when not set for dashboard, always use 5s default
 		timeWindowShift = 5 * time.Second
 	}
 
 	if timeWindowShift > 0 {
 		bulkQueryGen.TimeWindowShift = timeWindowShift // global
 		queryCount = int(timestampEnd.Sub(timestampStart).Seconds() / timeWindowShift.Seconds())
-		if (queryType == DashboardAll) {
+		if queryType == DashboardAll {
 			queryCount *= 18
 		}
-		log.Printf("%v queries will be generated to cover time interval using %v shift", queryCount,  timeWindowShift)
+		log.Printf("%v queries will be generated to cover time interval using %v shift", queryCount, timeWindowShift)
 	}
 
 	// the default seed is the current timestamp:
