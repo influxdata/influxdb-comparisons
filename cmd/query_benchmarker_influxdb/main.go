@@ -297,7 +297,27 @@ loop:
 	// Block for workers to finish sending requests, closing the stats
 	// channel when done:
 	fmt.Println("Waiting for workers to finish")
-	workersGroup.Wait()
+	waitCh := make(chan int)
+	waitFinished := false
+	go func() {
+		workersGroup.Wait()
+		waitFinished = true
+		waitCh <- 1
+	}()
+	waitTimer := time.NewTimer(time.Minute * 10)
+waitLoop:
+	for {
+		select {
+		case <-waitCh:
+			waitTimer.Stop()
+			break waitLoop
+		case <-waitTimer.C:
+			fmt.Println("Waiting for workers timeout")
+			break waitLoop
+		}
+	}
+	close(waitCh)
+
 	close(statChan)
 
 	// Wait on the stat collector to finish (and print its results):
