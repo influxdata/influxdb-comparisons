@@ -18,7 +18,7 @@ type DefaultHTTPClient struct {
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewGoHTTPClient(host string, debug int, timeout time.Duration) *DefaultHTTPClient {
+func NewDefaultHTTPClient(host string, debug int, timeout time.Duration) *DefaultHTTPClient {
 	return &DefaultHTTPClient{
 		client : &http.Client{
 			Timeout: 15 * time.Second,

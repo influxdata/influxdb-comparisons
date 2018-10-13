@@ -13,8 +13,6 @@ type HTTPClientPool struct {
 	Available		int
 }
 
-var UseFastHttp = true
-
 var clientsPools map[string]*HTTPClientPool
 
 func (p *HTTPClientPool) CachedOrNewHTTPClient() HTTPClient {
@@ -34,14 +32,6 @@ func CachedOrNewHTTPClient(host string, debug int, timeout time.Duration) HTTPCl
 		return NewHTTPClient(host, debug, timeout)
 	}
 	return clientsPools[host].CachedOrNewHTTPClient()
-}
-
-func NewHTTPClient(host string, debug int, timeout time.Duration) HTTPClient {
-	if UseFastHttp {
-		return NewFastHTTPClient(host, debug, timeout)
-	} else {
-		return NewGoHTTPClient(host, debug, timeout)
-	}
 }
 
 func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Duration) {
