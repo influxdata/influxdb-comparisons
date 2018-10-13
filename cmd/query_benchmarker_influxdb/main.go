@@ -58,6 +58,7 @@ var (
 	increaseInterval       time.Duration
 	notificationHostPort   string
 	dialTimeout            time.Duration
+	httpClientType     	   string
 	initialHttpClients     int
 )
 
@@ -113,6 +114,7 @@ func init() {
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
+	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, go}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 
 	flag.Parse()
@@ -232,6 +234,8 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
+	UseFastHttp = httpClientType == "fast"
+	fmt.Printf("Using HTTP client: %v\n", httpClientType)
 	if initialHttpClients > 0 {
 		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout)
 	}
@@ -452,7 +456,7 @@ loop:
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
+func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
 	opts := &HTTPClientDoOptions{
 		Debug:                debug,
 		PrettyPrintResponses: prettyPrintResponses,
@@ -501,7 +505,7 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 	return nil
 }
 
-func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, telemetrySink chan *report.Point, telemetryWorkerLabel string, queriesSeen int64, errCh chan error, doneCh chan int) error {
+func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, telemetrySink chan *report.Point, telemetryWorkerLabel string, queriesSeen int64, errCh chan error, doneCh chan int) error {
 	defer func() {
 		if doneCh != nil {
 			doneCh <- 1
@@ -530,7 +534,7 @@ func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, tele
 			p.AddTag(tagpair[0], tagpair[1])
 		}
 		p.AddTag("src_addr", telemetrySrcAddr)
-		p.AddTag("dst_addr", w.HostString)
+		p.AddTag("dst_addr", w.HostString())
 		p.AddTag("worker_id", telemetryWorkerLabel)
 		p.AddFloat64Field("rtt_ms", lagMillis)
 		p.AddInt64Field("worker_req_num", queriesSeen)
