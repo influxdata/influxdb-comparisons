@@ -57,7 +57,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	respBody, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 
-	if err != nil || resp.StatusCode != 200 {
+	if err != nil || resp.StatusCode != http.StatusOK {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
@@ -65,7 +65,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	// Check that the status code was 200 OK:
 	if err == nil {
 		sc := resp.StatusCode
-		if sc != 200 {
+		if sc != http.StatusOK {
 			err = fmt.Errorf("Invalid write response (status %d): %s", sc, string(respBody))
 			return
 		}
