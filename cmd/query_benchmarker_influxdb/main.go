@@ -58,7 +58,7 @@ var (
 	increaseInterval       time.Duration
 	notificationHostPort   string
 	dialTimeout            time.Duration
-	httpClientType		   string
+	httpClientType         string
 	initialHttpClients     int
 )
 
