@@ -188,6 +188,12 @@ func init() {
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 
+	if httpClientType == "fast" || httpClientType == "go" {
+		fmt.Printf("Using HTTP client: %v\n", httpClientType)
+		UseFastHttp = httpClientType == "fast"
+	} else {
+		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
+	}
 }
 
 func main() {
@@ -234,8 +240,6 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
-	UseFastHttp = httpClientType == "fast"
-	fmt.Printf("Using HTTP client: %v\n", httpClientType)
 	if initialHttpClients > 0 {
 		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout)
 	}
