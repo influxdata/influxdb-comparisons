@@ -23,7 +23,7 @@ func (p *HTTPClientPool) CachedOrNewHTTPClient() HTTPClient {
 		c = p.Pool[p.Available - 1]
 		p.Available--
 	} else {
-		fmt.Printf("Pool [%v] depleted, creating new HTTPClient\n", p.Host)
+		fmt.Printf("HTTP client pool [%v] depleted, creating new HTTPClient\n", p.Host)
 		c = NewHTTPClient(p.Host, p.Debug, p.Timeout)
 	}
 	return c
@@ -50,7 +50,7 @@ func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Durati
 	}
 	clientsPools = make(map[string]*HTTPClientPool)
 	for i := 0; i < len(urls); i++ {
-		fmt.Printf("Creating pool for %v ", urls[i])
+		fmt.Printf("Creating HTTP client pool for %v ", urls[i])
 		hp := HTTPClientPool{
 			Host: urls[i],
 			Debug: debug,
