@@ -114,7 +114,7 @@ func init() {
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
-	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, go}")
+	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 
 	flag.Parse()
@@ -188,7 +188,7 @@ func init() {
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 
-	if httpClientType == "fast" || httpClientType == "go" {
+	if httpClientType == "fast" || httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", httpClientType)
 		UseFastHttp = httpClientType == "fast"
 	} else {
