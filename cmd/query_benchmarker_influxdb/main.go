@@ -248,6 +248,7 @@ func main() {
 		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
+	fmt.Printf("Started querying with %d workers\n", workers)
 
 	wallStart := time.Now()
 
@@ -257,7 +258,9 @@ func main() {
 	go func() {
 		for {
 			scan(qr, scanClose)
-			if !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration)) {
+			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration))
+			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
+			if cont {
 				qr = bytes.NewReader(queriesData)
 			} else {
 				scanRes <- 1
@@ -279,13 +282,14 @@ loop:
 		case <-workersTicker.C:
 			if gradualWorkersIncrease {
 				for i := 0; i < workersIncreaseStep; i++ {
-					fmt.Printf("Adding worker %d\n", workers)
+					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
 					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
+				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
 			if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
@@ -303,7 +307,27 @@ loop:
 	// Block for workers to finish sending requests, closing the stats
 	// channel when done:
 	fmt.Println("Waiting for workers to finish")
-	workersGroup.Wait()
+	waitCh := make(chan int)
+	waitFinished := false
+	go func() {
+		workersGroup.Wait()
+		waitFinished = true
+		waitCh <- 1
+	}()
+	waitTimer := time.NewTimer(time.Minute * 10)
+waitLoop:
+	for {
+		select {
+		case <-waitCh:
+			waitTimer.Stop()
+			break waitLoop
+		case <-waitTimer.C:
+			fmt.Println("Waiting for workers timeout")
+			break waitLoop
+		}
+	}
+	close(waitCh)
+
 	close(statChan)
 
 	// Wait on the stat collector to finish (and print its results):
@@ -580,7 +604,7 @@ func processStats() {
 		i++
 
 		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
-			movingAverageStat.UpdateAvg()
+			movingAverageStat.UpdateAvg(now)
 			lastRefresh = now
 		}
 		// print stats to stderr (if printInterval is greater than zero):
@@ -626,7 +650,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}

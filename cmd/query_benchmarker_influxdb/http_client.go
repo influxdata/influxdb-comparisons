@@ -13,11 +13,9 @@ type HTTPClientDoOptions struct {
 	PrettyPrintResponses bool
 }
 
-// Method that rules them all
+// HTTPClient interface.
 type HTTPClient interface {
 	HostString() string
 	Ping()
 	Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error)
 }
-
-var UseFastHttp = true

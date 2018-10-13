@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"math"
+	"sort"
 	"time"
 )
 
@@ -68,6 +70,7 @@ type TimedStatGroup struct {
 	maxDuraton time.Duration
 	stats      []timedStat
 	lastAvg    float64
+	lastMedian float64
 }
 
 func NewTimedStatGroup(maxDuration time.Duration) *TimedStatGroup {
@@ -82,11 +85,26 @@ func (m *TimedStatGroup) Avg() float64 {
 	return m.lastAvg
 }
 
-func (m *TimedStatGroup) UpdateAvg() float64 {
+func (m *TimedStatGroup) Median() float64 {
+	return m.lastMedian
+}
+
+func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	newStats := make([]timedStat, 0, len(m.stats))
-	last := time.Now().Add(-m.maxDuraton)
+	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
 	c := 0
+
+	sort.Slice(m.stats, func(i, j int) bool {
+		return m.stats[i].value < m.stats[j].value
+	})
+	l := len(m.stats)
+	if l == 0 {
+		m.lastMedian = math.NaN()
+	} else {
+		m.lastMedian = m.stats[l/2].value
+	}
+
 	for _, ts := range m.stats {
 		if ts.timestamp.After(last) {
 			sum += ts.value
@@ -98,5 +116,5 @@ func (m *TimedStatGroup) UpdateAvg() float64 {
 	m.stats = newStats
 
 	m.lastAvg = sum / float64(c)
-	return m.lastAvg
+	return m.lastAvg, m.lastMedian
 }

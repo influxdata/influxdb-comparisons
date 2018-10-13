@@ -13,6 +13,8 @@ type HTTPClientPool struct {
 	Available		int
 }
 
+var UseFastHttp = true
+
 var clientsPools map[string]*HTTPClientPool
 
 func (p *HTTPClientPool) CachedOrNewHTTPClient() HTTPClient {
@@ -48,7 +50,7 @@ func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Durati
 	}
 	clientsPools = make(map[string]*HTTPClientPool)
 	for i := 0; i < len(urls); i++ {
-		fmt.Printf("Creating pool for %v...\n", urls[i])
+		fmt.Printf("Creating pool for %v ", urls[i])
 		hp := HTTPClientPool{
 			Host: urls[i],
 			Debug: debug,
