@@ -29,16 +29,16 @@ type HTTPClientDoOptions struct {
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewHTTPClient(host string, debug int, timeout time.Duration) *HTTPClient {
+func NewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *HTTPClient {
 	return &HTTPClient{
 		client: fasthttp.Client{
 			Name: "query_benchmarker",
 			Dial: func(addr string) (net.Conn, error) {
-				return fasthttp.DialTimeout(addr, timeout)
+				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
 			MaxIdleConnDuration: 1 * time.Hour,
-			ReadTimeout:         60 * time.Second,
-			WriteTimeout:        60 * time.Second,
+			ReadTimeout:         readTimeout,
+			WriteTimeout:        writeTimeout,
 		},
 		Host:       []byte(host),
 		HostString: host,
