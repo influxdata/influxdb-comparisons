@@ -308,7 +308,7 @@ loop:
 		log.Fatal(err)
 	}
 	if gradualWorkersIncrease {
-		fmt.Printf("Final workers count: %d", workers)
+		fmt.Printf("Final workers count: %d\n", workers)
 	}
 
 	if telemetryHost != "" {
