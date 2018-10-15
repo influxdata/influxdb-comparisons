@@ -17,7 +17,7 @@ var byteZero = []byte{0}     // heap optimization
 // HTTPClient is a reusable HTTP Client.
 type FastHTTPClient struct {
 	HTTPClientCommon
-	client     fasthttp.Client
+	client fasthttp.Client
 }
 
 // NewHTTPClient creates a new HTTPClient.
@@ -29,8 +29,8 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
 			MaxIdleConnDuration: 1 * time.Hour,
-			ReadTimeout: readTimeout,
-			WriteTimeout: writeTimeout,
+			ReadTimeout:         readTimeout,
+			WriteTimeout:        writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -63,7 +63,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
-	if err != nil || resp.StatusCode() != fasthttp.StatusOK {
+	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
@@ -123,7 +123,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	return lag, err
 }
 
-func  (w *FastHTTPClient) HostString() string {
+func (w *FastHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
 

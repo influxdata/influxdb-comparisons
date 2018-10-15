@@ -15,19 +15,19 @@ import (
 // HTTPClient is a reusable HTTP Client.
 type DefaultHTTPClient struct {
 	HTTPClientCommon
-	client     *http.Client
+	client *http.Client
 }
 
 // NewHTTPClient creates a new HTTPClient.
 func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *DefaultHTTPClient {
 	return &DefaultHTTPClient{
-		client : &http.Client{
+		client: &http.Client{
 			Timeout: readTimeout, // TODO sets all timeouts
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
 					Timeout: dialTimeout,
 				}).Dial,
-				MaxIdleConns: 1,
+				MaxIdleConns:    1,
 				MaxConnsPerHost: 1,
 				IdleConnTimeout: 1 * time.Hour,
 			},
@@ -58,7 +58,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	respBody, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
@@ -118,12 +118,12 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	return lag, err
 }
 
-func  (w *DefaultHTTPClient) HostString() string {
+func (w *DefaultHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
 
 func (w *DefaultHTTPClient) Ping() {
-	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString + "/ping", nil)
+	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString+"/ping", nil)
 	resp, _ := w.client.Do(req)
 	defer resp.Body.Close()
 }
