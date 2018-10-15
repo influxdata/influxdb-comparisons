@@ -60,6 +60,8 @@ var (
 	dialTimeout            time.Duration
 	readTimeout            time.Duration
 	writeTimeout           time.Duration
+	httpClientType         string
+	initialHttpClients     int
 )
 
 // Global vars:
@@ -116,6 +118,8 @@ func init() {
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 	flag.DurationVar(&readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
 	flag.DurationVar(&writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
+	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
+	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 
 	flag.Parse()
 
@@ -188,6 +192,12 @@ func init() {
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 
+	if httpClientType == "fast" || httpClientType == "default" {
+		fmt.Printf("Using HTTP client: %v\n", httpClientType)
+		UseFastHttp = httpClientType == "fast"
+	} else {
+		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
+	}
 }
 
 func main() {
@@ -234,12 +244,16 @@ func main() {
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
+	if initialHttpClients > 0 {
+		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout, readTimeout, writeTimeout)
+	}
+
 	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 	fmt.Printf("Started querying with %d workers\n", workers)
@@ -279,7 +293,7 @@ loop:
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
@@ -474,7 +488,7 @@ loop:
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
+func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
 	opts := &HTTPClientDoOptions{
 		Debug:                debug,
 		PrettyPrintResponses: prettyPrintResponses,
@@ -523,7 +537,7 @@ func processQueries(w *HTTPClient, telemetrySink chan *report.Point, telemetryWo
 	return nil
 }
 
-func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, telemetrySink chan *report.Point, telemetryWorkerLabel string, queriesSeen int64, errCh chan error, doneCh chan int) error {
+func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, telemetrySink chan *report.Point, telemetryWorkerLabel string, queriesSeen int64, errCh chan error, doneCh chan int) error {
 	defer func() {
 		if doneCh != nil {
 			doneCh <- 1
@@ -552,7 +566,7 @@ func processSingleQuery(w *HTTPClient, q *Query, opts *HTTPClientDoOptions, tele
 			p.AddTag(tagpair[0], tagpair[1])
 		}
 		p.AddTag("src_addr", telemetrySrcAddr)
-		p.AddTag("dst_addr", w.HostString)
+		p.AddTag("dst_addr", w.HostString())
 		p.AddTag("worker_id", telemetryWorkerLabel)
 		p.AddFloat64Field("rtt_ms", lagMillis)
 		p.AddInt64Field("worker_req_num", queriesSeen)

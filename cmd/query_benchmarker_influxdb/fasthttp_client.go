@@ -4,33 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"github.com/valyala/fasthttp"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"time"
 )
 
+var bytesSlash = []byte("/") // heap optimization
+var byteZero = []byte{0}     // heap optimization
+
 // HTTPClient is a reusable HTTP Client.
-type DefaultHTTPClient struct {
+type FastHTTPClient struct {
 	HTTPClientCommon
-	client     *http.Client
+	client     fasthttp.Client
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *DefaultHTTPClient {
-	return &DefaultHTTPClient{
-		client : &http.Client{
-			Timeout: readTimeout, // TODO sets all timeouts
-			Transport: &http.Transport{
-				Dial: (&net.Dialer{
-					Timeout: dialTimeout,
-				}).Dial,
-				MaxIdleConns: 1,
-				MaxConnsPerHost: 1,
-				IdleConnTimeout: 1 * time.Hour,
+func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *FastHTTPClient {
+	return &FastHTTPClient{
+		client: fasthttp.Client{
+			Name: "query_benchmarker",
+			Dial: func(addr string) (net.Conn, error) {
+				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
+			MaxIdleConnDuration: 1 * time.Hour,
+			ReadTimeout: readTimeout,
+			WriteTimeout: writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -42,32 +42,37 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 
 // Do performs the action specified by the given Query. It uses fasthttp, and
 // tries to minimize heap allocations.
-func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
+func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
 	// populate uri from the reusable byte slice:
 	uri := make([]byte, 0, 100)
 	uri = append(uri, w.Host...)
+	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
 
 	// populate a request with data from the Query:
-	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewBuffer(q.Body)) // TODO performance
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
 
+	req.Header.SetMethodBytes(q.Method)
+	req.Header.SetRequestURIBytes(uri)
+	req.SetBody(q.Body)
+	// Perform the request while tracking latency:
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
-	resp, err := w.client.Do(req)
+	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
-	respBody, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil || resp.StatusCode() != fasthttp.StatusOK {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
 
 	// Check that the status code was 200 OK:
 	if err == nil {
-		sc := resp.StatusCode
-		if sc != http.StatusOK {
-			err = fmt.Errorf("Invalid write response (status %d): %s", sc, string(respBody))
+		sc := resp.StatusCode()
+		if sc != fasthttp.StatusOK {
+			err = fmt.Errorf("Invalid write response (status %d): %s", sc, resp.Body())
 			return
 		}
 	}
@@ -85,7 +90,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 		case 4:
 			fmt.Fprintf(os.Stderr, "debug: %s in %7.2fms -- %s\n", q.HumanLabel, lag, q.HumanDescription)
 			fmt.Fprintf(os.Stderr, "debug:   request: %s\n", string(q.String()))
-			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(respBody))
+			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(resp.Body()))
 		default:
 		}
 
@@ -95,9 +100,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 			// Flux responses are just simple CSV.
 
 			prefix := fmt.Sprintf("ID %d: ", q.ID)
-			if json.Valid(respBody) {
+			if json.Valid(resp.Body()) {
 				var pretty bytes.Buffer
-				err = json.Indent(&pretty, respBody, prefix, "  ")
+				err = json.Indent(&pretty, resp.Body(), prefix, "  ")
 				if err != nil {
 					return
 				}
@@ -107,7 +112,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 					return
 				}
 			} else {
-				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, respBody)
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, resp.Body())
 				if err != nil {
 					return
 				}
@@ -118,12 +123,16 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	return lag, err
 }
 
-func  (w *DefaultHTTPClient) HostString() string {
+func  (w *FastHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
 
-func (w *DefaultHTTPClient) Ping() {
-	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString + "/ping", nil)
-	resp, _ := w.client.Do(req)
-	defer resp.Body.Close()
+func (w *FastHTTPClient) Ping() {
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.Header.SetMethod("GET")
+	req.Header.SetRequestURI(w.HTTPClientCommon.HostString + "/ping")
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
+	_ = w.client.Do(req, resp)
 }
