@@ -58,6 +58,8 @@ var (
 	increaseInterval       time.Duration
 	notificationHostPort   string
 	dialTimeout            time.Duration
+	readTimeout            time.Duration
+	writeTimeout           time.Duration
 	httpClientType         string
 	initialHttpClients     int
 )
@@ -114,6 +116,8 @@ func init() {
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
+	flag.DurationVar(&readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
+	flag.DurationVar(&writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 
@@ -249,7 +253,7 @@ func main() {
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout)
+		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 	fmt.Printf("Started querying with %d workers\n", workers)
@@ -289,14 +293,14 @@ loop:
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout)
+					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
 				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
-			if responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
+			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
 				responseTimeLimitReached = true
 				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
 				scanClose <- 1
@@ -344,7 +348,7 @@ waitLoop:
 		log.Fatal(err)
 	}
 	if gradualWorkersIncrease {
-		fmt.Printf("Final workers count: %d", workers)
+		fmt.Printf("Final workers count: %d\n", workers)
 	}
 
 	if telemetryHost != "" {

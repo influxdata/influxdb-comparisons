@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,14 +19,14 @@ type DefaultHTTPClient struct {
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewDefaultHTTPClient(host string, debug int, timeout time.Duration) *DefaultHTTPClient {
+func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *DefaultHTTPClient {
 	return &DefaultHTTPClient{
 		client : &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: readTimeout, // TODO sets all timeouts
 			Transport: &http.Transport{
-				//Dial: (&net.Dialer{
-				//	Timeout: 15 * time.Second,
-				//}).Dial,
+				Dial: (&net.Dialer{
+					Timeout: dialTimeout,
+				}).Dial,
 				MaxIdleConns: 1,
 				MaxConnsPerHost: 1,
 				IdleConnTimeout: 1 * time.Hour,

@@ -24,11 +24,11 @@ type HTTPClient interface {
 	Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error)
 }
 
-func NewHTTPClient(host string, debug int, timeout time.Duration) HTTPClient {
+func NewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) HTTPClient {
 	if UseFastHttp {
-		return NewFastHTTPClient(host, debug, timeout)
+		return NewFastHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)
 	} else {
-		return NewDefaultHTTPClient(host, debug, timeout)
+		return NewDefaultHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)
 	}
 }
 
