@@ -95,16 +95,6 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	sum := float64(0)
 	c := 0
 
-	sort.Slice(m.stats, func(i, j int) bool {
-		return m.stats[i].value < m.stats[j].value
-	})
-	l := len(m.stats)
-	if l == 0 {
-		m.lastMedian = math.NaN()
-	} else {
-		m.lastMedian = m.stats[l/2].value
-	}
-
 	for _, ts := range m.stats {
 		if ts.timestamp.After(last) {
 			sum += ts.value
@@ -114,6 +104,16 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	}
 	m.stats = nil
 	m.stats = newStats
+
+	l := len(newStats)
+	if l == 0 {
+		m.lastMedian = math.NaN()
+	} else {
+		sort.Slice(newStats, func(i, j int) bool {
+			return newStats[i].value < newStats[j].value
+		})
+		m.lastMedian = newStats[l/2].value
+	}
 
 	m.lastAvg = sum / float64(c)
 	return m.lastAvg, m.lastMedian
