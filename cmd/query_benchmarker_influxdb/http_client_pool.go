@@ -9,7 +9,9 @@ type HTTPClientPool struct {
 	Pool 			[]HTTPClient
 	Host 			string
 	Debug 			int
-	Timeout 		time.Duration
+	DialTimeout     time.Duration
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
 	Available		int
 }
 
@@ -22,19 +24,19 @@ func (p *HTTPClientPool) CachedOrNewHTTPClient() HTTPClient {
 		p.Available--
 	} else {
 		fmt.Printf("HTTP client pool [%v] depleted, creating new HTTPClient\n", p.Host)
-		c = NewHTTPClient(p.Host, p.Debug, p.Timeout)
+		c = NewHTTPClient(p.Host, p.Debug, p.DialTimeout, p.ReadTimeout, p.WriteTimeout)
 	}
 	return c
 }
 
-func CachedOrNewHTTPClient(host string, debug int, timeout time.Duration) HTTPClient {
+func CachedOrNewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) HTTPClient {
 	if clientsPools == nil {
-		return NewHTTPClient(host, debug, timeout)
+		return NewHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)
 	}
 	return clientsPools[host].CachedOrNewHTTPClient()
 }
 
-func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Duration) {
+func InitPools(clientsPerHost int, urls []string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) {
 	if clientsPerHost <= 0 {
 		return
 	}
@@ -44,11 +46,13 @@ func InitPools(clientsPerHost int, urls []string, debug int, timeout time.Durati
 		hp := HTTPClientPool{
 			Host: urls[i],
 			Debug: debug,
-			Timeout: timeout,
+			DialTimeout: dialTimeout,
+			ReadTimeout: readTimeout,
+			WriteTimeout: writeTimeout,
 		}
 		hp.Pool = make([]HTTPClient, clientsPerHost)
 		for j := 0; j < clientsPerHost; j++ {
-			c := NewHTTPClient(urls[i], debug, timeout)
+			c := NewHTTPClient(urls[i], debug, dialTimeout, readTimeout, writeTimeout)
 			c.Ping()
 			hp.Pool[hp.Available] = c
 			hp.Available++

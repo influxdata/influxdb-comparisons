@@ -245,7 +245,7 @@ func main() {
 	}
 
 	if initialHttpClients > 0 {
-		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout)
+		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout, readTimeout, writeTimeout)
 	}
 
 	workersIncreaseStep := workers
