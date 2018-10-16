@@ -623,7 +623,7 @@ func processStats() {
 		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
-			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i-burnIn, workers)
+			_, err := fmt.Fprintf(os.Stderr, "%s: after %d queries with %d workers:\n", time.Now().String(), i-burnIn, workers)
 			if err != nil {
 				log.Fatal(err)
 			}
