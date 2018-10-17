@@ -315,7 +315,7 @@ loop:
 				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
-			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
+			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
 				if trendSamples == -1 {
