@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/GaryBoone/GoStats/stats"
 	"math"
 	"sort"
 	"time"
@@ -131,12 +130,12 @@ type TrendStat struct {
 	skipFirst bool
 }
 
-func (ls *TrendStat) Add(y float64) float64 {
+func (ls *TrendStat) Add(y float64) {
 	c := len(ls.y)
 	if c == 0 {
 		if ls.skipFirst {
 			ls.skipFirst = false
-			return 0
+			return
 		}
 	}
 	y = y / 1000 // normalize to seconds
@@ -144,7 +143,7 @@ func (ls *TrendStat) Add(y float64) float64 {
 		ls.y = append(ls.y, y)
 		c++
 		if c < 5 { // at least 5 samples required for regression
-			return 0
+			return
 		}
 	} else { // shift left using copy and insert at last position - hopefully no reallocation
 		y1 := ls.y[1:]
@@ -154,14 +153,14 @@ func (ls *TrendStat) Add(y float64) float64 {
 	if c > ls.size {
 		panic("Bug in implementation")
 	}
-	var r stats.Regression
+	//var r stats.Regression
+	var r SimpleRegression
+	r.hasIntercept = false
 	for i := 0; i < c; i++ {
 		r.Update(ls.x[i], ls.y[i] - ls.y[0])
 	}
 	ls.slope = r.Slope()
 	ls.intercept = (r.Intercept() + ls.y[0]) * 1000
-	// Y = INTERCEPT + SLOPE * X
-	return ls.slope
 }
 
 func NewTrendStat(size int, skipFirst bool) *TrendStat  {
@@ -177,4 +176,61 @@ func NewTrendStat(size int, skipFirst bool) *TrendStat  {
 		instance.x[i] = float64(i) // X is constant array { 0, 1, 2 ... size }
 	}
 	return &instance
+}
+
+type SimpleRegression struct {
+	sumX  float64
+	sumXX float64
+	sumY  float64
+	sumYY float64
+	sumXY float64
+
+	n float64
+
+	xbar float64
+	ybar float64
+
+	hasIntercept bool
+}
+
+func (sr *SimpleRegression) Update(x, y float64) {
+	if sr.n == 0 {
+		sr.xbar = x
+		sr.ybar = y
+	} else {
+		if sr.hasIntercept {
+			fact1 := 1.0 + sr.n
+			fact2 := sr.n / (1.0 + sr.n)
+			dx := x - sr.xbar
+			dy := y - sr.ybar
+			sr.sumXX += dx * dx * fact2
+			sr.sumYY += dy * dy * fact2
+			sr.sumXY += dx * dy * fact2
+			sr.xbar += dx / fact1
+			sr.ybar += dy / fact1
+		}
+	}
+	if !sr.hasIntercept {
+		sr.sumXX += x * x
+		sr.sumYY += y * y
+		sr.sumXY += x * y
+	}
+	sr.sumX += x
+	sr.sumY += y
+	sr.n++
+}
+
+func (sr *SimpleRegression) Intercept() float64 {
+	if sr.hasIntercept {
+		return (sr.sumY - sr.Slope() * sr.sumX) / sr.n
+	} else {
+		return 0
+	}
+}
+
+func (sr *SimpleRegression) Slope() float64 {
+	if sr.n < 2 {
+		return math.NaN()
+	}
+	return sr.sumXY / sr.sumXX
 }
