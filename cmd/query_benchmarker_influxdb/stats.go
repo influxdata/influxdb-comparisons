@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/GaryBoone/GoStats/stats"
 	"math"
 	"sort"
 	"time"
@@ -66,15 +67,17 @@ type timedStat struct {
 	timestamp time.Time
 	value     float64
 }
+
 type TimedStatGroup struct {
 	maxDuraton time.Duration
 	stats      []timedStat
 	lastAvg    float64
 	lastMedian float64
+	trendAvg   *TrendStat
 }
 
-func NewTimedStatGroup(maxDuration time.Duration) *TimedStatGroup {
-	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000)}
+func NewTimedStatGroup(maxDuration time.Duration, maxTrendSamples int) *TimedStatGroup {
+	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(maxTrendSamples, true)}
 }
 
 func (m *TimedStatGroup) Push(timestamp time.Time, value float64) {
@@ -116,5 +119,62 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	}
 
 	m.lastAvg = sum / float64(c)
+	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian
+}
+
+type TrendStat struct {
+	x,y	      []float64
+	size      int
+	slope     float64
+	intercept float64
+	skipFirst bool
+}
+
+func (ls *TrendStat) Add(y float64) float64 {
+	c := len(ls.y)
+	if c == 0 {
+		if ls.skipFirst {
+			ls.skipFirst = false
+			return 0
+		}
+	}
+	y = y / 1000 // normalize to seconds
+	if c < ls.size {
+		ls.y = append(ls.y, y)
+		c++
+		if c < 5 { // at least 5 samples required for regression
+			return 0
+		}
+	} else { // shift left using copy and insert at last position - hopefully no reallocation
+		y1 := ls.y[1:]
+		copy(ls.y, y1)
+		ls.y[ls.size-1] = y
+	}
+	if c > ls.size {
+		panic("Bug in implementation")
+	}
+	var r stats.Regression
+	for i := 0; i < c; i++ {
+		r.Update(ls.x[i], ls.y[i] - ls.y[0])
+	}
+	ls.slope = r.Slope()
+	ls.intercept = (r.Intercept() + ls.y[0]) * 1000
+	// Y = INTERCEPT + SLOPE * X
+	return ls.slope
+}
+
+func NewTrendStat(size int, skipFirst bool) *TrendStat  {
+	fmt.Printf("Trend statistics using %d samples\n", size)
+	instance := TrendStat{
+		size:size,
+		slope:0,
+		skipFirst:skipFirst,
+	}
+	instance.x = make([]float64, size, size)
+	instance.y = make([]float64, 0, size)
+	for i := 0; i < size; i++ {
+		instance.x[i] = float64(i) // X is constant array { 0, 1, 2 ... size }
+	}
+	return &instance
 }
