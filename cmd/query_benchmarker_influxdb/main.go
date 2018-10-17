@@ -265,10 +265,12 @@ func main() {
 	scanRes := make(chan int)
 	scanClose := make(chan int)
 	responseTimeLimitReached := false
+	timeoutReached := false
+	timeLimit := testDuration.Nanoseconds() > 0
 	go func() {
 		for {
 			scan(qr, scanClose)
-			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && testDuration.Nanoseconds() > 0 && time.Now().Before(wallStart.Add(testDuration))
+			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached
 			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
 			if cont {
 				qr = bytes.NewReader(queriesData)
@@ -283,6 +285,12 @@ func main() {
 	defer workersTicker.Stop()
 	responseTicker := time.NewTicker(time.Second)
 	defer responseTicker.Stop()
+
+	if !timeLimit {
+		//we need a time limit to have timer set, so set some  long time
+		testDuration = time.Hour * 24
+	}
+	timeoutTicker := time.NewTimer(testDuration)
 
 loop:
 	for {
@@ -311,7 +319,14 @@ loop:
 				}
 				scanClose <- 1
 			}
+		case <-timeoutTicker.C:
+			if timeLimit && !timeoutReached {
+				timeoutReached = true
+				fmt.Println("Time out reached")
+				scanClose <- 1
+			}
 		}
+
 	}
 
 	close(scanClose)
