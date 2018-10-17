@@ -63,6 +63,7 @@ var (
 	httpClientType         string
 	initialHttpClients     int
 	trendSamples           int
+	movingAverageInterval  time.Duration
 )
 
 // Global vars:
@@ -122,6 +123,7 @@ func init() {
 	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of moving mean response time samples used for linear regression (-1: unlimited)")
+	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calcualted.")
 
 	flag.Parse()
 
@@ -224,7 +226,10 @@ func main() {
 			}
 		},
 	}
-	movingAverageStat = NewTimedStatGroup(increaseInterval)
+	if movingAverageInterval <= 0 {
+		movingAverageInterval = increaseInterval
+	}
+	movingAverageStat = NewTimedStatGroup(movingAverageInterval)
 	fmt.Println("Reading queries to buffer ")
 	queriesData, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
