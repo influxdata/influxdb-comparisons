@@ -337,10 +337,12 @@ loop:
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
 				if item == nil {
-					log.Fatalf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+					fmt.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+					reponseTimeLimitWorkers = workers
+				} else {
+					fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+					reponseTimeLimitWorkers = item.item
 				}
-				fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
-				reponseTimeLimitWorkers = item.item
 			}
 		case <-timeoutTicker.C:
 			if timeLimit && !timeoutReached {
