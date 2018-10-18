@@ -453,18 +453,14 @@ waitLoop:
 
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
-				movingAvg := float64(-1)
-				if query == allQueriesLabel {
-					movingAvg = movingAverageStat.Avg()
-				}
-				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAvg, wallTook, extraVals...)
+				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook, extraVals...)
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
 		} else {
 			stat := statMapping[allQueriesLabel]
-			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook, extraVals...)
+			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook, extraVals...)
 			if err != nil {
 				log.Fatal(err)
 			}
