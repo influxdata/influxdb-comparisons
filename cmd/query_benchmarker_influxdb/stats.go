@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -137,6 +138,10 @@ func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
 	for i := len(m.statHistory) - 1; i >= 0; i-- {
 		if m.statHistory[i].value < val {
 			item = i + 1
+			if item == len(m.statHistory) {
+				log.Printf("FindHistoryItemBelow: Adjusting returned value from %d to %d\n", item, i)
+				item = i
+			}
 			break
 		}
 	}
