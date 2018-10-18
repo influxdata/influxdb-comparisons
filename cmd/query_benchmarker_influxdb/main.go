@@ -123,7 +123,7 @@ func init() {
 	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
-	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calcualted.")
+	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
 
 	flag.Parse()
 
@@ -230,6 +230,7 @@ func main() {
 			}
 		},
 	}
+
 	if movingAverageInterval <= 0 {
 		movingAverageInterval = increaseInterval
 	}
@@ -243,8 +244,17 @@ func main() {
 
 	qr := bytes.NewReader(queriesData)
 	// Make data and control channels:
-	queryChan = make(chan []*Query, workers)
-	statChan = make(chan *Stat, workers)
+	queryChan = make(chan []*Query)
+	statChanBuff := workers
+	if gradualWorkersIncrease {
+		if testDuration > 0 {
+			statChanBuff = workers + int(testDuration.Seconds()/increaseInterval.Seconds())*workers
+		} else {
+			statChanBuff = workers * 11
+		}
+
+	}
+	statChan = make(chan *Stat, statChanBuff)
 
 	// Launch the stats processor:
 	statGroup.Add(1)
@@ -300,6 +310,7 @@ func main() {
 		testDuration = time.Hour * 24
 	}
 	timeoutTicker := time.NewTimer(testDuration)
+	reponseTimeLimitWorkers := 0
 
 loop:
 	for {
@@ -321,8 +332,14 @@ loop:
 		case <-responseTicker.C:
 			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
-				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
 				scanClose <- 1
+				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
+				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
+				if item == nil {
+					log.Fatalf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+				}
+				fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+				reponseTimeLimitWorkers = item.item
 			}
 		case <-timeoutTicker.C:
 			if timeLimit && !timeoutReached {
@@ -373,9 +390,6 @@ waitLoop:
 	if err != nil {
 		log.Fatal(err)
 	}
-	if gradualWorkersIncrease {
-		fmt.Printf("Final workers count: %d\n", workers)
-	}
 
 	if telemetryHost != "" {
 		fmt.Println("shutting down telemetry...")
@@ -409,6 +423,7 @@ waitLoop:
 		if useCase != "" && !found {
 			reportTags = append(reportTags, [2]string{"use_case", useCase})
 		}
+		extraVals := make([]report.ExtraVal, 0, 1)
 		reportTags = append(reportTags, [2]string{"batch_size", fmt.Sprintf("%d", batchSize)})
 		reportTags = append(reportTags, [2]string{"wait_interval", waitInterval.String()})
 		reportTags = append(reportTags, [2]string{"grad_workers_inc", fmt.Sprintf("%v", gradualWorkersIncrease)})
@@ -417,6 +432,7 @@ waitLoop:
 		reportTags = append(reportTags, [2]string{"response_time_limit", responseTimeLimit.String()})
 		if responseTimeLimitReached {
 			reportTags = append(reportTags, [2]string{"response_time_limit_reached", fmt.Sprintf("%v", responseTimeLimitReached)})
+			extraVals = append(extraVals, report.ExtraVal{Name: "response_time_limit_workers", Value: int64(reponseTimeLimitWorkers)})
 		}
 
 		reportParams := &report.QueryReportParams{
@@ -434,20 +450,21 @@ waitLoop:
 			},
 			BurnIn: int64(burnIn),
 		}
+
 		if len(statMapping) > 2 {
 			for query, stat := range statMapping {
 				movingAvg := float64(-1)
 				if query == allQueriesLabel {
 					movingAvg = movingAverageStat.Avg()
 				}
-				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAvg, wallTook)
+				err = report.ReportQueryResult(reportParams, query, stat.Min, stat.Mean, stat.Max, stat.Count, movingAvg, wallTook, extraVals...)
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
 		} else {
 			stat := statMapping[allQueriesLabel]
-			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook)
+			err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, movingAverageStat.Avg(), wallTook, extraVals...)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -638,7 +655,7 @@ func processStats() {
 		i++
 
 		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
-			movingAverageStat.UpdateAvg(now)
+			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 		}
 		// print stats to stderr (if printInterval is greater than zero):

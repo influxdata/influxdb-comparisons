@@ -67,16 +67,22 @@ type timedStat struct {
 	value     float64
 }
 
+type HistoryItem struct {
+	value float64
+	item  int
+}
+
 type TimedStatGroup struct {
-	maxDuraton time.Duration
-	stats      []timedStat
-	lastAvg    float64
-	lastMedian float64
-	trendAvg   *TrendStat
+	maxDuraton  time.Duration
+	stats       []timedStat
+	lastAvg     float64
+	lastMedian  float64
+	trendAvg    *TrendStat
+	statHistory []*HistoryItem
 }
 
 func NewTimedStatGroup(maxDuration time.Duration, maxTrendSamples int) *TimedStatGroup {
-	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(maxTrendSamples, true)}
+	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(maxTrendSamples, true), statHistory: make([]*HistoryItem, 0, 512)}
 }
 
 func (m *TimedStatGroup) Push(timestamp time.Time, value float64) {
@@ -91,7 +97,7 @@ func (m *TimedStatGroup) Median() float64 {
 	return m.lastMedian
 }
 
-func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
+func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64) {
 	newStats := make([]timedStat, 0, len(m.stats))
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
@@ -118,12 +124,27 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	}
 
 	m.lastAvg = sum / float64(c)
+	m.statHistory = append(m.statHistory, &HistoryItem{m.lastAvg, workers})
 	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian
 }
 
+func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
+	item := -1
+	for i := len(m.statHistory) - 1; i >= 0; i-- {
+		if m.statHistory[i].value < val {
+			item = i + 1
+			break
+		}
+	}
+	if item > -1 {
+		return m.statHistory[item]
+	}
+	return nil
+}
+
 type TrendStat struct {
-	x,y	      []float64
+	x, y      []float64
 	size      int
 	slope     float64
 	intercept float64
@@ -157,18 +178,18 @@ func (ls *TrendStat) Add(y float64) {
 	var r SimpleRegression
 	r.hasIntercept = false
 	for i := 0; i < c; i++ {
-		r.Update(ls.x[i], ls.y[i] - ls.y[0])
+		r.Update(ls.x[i], ls.y[i]-ls.y[0])
 	}
 	ls.slope = r.Slope()
 	ls.intercept = (r.Intercept() + ls.y[0]) * 1000
 }
 
-func NewTrendStat(size int, skipFirst bool) *TrendStat  {
+func NewTrendStat(size int, skipFirst bool) *TrendStat {
 	fmt.Printf("Trend statistics using %d samples\n", size)
 	instance := TrendStat{
-		size:size,
-		slope:0,
-		skipFirst:skipFirst,
+		size:      size,
+		slope:     0,
+		skipFirst: skipFirst,
 	}
 	instance.x = make([]float64, size, size)
 	instance.y = make([]float64, 0, size)
@@ -222,7 +243,7 @@ func (sr *SimpleRegression) Update(x, y float64) {
 
 func (sr *SimpleRegression) Intercept() float64 {
 	if sr.hasIntercept {
-		return (sr.sumY - sr.Slope() * sr.sumX) / sr.n
+		return (sr.sumY - sr.Slope()*sr.sumX) / sr.n
 	} else {
 		return 0
 	}
