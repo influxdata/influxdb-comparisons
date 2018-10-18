@@ -68,16 +68,22 @@ type timedStat struct {
 	value     float64
 }
 
+type HistoryItem struct {
+	value float64
+	item  int
+}
+
 type TimedStatGroup struct {
-	maxDuraton time.Duration
-	stats      []timedStat
-	lastAvg    float64
-	lastMedian float64
-	trendAvg   *TrendStat
+	maxDuraton  time.Duration
+	stats       []timedStat
+	lastAvg     float64
+	lastMedian  float64
+	trendAvg    *TrendStat
+	statHistory []*HistoryItem
 }
 
 func NewTimedStatGroup(maxDuration time.Duration) *TimedStatGroup {
-	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(true)}
+	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(true), statHistory: make([]*HistoryItem, 0, 512)}
 }
 
 func (m *TimedStatGroup) Push(timestamp time.Time, value float64) {
@@ -92,7 +98,7 @@ func (m *TimedStatGroup) Median() float64 {
 	return m.lastMedian
 }
 
-func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
+func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64) {
 	newStats := make([]timedStat, 0, len(m.stats))
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
@@ -119,14 +125,29 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	}
 
 	m.lastAvg = sum / float64(c)
+	m.statHistory = append(m.statHistory, &HistoryItem{m.lastAvg, workers})
 	if responseTimeLimit > 0 {
 		m.trendAvg.Add(m.lastAvg, now)
 	}
 	return m.lastAvg, m.lastMedian
 }
 
+func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
+	item := -1
+	for i := len(m.statHistory) - 1; i >= 0; i-- {
+		if m.statHistory[i].value < val {
+			item = i + 1
+			break
+		}
+	}
+	if item > -1 {
+		return m.statHistory[item]
+	}
+	return nil
+}
+
 type TrendStat struct {
-	x,y	      []float64
+	x, y      []float64
 	size      int
 	slope     float64
 	intercept float64
@@ -284,7 +305,7 @@ func (sr *SimpleRegression) Update(x, y float64) {
 
 func (sr *SimpleRegression) Intercept() float64 {
 	if sr.hasIntercept {
-		return (sr.sumY - sr.Slope() * sr.sumX) / sr.n
+		return (sr.sumY - sr.Slope()*sr.sumX) / sr.n
 	} else {
 		return 0
 	}
