@@ -121,7 +121,7 @@ func init() {
 	flag.DurationVar(&writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
-	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
+	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of moving mean response time samples used for linear regression (-1: unlimited)")
 
 	flag.Parse()
 
@@ -200,10 +200,6 @@ func init() {
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
 	}
-
-	if trendSamples <= 0 {
-		trendSamples = int(increaseInterval.Seconds())
-	}
 }
 
 func main() {
@@ -228,7 +224,7 @@ func main() {
 			}
 		},
 	}
-	movingAverageStat = NewTimedStatGroup(increaseInterval, trendSamples)
+	movingAverageStat = NewTimedStatGroup(increaseInterval)
 	fmt.Println("Reading queries to buffer ")
 	queriesData, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
@@ -309,6 +305,10 @@ loop:
 			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds() < int64(movingAverageStat.Avg()*1e6) && statMapping[allQueriesLabel].Count > 1000 {
 				responseTimeLimitReached = true
 				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
+				if trendSamples == -1 {
+					n, err := movingAverageStat.trendAvg.NumWorkersByResponseTime(responseTimeLimit.Seconds() * 1000)
+					fmt.Printf("Workers for rt threshold: %v (error: %v)\n", n, err)
+				}
 				scanClose <- 1
 			}
 		}
@@ -664,7 +664,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %8.2fms + %3.3f * x, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.intercept, movingAverageStat.trendAvg.slope, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %3.1fx + %8f ms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.slope * 1000, movingAverageStat.trendAvg.intercept, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
