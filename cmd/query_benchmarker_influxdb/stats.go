@@ -166,7 +166,7 @@ func (ls *TrendStat) Add(y float64, now time.Time) {
 	}
 	if ls.size < 0 {
 		ls.r.Update(float64(c - 1), y)
-		ls.slope = ls.r.Slope()
+		ls.slope = ls.r.Slope() * 1000
 		ls.intercept = ls.r.Intercept() * 1000
 	} else {
 		r := &SimpleRegression{
@@ -175,7 +175,7 @@ func (ls *TrendStat) Add(y float64, now time.Time) {
 		for i := 0; i < c; i++ {
 			r.Update(ls.x[i], ls.y[i] - ls.y[0])
 		}
-		ls.slope = r.Slope()
+		ls.slope = r.Slope() * 1000
 		ls.intercept = (r.Intercept() + ls.y[0]) * 1000
 	}
 }
