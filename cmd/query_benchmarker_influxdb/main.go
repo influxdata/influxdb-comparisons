@@ -83,6 +83,7 @@ var (
 	reportHostname      string
 	batchSize           int
 	movingAverageStat   *TimedStatGroup
+	isBurnIn            bool
 )
 
 type statsMap map[string]*StatGroup
@@ -314,7 +315,7 @@ loop:
 		case <-scanRes:
 			break loop
 		case <-workersTicker.C:
-			if gradualWorkersIncrease {
+			if gradualWorkersIncrease && !isBurnIn {
 				for i := 0; i < workersIncreaseStep; i++ {
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
@@ -628,7 +629,8 @@ func processStats() {
 	lastRefresh := time.Time{}
 	i := uint64(0)
 	for stat := range statChan {
-		if i < burnIn {
+		isBurnIn = i < burnIn
+		if isBurnIn {
 			i++
 			statPool.Put(stat)
 			continue
