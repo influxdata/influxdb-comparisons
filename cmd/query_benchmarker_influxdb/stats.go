@@ -99,7 +99,7 @@ func (m *TimedStatGroup) Median() float64 {
 	return m.lastMedian
 }
 
-func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
+func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64) {
 	newStats := make([]timedStat, 0, len(m.stats))
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)

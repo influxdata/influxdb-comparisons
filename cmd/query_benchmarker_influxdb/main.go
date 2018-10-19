@@ -330,10 +330,6 @@ loop:
 			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				fmt.Printf("Mean response time is above threshold: %.2fms > %.2fms\n", movingAverageStat.Avg(), float64(responseTimeLimit.Nanoseconds())/1e6)
-				if trendSamples == -1 {
-					n, err := movingAverageStat.trendAvg.NumWorkersByResponseTime(responseTimeLimit.Seconds() * 1000)
-					fmt.Printf("Workers for rt threshold: %v (error: %v)\n", n, err)
-				}
 				scanClose <- 1
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
@@ -343,10 +339,6 @@ loop:
 				} else {
 					fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
 					reponseTimeLimitWorkers = item.item
-					if trendSamples == -1 {
-						n, err := movingAverageStat.trendAvg.NumWorkersByResponseTime(responseTimeLimit.Seconds() * 1000)
-						fmt.Printf("Workers for rt threshold: %v (error: %v)\n", n, err)
-					}
 				}
 			}
 		case <-timeoutTicker.C:
@@ -660,7 +652,7 @@ func processStats() {
 		i++
 
 		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
-			movingAverageStat.UpdateAvg(now)
+			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 		}
 		// print stats to stderr (if printInterval is greater than zero):
