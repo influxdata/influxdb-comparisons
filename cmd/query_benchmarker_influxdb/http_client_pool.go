@@ -40,6 +40,7 @@ func InitPools(clientsPerHost int, urls []string, debug int, dialTimeout time.Du
 	if clientsPerHost <= 0 {
 		return
 	}
+	idleConnectionTimeout = 1 * time.Hour
 	clientsPools = make(map[string]*HTTPClientPool)
 	for i := 0; i < len(urls); i++ {
 		fmt.Printf("Creating HTTP client pool for %v ", urls[i])
@@ -61,4 +62,5 @@ func InitPools(clientsPerHost int, urls []string, debug int, dialTimeout time.Du
 		fmt.Printf("\n")
 		clientsPools[hp.Host] = &hp
 	}
+	idleConnectionTimeout = DefaultIdleConnectionTimeout
 }

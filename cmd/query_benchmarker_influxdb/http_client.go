@@ -27,9 +27,10 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 				Dial: (&net.Dialer{
 					Timeout: dialTimeout,
 				}).Dial,
-				MaxIdleConns:    1,
-				MaxConnsPerHost: 1,
-				IdleConnTimeout: 1 * time.Hour,
+				MaxIdleConns: 100, // or batchSize
+				MaxIdleConnsPerHost: 100, // or batchSize
+				MaxConnsPerHost: 100, // or batchSize
+				IdleConnTimeout: idleConnectionTimeout,
 			},
 		},
 		HTTPClientCommon: HTTPClientCommon{
