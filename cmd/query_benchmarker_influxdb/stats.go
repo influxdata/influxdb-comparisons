@@ -84,7 +84,7 @@ type TimedStatGroup struct {
 }
 
 func NewTimedStatGroup(maxDuration time.Duration) *TimedStatGroup {
-	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(true), statHistory: make([]*HistoryItem, 0, 512)}
+	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(false), statHistory: make([]*HistoryItem, 0, 512)}
 }
 
 func (m *TimedStatGroup) Push(timestamp time.Time, value float64) {
@@ -233,7 +233,7 @@ func NewTrendStat(skipFirst bool) *TrendStat  {
 // Finds number of workers for given response time in ms.
 func (ls *TrendStat) NumWorkersByResponseTime(y float64) (int, error) {
 	if ls.w != nil {
-		x := (y - ls.intercept) / (ls.slope * 1000) // y and intercept in ms
+		x := (y - ls.intercept) / (ls.slope) // y and intercept in ms
 		//log.Printf("Get num of workers for %v ms at %v (%v after %v)\n", y, x, ls.t0.Add(ls.xToDuration(x)), ls.t0)
 		n,err := ls.NumWorkersAtTime(ls.t0.Add(ls.xToDuration(x)))
 		if err == nil {
