@@ -275,7 +275,7 @@ func main() {
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 	fmt.Printf("Started querying with %d workers\n", workers)
@@ -324,7 +324,7 @@ loop:
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
