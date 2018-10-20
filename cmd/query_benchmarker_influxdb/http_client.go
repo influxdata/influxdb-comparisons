@@ -130,7 +130,7 @@ func (w *DefaultHTTPClient) HostString() string {
 }
 
 func (w *DefaultHTTPClient) Ping() {
-	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString+"/ping", nil)
+	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString + "/ping", nil)
 	resp, _ := w.client.Do(req)
 	defer resp.Body.Close()
 }
