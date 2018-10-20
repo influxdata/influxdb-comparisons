@@ -58,8 +58,11 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 
 	var respBody []byte
 	if err == nil {
-		respBody, _ = ioutil.ReadAll(resp.Body)
+		respBody, err = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
+		if err != nil {
+			return
+		}
 	}
 
 	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
