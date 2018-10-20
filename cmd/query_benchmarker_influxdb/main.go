@@ -199,7 +199,7 @@ func init() {
 
 	if httpClientType == "fast" || httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", httpClientType)
-		UseFastHttp = httpClientType == "fast"
+		useFastHttp = httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
 	}
