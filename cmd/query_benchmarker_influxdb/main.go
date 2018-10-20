@@ -340,6 +340,8 @@ loop:
 					fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
 					reponseTimeLimitWorkers = item.item
 				}
+				numWorkers, err := movingAverageStat.trendAvg.NumWorkersByResponseTime(respLimitms)
+				fmt.Printf("Threshold in mean trend reached wih %d workers (error: %v)\n", numWorkers, err)
 			}
 		case <-timeoutTicker.C:
 			if timeLimit && !timeoutReached {
@@ -698,7 +700,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %3.1fx + %8f ms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.slope, movingAverageStat.trendAvg.intercept, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %3.2fx + %8.1f ms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.slope, movingAverageStat.trendAvg.intercept, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
