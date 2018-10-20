@@ -199,7 +199,7 @@ func init() {
 
 	if httpClientType == "fast" || httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", httpClientType)
-		UseFastHttp = httpClientType == "fast"
+		useFastHttp = httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
 	}
@@ -275,7 +275,7 @@ func main() {
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[i%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
 	fmt.Printf("Started querying with %d workers\n", workers)
@@ -324,7 +324,7 @@ loop:
 					//fmt.Printf("Adding worker %d\n", workers)
 					daemonUrl := daemonUrls[workers%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
@@ -701,7 +701,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %8.2fms + %3.3f * x, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.intercept, movingAverageStat.trendAvg.slope, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}

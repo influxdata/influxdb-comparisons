@@ -27,9 +27,10 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 				Dial: (&net.Dialer{
 					Timeout: dialTimeout,
 				}).Dial,
-				MaxIdleConns:    1,
-				MaxConnsPerHost: 1,
-				IdleConnTimeout: 1 * time.Hour,
+				MaxIdleConns: 0, // unlimited
+				MaxIdleConnsPerHost: 100, // 0 would fallback to DefaultMaxIdleConnsPerHost ie. 2
+				MaxConnsPerHost: 0, // unlimited
+				IdleConnTimeout: idleConnectionTimeout,
 			},
 		},
 		HTTPClientCommon: HTTPClientCommon{
@@ -55,8 +56,14 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	resp, err := w.client.Do(req)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
-	respBody, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	var respBody []byte
+	if err == nil {
+		respBody, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return
+		}
+	}
 
 	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
@@ -123,7 +130,7 @@ func (w *DefaultHTTPClient) HostString() string {
 }
 
 func (w *DefaultHTTPClient) Ping() {
-	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString+"/ping", nil)
+	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString + "/ping", nil)
 	resp, _ := w.client.Do(req)
 	defer resp.Body.Close()
 }
