@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ import (
 type DefaultHTTPClient struct {
 	HTTPClientCommon
 	client *http.Client
+	buffPool sync.Pool
 }
 
 // NewHTTPClient creates a new HTTPClient.
@@ -38,6 +40,11 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 			HostString: host,
 			debug:      debug,
 		},
+		buffPool: sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(make([]byte, 0, 64 * 1024))
+			},
+		},
 	}
 }
 
@@ -50,16 +57,21 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	uri = append(uri, q.Path...)
 
 	// populate a request with data from the Query:
-	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewBuffer(q.Body)) // TODO performance
+	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewReader(q.Body)) // TODO performance
+	//req.Header.Add("Accept-Encoding", "gzip")
 
 	start := time.Now()
 	resp, err := w.client.Do(req)
-	var respBody []byte
+	respBody := w.buffPool.Get().(*bytes.Buffer)
+	defer func() {
+		respBody.Reset()
+		w.buffPool.Put(respBody)
+	}()
 	if err == nil {
-		respBody, err = ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
+		defer resp.Body.Close()
+		_, err := io.Copy(respBody, resp.Body)
 		if err != nil {
-			return
+			return -1, err
 		}
 	}
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
@@ -73,7 +85,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	if err == nil {
 		sc := resp.StatusCode
 		if sc != http.StatusOK {
-			err = fmt.Errorf("Invalid write response (status %d): %s", sc, string(respBody))
+			err = fmt.Errorf("Invalid write response (status %d): %s", sc, respBody.String())
 			return
 		}
 	}
@@ -91,7 +103,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 		case 4:
 			fmt.Fprintf(os.Stderr, "debug: %s in %7.2fms -- %s\n", q.HumanLabel, lag, q.HumanDescription)
 			fmt.Fprintf(os.Stderr, "debug:   request: %s\n", string(q.String()))
-			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(respBody))
+			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", respBody.String())
 		default:
 		}
 
@@ -101,9 +113,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 			// Flux responses are just simple CSV.
 
 			prefix := fmt.Sprintf("ID %d: ", q.ID)
-			if json.Valid(respBody) {
+			if json.Valid(respBody.Bytes()) {
 				var pretty bytes.Buffer
-				err = json.Indent(&pretty, respBody, prefix, "  ")
+				err = json.Indent(&pretty, respBody.Bytes(), prefix, "  ")
 				if err != nil {
 					return
 				}
