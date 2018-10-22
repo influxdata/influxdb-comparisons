@@ -31,6 +31,7 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 			MaxIdleConnDuration: idleConnectionTimeout,
 			ReadTimeout: readTimeout,
 			WriteTimeout: writeTimeout,
+			DisableHeaderNamesNormalizing: true,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -55,6 +56,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
+	//req.Header.AddBytesKV([]byte("Accept-Encoding"), []byte("gzip"))
 	req.SetBody(q.Body)
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
