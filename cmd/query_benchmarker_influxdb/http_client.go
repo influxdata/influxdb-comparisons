@@ -58,7 +58,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 
 	// populate a request with data from the Query:
 	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewReader(q.Body)) // TODO performance
-	//req.Header.Add("Accept-Encoding", "gzip")
+	if acceptGzip {
+		req.Header.Add("Accept-Encoding", "gzip")
+	}
 
 	start := time.Now()
 	resp, err := w.client.Do(req)

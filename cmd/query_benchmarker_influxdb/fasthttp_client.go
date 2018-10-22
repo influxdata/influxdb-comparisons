@@ -56,7 +56,9 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
-	//req.Header.AddBytesKV([]byte("Accept-Encoding"), []byte("gzip"))
+	if acceptGzip {
+		req.Header.Add("Accept-Encoding", "gzip")
+	}
 	req.SetBody(q.Body)
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
