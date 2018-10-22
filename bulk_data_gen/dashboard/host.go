@@ -27,7 +27,7 @@ func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
 	sm := []SimulatedMeasurement{
 		devops.NewCPUMeasurement(start),
 		devops.NewDiskIOMeasurement(start),
-		devops.NewDiskMeasurement(start),
+		devops.NewDiskMeasurement(start, 1),
 		devops.NewKernelMeasurement(start),
 		devops.NewMemMeasurement(start),
 		devops.NewNetMeasurement(start),

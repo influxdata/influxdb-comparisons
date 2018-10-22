@@ -38,8 +38,11 @@ type DiskMeasurement struct {
 	freeBytesDist Distribution
 }
 
-func NewDiskMeasurement(start time.Time) *DiskMeasurement {
-	path := []byte(fmt.Sprintf("/dev/sda%d", rand.Intn(10)))
+func NewDiskMeasurement(start time.Time, sda int) *DiskMeasurement {
+	if sda == 0 {
+		sda = rand.Intn(10)
+	}
+	path := []byte(fmt.Sprintf("/dev/sda%d", sda))
 	fsType := DiskFSTypeChoices[rand.Intn(len(DiskFSTypeChoices))]
 	return &DiskMeasurement{
 		path:   path,
