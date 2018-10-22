@@ -54,8 +54,6 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 
 	start := time.Now()
 	resp, err := w.client.Do(req)
-	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
-
 	var respBody []byte
 	if err == nil {
 		respBody, err = ioutil.ReadAll(resp.Body)
@@ -64,6 +62,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 			return
 		}
 	}
+	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
 	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
