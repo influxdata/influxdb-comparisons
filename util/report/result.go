@@ -43,7 +43,7 @@ type ExtraVal struct {
 }
 
 // ReportLoadResult send results from bulk load to an influxdb according to the given parameters
-func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate float64, inputSpeed float64, loadDuration time.Duration) error {
+func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate float64, inputSpeed float64, loadDuration time.Duration, extraVals ...ExtraVal) error {
 
 	c, p, err := initReport(&params.ReportParams, "load_benchmarks")
 	if err != nil {
@@ -57,7 +57,18 @@ func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate floa
 	p.AddFloat64Field("values_rate", valueRate)
 	p.AddFloat64Field("input_rate", inputSpeed)
 	p.AddFloat64Field("duration", loadDuration.Seconds())
-
+	for _, v := range extraVals {
+		switch v.Value.(type) {
+		case float64:
+			p.AddFloat64Field(v.Name, v.Value.(float64))
+			break
+		case int64:
+			p.AddInt64Field(v.Name, v.Value.(int64))
+			break
+		default:
+			panic("unsupported type " + reflect.TypeOf(v.Value).String())
+		}
+	}
 	err = finishReport(c, p)
 
 	return err
