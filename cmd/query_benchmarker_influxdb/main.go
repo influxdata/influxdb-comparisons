@@ -64,6 +64,7 @@ var (
 	initialHttpClients     int
 	trendSamples           int
 	movingAverageInterval  time.Duration
+	clientIndex            int
 )
 
 // Global vars:
@@ -125,6 +126,7 @@ func init() {
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
 	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
+	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 
 	flag.Parse()
 
@@ -273,7 +275,7 @@ func main() {
 	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
-		daemonUrl := daemonUrls[i%len(daemonUrls)]
+		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
 		workersGroup.Add(1)
 		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
@@ -322,7 +324,7 @@ loop:
 			if gradualWorkersIncrease && !isBurnIn {
 				for i := 0; i < workersIncreaseStep; i++ {
 					//fmt.Printf("Adding worker %d\n", workers)
-					daemonUrl := daemonUrls[workers%len(daemonUrls)]
+					daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
 					workersGroup.Add(1)
 					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
