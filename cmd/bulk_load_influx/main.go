@@ -278,6 +278,7 @@ func main() {
 
 	backingOffChans = make([]chan bool, workers)
 	backingOffDones = make([]chan struct{}, workers)
+	backingOffSecs := make([]float64, workers)
 
 	if telemetryHost != "" {
 		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
@@ -310,7 +311,9 @@ func main() {
 			BackingOffDone: backingOffDones[i],
 		}
 		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], telemetryChanPoints, fmt.Sprintf("%d", i))
-		go processBackoffMessages(i, backingOffChans[i], backingOffDones[i])
+		go func(w int) {
+			backingOffSecs[w] = processBackoffMessages(w, backingOffChans[w], backingOffDones[w])
+		}(i)
 	}
 	fmt.Printf("Started load with %d workers\n", workers)
 
@@ -345,6 +348,11 @@ func main() {
 	end := time.Now()
 	took := end.Sub(start)
 
+	totalBackOffSecs := float64(0)
+	for i := 0; i < workers; i++ {
+		totalBackOffSecs += backingOffSecs[i]
+	}
+
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 	valuesRate := float64(valuesRead) / float64(took.Seconds())
@@ -367,9 +375,14 @@ func main() {
 		if timeLimit.Seconds() > 0 {
 			reportTags = append(reportTags, [2]string{"time_limit", timeLimit.String()})
 		}
+		extraVals := make([]report.ExtraVal, 0, 1)
 		if ingestRateLimit > 0 {
-			reportTags = append(reportTags, [2]string{"ingest_rate_limit", strconv.Itoa(ingestRateLimit)})
+			extraVals = append(extraVals, report.ExtraVal{Name: "ingest_rate_limit_values", Value: ingestRateLimit})
 		}
+		if totalBackOffSecs > 0 {
+			extraVals = append(extraVals, report.ExtraVal{Name: "total_backoff_secs", Value: totalBackOffSecs})
+		}
+
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -386,7 +399,7 @@ func main() {
 			IsGzip:    useGzip,
 			BatchSize: batchSize,
 		}
-		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took, extraVals...)
 
 		if err != nil {
 			log.Fatal(err)
@@ -594,7 +607,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	workersGroup.Done()
 }
 
-func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) {
+func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) float64 {
 	var totalBackoffSecs float64
 	var start time.Time
 	last := false
@@ -612,6 +625,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) {
 	}
 	fmt.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
 	dst <- struct{}{}
+	return totalBackoffSecs
 }
 
 func createDb(daemon_url, dbname string, replicationFactor int) error {
