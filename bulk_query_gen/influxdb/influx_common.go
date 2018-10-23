@@ -42,6 +42,7 @@ func (d *InfluxCommon) getHttpQuery(humanLabel, intervalStart, query string, q *
 	getValues := url.Values{}
 	if d.language == InfluxQL {
 		getValues.Set("db", d.DatabaseName)
+		getValues.Set("chunked", "true")
 		getValues.Set("q", query)
 		q.Method = []byte("GET")
 		q.Path = []byte(fmt.Sprintf("/query?%s", getValues.Encode()))
