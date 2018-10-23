@@ -331,7 +331,7 @@ loop:
 				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
-			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
+			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				scanClose <- 1
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
@@ -349,6 +349,19 @@ loop:
 				timeoutReached = true
 				fmt.Println("Time out reached")
 				scanClose <- 1
+				if responseTimeLimit > 0 {
+					//still try to find response time limit
+					respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
+					item := movingAverageStat.FindHistoryItemBelow(respLimitms)
+					if item == nil {
+						fmt.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+						reponseTimeLimitWorkers = workers
+					} else {
+						fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+						reponseTimeLimitWorkers = item.item
+					}
+
+				}
 			}
 		}
 
