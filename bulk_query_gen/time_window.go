@@ -6,6 +6,7 @@ import (
 
 var (
 	TimeWindowShift time.Duration
+	QueryIntervalType string
 )
 
 type TimeWindow struct {

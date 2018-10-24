@@ -50,8 +50,13 @@ func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQ
 }
 
 func (d *InfluxDashboard) GetTimeConstraint(interval *bulkQuerygen.TimeInterval) string {
-	//s := fmt.Sprintf("time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
-	s := "time >= now() - 2d and time < now() - 1d"
+	var s string
+	switch bulkQuerygen.QueryIntervalType {
+	case "window":
+		s = fmt.Sprintf("time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
+	case "last":
+		s = fmt.Sprintf("time >= now() - %dh and time < now() - %dh", int64(2*interval.Duration().Hours()), int64(interval.Duration().Hours()))
+	}
 	return s
 }
 
