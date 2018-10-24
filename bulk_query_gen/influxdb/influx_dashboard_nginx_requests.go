@@ -30,7 +30,7 @@ func (d *InfluxDashboardNginxRequests) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT non_negative_derivative(mean("queriesExecuted"), 1s) FROM "telegraf"."default"."influxdb_queryExecutor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host"
-	query = fmt.Sprintf("SELECT non_negative_derivative(mean(\"accepts\"), 1s) FROM nginx WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by time(1m), \"hostname\"", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT non_negative_derivative(mean(\"accepts\"), 1s) FROM nginx WHERE cluster_id = '%s' and %s group by time(1m), \"hostname\"", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Queries Executed (Number)	, rand cluster, %s by 1m, host", d.language.String(), interval.Duration())
 

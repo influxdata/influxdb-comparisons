@@ -30,7 +30,7 @@ func (d *InfluxDashboardDiskUsage) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT last("used_percent") AS "mean_used_percent" FROM "telegraf"."default"."disk" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: and host =~ /.data./
-	query = fmt.Sprintf("SELECT last(\"used_percent\") AS \"mean_used_percent\" FROM disk WHERE cluster_id = '%s' and time >= '%s' and time < '%s' and hostname =~ /.data./", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT last(\"used_percent\") AS \"mean_used_percent\" FROM disk WHERE cluster_id = '%s' and %s and hostname =~ /.data./", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Disk Usage (GB), rand cluster, %s", d.language.String(), interval.Duration())
 
