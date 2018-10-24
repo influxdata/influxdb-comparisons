@@ -30,7 +30,7 @@ func (d *InfluxDashboardKapaRam) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT "used_percent" FROM "telegraf"."autogen"."mem" WHERE time > :dashboardTime: AND "host"='kapacitor'
-	query = fmt.Sprintf("SELECT \"used_percent\" FROM mem WHERE  hostname='kapacitor_' and %s", d.GetTimeConstraint(interval))
+	query = fmt.Sprintf("SELECT \"used_percent\" FROM mem WHERE  hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) kapa mem used in %s", d.language.String(), interval.Duration())
 
