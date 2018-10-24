@@ -30,7 +30,7 @@ func (d *InfluxDashboardKapaCpu) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT 100 - "usage_idle" FROM "telegraf"."autogen"."cpu" WHERE time > now() - 15m AND "cpu"='cpu-total' AND "host"='kapacitor'
-	query = fmt.Sprintf("SELECT 100 - \"usage_idle\" FROM cpu WHERE hostname='kapacitor_1' and time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT 100 - \"usage_idle\" FROM cpu WHERE hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) kapa cpu in %s", d.language.String(), interval.Duration())
 

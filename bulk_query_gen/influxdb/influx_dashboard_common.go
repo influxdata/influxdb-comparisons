@@ -49,6 +49,12 @@ func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQ
 	return q, &interval
 }
 
+func (d *InfluxDashboard) GetTimeConstraint(interval *bulkQuerygen.TimeInterval) string {
+	//s := fmt.Sprintf("time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
+	s := "time >= now() - 2d and time < now() - 1d"
+	return s
+}
+
 func (d *InfluxDashboard) GetRandomClusterId() string {
 	return fmt.Sprintf("%d", rand.Intn(d.ClustersCount-1)+1)
 }
