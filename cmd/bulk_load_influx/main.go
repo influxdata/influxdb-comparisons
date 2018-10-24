@@ -105,7 +105,7 @@ func init() {
 	flag.StringVar(&csvDaemonUrls, "urls", "http://localhost:8086", "InfluxDB URLs, comma-separated. Will be used in a round-robin fashion.")
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database name.")
 	flag.IntVar(&replicationFactor, "replication-factor", 1, "Cluster replication factor (only applies to clustered databases).")
-	flag.StringVar(&consistency, "consistency", "all", "Write consistency. Must be one of: any, one, quorum, all.")
+	flag.StringVar(&consistency, "consistency", "one", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
@@ -142,6 +142,10 @@ func init() {
 		log.Fatal("missing 'urls' flag")
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+
+	if workers < 1 {
+		log.Fatalf("invalid number of workers: %d\n", workers)
+	}
 
 	if telemetryHost != "" {
 		fmt.Printf("telemetry destination: %v\n", telemetryHost)

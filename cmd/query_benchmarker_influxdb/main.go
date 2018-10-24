@@ -136,6 +136,10 @@ func init() {
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
 
+	if workers < 1 {
+		log.Fatalf("invalid number of workers: %d\n", workers)
+	}
+
 	batchSize = 1
 	if useCase == Dashboard {
 		batchSize = queriesBatch
