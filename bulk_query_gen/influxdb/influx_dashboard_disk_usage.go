@@ -19,7 +19,7 @@ func NewInfluxQLDashboardDiskUsage(dbConfig bulkQuerygen.DatabaseConfig, interva
 }
 
 func NewFluxDashboardDiskUsage(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration,scaleVar).(*InfluxDashboard)
+	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardDiskUsage{
 		InfluxDashboard: *underlying,
 	}

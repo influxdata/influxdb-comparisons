@@ -12,14 +12,14 @@ type InfluxDashboardDiskUtilization struct {
 }
 
 func NewInfluxQLDashboardDiskUtilization(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDashboard(InfluxQL, dbConfig, interval, duration,scaleVar).(*InfluxDashboard)
+	underlying := newInfluxDashboard(InfluxQL, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardDiskUtilization{
 		InfluxDashboard: *underlying,
 	}
 }
 
 func NewFluxDashboardDiskUtilization(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration,scaleVar).(*InfluxDashboard)
+	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardDiskUtilization{
 		InfluxDashboard: *underlying,
 	}

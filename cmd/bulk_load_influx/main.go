@@ -105,7 +105,7 @@ func init() {
 	flag.StringVar(&csvDaemonUrls, "urls", "http://localhost:8086", "InfluxDB URLs, comma-separated. Will be used in a round-robin fashion.")
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database name.")
 	flag.IntVar(&replicationFactor, "replication-factor", 1, "Cluster replication factor (only applies to clustered databases).")
-	flag.StringVar(&consistency, "consistency", "all", "Write consistency. Must be one of: any, one, quorum, all.")
+	flag.StringVar(&consistency, "consistency", "one", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
@@ -142,6 +142,10 @@ func init() {
 		log.Fatal("missing 'urls' flag")
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+
+	if workers < 1 {
+		log.Fatalf("invalid number of workers: %d\n", workers)
+	}
 
 	if telemetryHost != "" {
 		fmt.Printf("telemetry destination: %v\n", telemetryHost)
@@ -278,6 +282,7 @@ func main() {
 
 	backingOffChans = make([]chan bool, workers)
 	backingOffDones = make([]chan struct{}, workers)
+	backingOffSecs := make([]float64, workers)
 
 	if telemetryHost != "" {
 		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
@@ -310,7 +315,9 @@ func main() {
 			BackingOffDone: backingOffDones[i],
 		}
 		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], telemetryChanPoints, fmt.Sprintf("%d", i))
-		go processBackoffMessages(i, backingOffChans[i], backingOffDones[i])
+		go func(w int) {
+			backingOffSecs[w] = processBackoffMessages(w, backingOffChans[w], backingOffDones[w])
+		}(i)
 	}
 	fmt.Printf("Started load with %d workers\n", workers)
 
@@ -345,6 +352,11 @@ func main() {
 	end := time.Now()
 	took := end.Sub(start)
 
+	totalBackOffSecs := float64(0)
+	for i := 0; i < workers; i++ {
+		totalBackOffSecs += backingOffSecs[i]
+	}
+
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 	valuesRate := float64(valuesRead) / float64(took.Seconds())
@@ -367,9 +379,14 @@ func main() {
 		if timeLimit.Seconds() > 0 {
 			reportTags = append(reportTags, [2]string{"time_limit", timeLimit.String()})
 		}
+		extraVals := make([]report.ExtraVal, 0, 1)
 		if ingestRateLimit > 0 {
-			reportTags = append(reportTags, [2]string{"ingest_rate_limit", strconv.Itoa(ingestRateLimit)})
+			extraVals = append(extraVals, report.ExtraVal{Name: "ingest_rate_limit_values", Value: ingestRateLimit})
 		}
+		if totalBackOffSecs > 0 {
+			extraVals = append(extraVals, report.ExtraVal{Name: "total_backoff_secs", Value: totalBackOffSecs})
+		}
+
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				DBType:             "InfluxDB",
@@ -386,7 +403,7 @@ func main() {
 			IsGzip:    useGzip,
 			BatchSize: batchSize,
 		}
-		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+		err = report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took, extraVals...)
 
 		if err != nil {
 			log.Fatal(err)
@@ -594,7 +611,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	workersGroup.Done()
 }
 
-func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) {
+func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) float64 {
 	var totalBackoffSecs float64
 	var start time.Time
 	last := false
@@ -612,6 +629,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) {
 	}
 	fmt.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
 	dst <- struct{}{}
+	return totalBackoffSecs
 }
 
 func createDb(daemon_url, dbname string, replicationFactor int) error {

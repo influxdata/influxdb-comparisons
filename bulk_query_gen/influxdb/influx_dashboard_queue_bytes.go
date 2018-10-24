@@ -30,7 +30,7 @@ func (d *InfluxDashboardQueueBytes) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT mean("queueBytes") FROM "telegraf"."default"."influxdb_hh_processor" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY time(1m), "host" fill(0)
-	query = fmt.Sprintf("SELECT mean(\"temp_files\") FROM system WHERE cluster_id = '%s' and %s group by time(1m), hostname, fill(0)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	query = fmt.Sprintf("SELECT mean(\"temp_files\") FROM postgresl WHERE cluster_id = '%s' and %s group by time(1m), hostname, fill(0)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Hinted HandOff Queue Size (MB), rand cluster, %s by 1m", d.language.String(), interval.Duration())
 

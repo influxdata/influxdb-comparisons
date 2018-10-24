@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -66,15 +67,23 @@ type timedStat struct {
 	timestamp time.Time
 	value     float64
 }
-type TimedStatGroup struct {
-	maxDuraton time.Duration
-	stats      []timedStat
-	lastAvg    float64
-	lastMedian float64
+
+type HistoryItem struct {
+	value float64
+	item  int
 }
 
-func NewTimedStatGroup(maxDuration time.Duration) *TimedStatGroup {
-	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000)}
+type TimedStatGroup struct {
+	maxDuraton  time.Duration
+	stats       []timedStat
+	lastAvg     float64
+	lastMedian  float64
+	trendAvg    *TrendStat
+	statHistory []*HistoryItem
+}
+
+func NewTimedStatGroup(maxDuration time.Duration, maxTrendSamples int) *TimedStatGroup {
+	return &TimedStatGroup{maxDuraton: maxDuration, stats: make([]timedStat, 0, 100000), trendAvg: NewTrendStat(maxTrendSamples, true), statHistory: make([]*HistoryItem, 0, 512)}
 }
 
 func (m *TimedStatGroup) Push(timestamp time.Time, value float64) {
@@ -89,7 +98,7 @@ func (m *TimedStatGroup) Median() float64 {
 	return m.lastMedian
 }
 
-func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
+func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64) {
 	newStats := make([]timedStat, 0, len(m.stats))
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
@@ -116,5 +125,138 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time) (float64, float64) {
 	}
 
 	m.lastAvg = sum / float64(c)
+	m.statHistory = append(m.statHistory, &HistoryItem{m.lastAvg, workers})
+	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian
+}
+
+func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
+	item := -1
+	for i := len(m.statHistory) - 1; i >= 0; i-- {
+		if m.statHistory[i].value < val {
+			item = i + 1
+			if item == len(m.statHistory) {
+				log.Printf("FindHistoryItemBelow: Adjusting returned value from %d to %d\n", item, i)
+				item = i
+			}
+			break
+		}
+	}
+	if item > -1 {
+		return m.statHistory[item]
+	}
+	return nil
+}
+
+type TrendStat struct {
+	x, y      []float64
+	size      int
+	slope     float64
+	intercept float64
+	skipFirst bool
+}
+
+func (ls *TrendStat) Add(y float64) {
+	c := len(ls.y)
+	if c == 0 {
+		if ls.skipFirst {
+			ls.skipFirst = false
+			return
+		}
+	}
+	y = y / 1000 // normalize to seconds
+	if c < ls.size {
+		ls.y = append(ls.y, y)
+		c++
+		if c < 5 { // at least 5 samples required for regression
+			return
+		}
+	} else { // shift left using copy and insert at last position - hopefully no reallocation
+		y1 := ls.y[1:]
+		copy(ls.y, y1)
+		ls.y[ls.size-1] = y
+	}
+	if c > ls.size {
+		panic("Bug in implementation")
+	}
+	//var r stats.Regression
+	var r SimpleRegression
+	r.hasIntercept = false
+	for i := 0; i < c; i++ {
+		r.Update(ls.x[i], ls.y[i]-ls.y[0])
+	}
+	ls.slope = r.Slope()
+	ls.intercept = (r.Intercept() + ls.y[0]) * 1000
+}
+
+func NewTrendStat(size int, skipFirst bool) *TrendStat {
+	fmt.Printf("Trend statistics using %d samples\n", size)
+	instance := TrendStat{
+		size:      size,
+		slope:     0,
+		skipFirst: skipFirst,
+	}
+	instance.x = make([]float64, size, size)
+	instance.y = make([]float64, 0, size)
+	for i := 0; i < size; i++ {
+		instance.x[i] = float64(i) // X is constant array { 0, 1, 2 ... size }
+	}
+	return &instance
+}
+
+type SimpleRegression struct {
+	sumX  float64
+	sumXX float64
+	sumY  float64
+	sumYY float64
+	sumXY float64
+
+	n float64
+
+	xbar float64
+	ybar float64
+
+	hasIntercept bool
+}
+
+func (sr *SimpleRegression) Update(x, y float64) {
+	if sr.n == 0 {
+		sr.xbar = x
+		sr.ybar = y
+	} else {
+		if sr.hasIntercept {
+			fact1 := 1.0 + sr.n
+			fact2 := sr.n / (1.0 + sr.n)
+			dx := x - sr.xbar
+			dy := y - sr.ybar
+			sr.sumXX += dx * dx * fact2
+			sr.sumYY += dy * dy * fact2
+			sr.sumXY += dx * dy * fact2
+			sr.xbar += dx / fact1
+			sr.ybar += dy / fact1
+		}
+	}
+	if !sr.hasIntercept {
+		sr.sumXX += x * x
+		sr.sumYY += y * y
+		sr.sumXY += x * y
+	}
+	sr.sumX += x
+	sr.sumY += y
+	sr.n++
+}
+
+func (sr *SimpleRegression) Intercept() float64 {
+	if sr.hasIntercept {
+		return (sr.sumY - sr.Slope()*sr.sumX) / sr.n
+	} else {
+		return 0
+	}
+}
+
+func (sr *SimpleRegression) Slope() float64 {
+	if sr.n < 2 {
+		return math.NaN()
+	}
+	return sr.sumXY / sr.sumXX
 }
