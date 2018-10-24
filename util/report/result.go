@@ -181,6 +181,9 @@ func ReportQueryResult(params *QueryReportParams, queryName string, minQueryTime
 		case int64:
 			p.AddInt64Field(v.Name, v.Value.(int64))
 			break
+		case int:
+			p.AddInt64Field(v.Name, int64(v.Value.(int)))
+			break
 		default:
 			panic("unsupported type " + reflect.TypeOf(v.Value).String())
 		}
