@@ -1,0 +1,8 @@
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/influxdata/influxdb-comparisons"
+
+[[constraint]]
+  name = "github.com/valyala/fasthttp"
+  version = "1.0.0"
