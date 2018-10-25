@@ -70,6 +70,7 @@ var (
 	reportPassword         string
 	reportTagsCSV          string
 	notificationListenPort int
+	clientIndex            int
 )
 
 // Global vars
@@ -130,6 +131,7 @@ func init() {
 	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.StringVar(&cpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
+	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 
 	flag.Parse()
 
@@ -303,7 +305,7 @@ func main() {
 	}
 
 	for i := 0; i < workers; i++ {
-		daemonUrl := daemonUrls[i%len(daemonUrls)]
+		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
 		backingOffChans[i] = make(chan bool, 100)
 		backingOffDones[i] = make(chan struct{})
 		workersGroup.Add(1)
