@@ -354,9 +354,11 @@ loop:
 		case <-timeoutTicker.C:
 			if timeLimit && !timeoutReached {
 				timeoutReached = true
-				fmt.Println("Time out reached")
+				log.Println("Time out reached")
 				if !scanFinished {
 					scanClose <- 1
+				} else {
+					log.Println("Scan already finished")
 				}
 				if responseTimeLimit > 0 {
 					//still try to find response time limit
@@ -549,7 +551,6 @@ loop:
 
 	}
 	scanFinished = true
-	log.Println("Scan finished")
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
