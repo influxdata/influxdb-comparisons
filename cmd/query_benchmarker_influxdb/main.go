@@ -65,6 +65,7 @@ var (
 	trendSamples           int
 	movingAverageInterval  time.Duration
 	clientIndex            int
+	scanFinished           bool
 )
 
 // Global vars:
@@ -284,7 +285,7 @@ func main() {
 		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
-	fmt.Printf("Started querying with %d workers\n", workers)
+	log.Printf("Started querying with %d workers\n", workers)
 
 	wallStart := time.Now()
 
@@ -334,7 +335,7 @@ loop:
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
-				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
+				log.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
 			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
@@ -343,10 +344,10 @@ loop:
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
 				if item == nil {
-					fmt.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+					log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
 					reponseTimeLimitWorkers = workers
 				} else {
-					fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+					log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
 					reponseTimeLimitWorkers = item.item
 				}
 			}
@@ -354,16 +355,18 @@ loop:
 			if timeLimit && !timeoutReached {
 				timeoutReached = true
 				fmt.Println("Time out reached")
-				scanClose <- 1
+				if !scanFinished {
+					scanClose <- 1
+				}
 				if responseTimeLimit > 0 {
 					//still try to find response time limit
 					respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 					item := movingAverageStat.FindHistoryItemBelow(respLimitms)
 					if item == nil {
-						fmt.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+						log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
 						reponseTimeLimitWorkers = workers
 					} else {
-						fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+						log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
 						reponseTimeLimitWorkers = item.item
 					}
 
@@ -379,7 +382,7 @@ loop:
 
 	// Block for workers to finish sending requests, closing the stats
 	// channel when done:
-	fmt.Println("Waiting for workers to finish")
+	log.Println("Waiting for workers to finish")
 	waitCh := make(chan int)
 	waitFinished := false
 	go func() {
@@ -395,7 +398,7 @@ waitLoop:
 			waitTimer.Stop()
 			break waitLoop
 		case <-waitTimer.C:
-			fmt.Println("Waiting for workers timeout")
+			log.Println("Waiting for workers timeout")
 			break waitLoop
 		}
 	}
@@ -545,6 +548,8 @@ loop:
 		}
 
 	}
+	scanFinished = true
+	log.Println("Scan finished")
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
