@@ -462,7 +462,9 @@ outer:
 				break outer
 			}
 
-			itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
+			if ingestRateLimit > 0 {
+				itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
+			}
 		}
 		select {
 		case <-doneCh:
