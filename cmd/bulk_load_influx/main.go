@@ -481,7 +481,9 @@ outer:
 				break outer
 			}
 
-			itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
+			if ingestRateLimit > 0 {
+				itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
+			}
 		}
 		select {
 		case <-doneCh:
@@ -579,9 +581,12 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				} else {
 					gvStart = now
 					ingestionRateDebt = remainingMs
-					delta := int32(float32(batchSize) * 0.10) // or 10% of volatileBatchSize for faster speed-up?
-					atomic.AddInt32(&volatileBatchSize, delta)
-					log.Printf("Increasing batchSize by %d to %d\n", delta, atomic.LoadInt32(&volatileBatchSize))
+					currentBatchSize := atomic.LoadInt32(&volatileBatchSize)
+					if currentBatchSize < int32(batchSize) {
+						delta := int32(float32(volatileBatchSize) * 0.20)
+						newBatchSize := atomic.AddInt32(&volatileBatchSize, delta)
+						log.Printf("Increasing actual batch size by %d to %d\n", delta, newBatchSize)
+					}
 				}
 				if ingestionRateDebt != 0 {
 					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
