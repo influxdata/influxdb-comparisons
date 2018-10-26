@@ -20,7 +20,7 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
-	clustersCount := scaleVar / dashboard.ClusterSizes[len(dashboard.ClusterSizes)/2]
+	clustersCount := scaleVar / dashboard.ClusterSize //ClusterSizes[len(dashboard.ClusterSizes)/2]
 	if clustersCount == 0 {
 		clustersCount = 1
 	}
