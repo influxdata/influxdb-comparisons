@@ -20,7 +20,7 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
-	clustersCount := scaleVar / dashboard.ClusterSizes[len(dashboard.ClusterSizes)/2]
+	clustersCount := scaleVar / dashboard.ClusterSize //ClusterSizes[len(dashboard.ClusterSizes)/2]
 	if clustersCount == 0 {
 		clustersCount = 1
 	}
@@ -41,7 +41,7 @@ func (d *InfluxDashboard) Dispatch(i int) bulkQuerygen.Query {
 func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQuerygen.TimeInterval) {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
 	var interval bulkQuerygen.TimeInterval
-	if (bulkQuerygen.TimeWindowShift > 0) {
+	if bulkQuerygen.TimeWindowShift > 0 {
 		interval = d.TimeWindow.SlidingWindow(&d.AllInterval)
 	} else {
 		interval = d.AllInterval.RandWindow(d.Duration)
