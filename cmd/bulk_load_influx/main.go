@@ -560,7 +560,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				} else {
 					gvStart = now
 					ingestionRateDebt = remainingMs
-					delta := int32(float32(batchSize) * 0.10)
+					delta := int32(float32(batchSize) * 0.10) // or 10% of volatileBatchSize for faster speed-up?
 					atomic.AddInt32(&volatileBatchSize, delta)
 					log.Printf("Increasing batchSize by %d to %d\n", delta, atomic.LoadInt32(&volatileBatchSize))
 				}
