@@ -1,4 +1,5 @@
 // bulk_load_influx loads an InfluxDB daemon with data from stdin.
+// bulk_load_influx loads an InfluxDB daemon with data from stdin.
 //
 // The caller is responsible for assuring that the database is empty before
 // bulk load.
@@ -92,6 +93,7 @@ var (
 	ingestionRateGran     float32
 	endedPrematurely      bool
 	prematureEndReason    string
+	volatileBatchSize     int32
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -208,6 +210,7 @@ func init() {
 			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
+		volatileBatchSize = int32(batchSize)
 	} else {
 		log.Printf("Ingestion rate control is off")
 	}
@@ -477,6 +480,8 @@ outer:
 				prematureEndReason = "Timeout elapsed"
 				break outer
 			}
+
+			itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
 		}
 		select {
 		case <-doneCh:
@@ -558,7 +563,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		}
 
 		if ingestRateLimit > 0 {
-			gvCount += float32(batchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
+			gvCount += float32(volatileBatchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
 				remaining := now.Sub(gvStart)
@@ -574,6 +579,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				} else {
 					gvStart = now
 					ingestionRateDebt = remainingMs
+					delta := int32(float32(batchSize) * 0.10) // or 10% of volatileBatchSize for faster speed-up?
+					atomic.AddInt32(&volatileBatchSize, delta)
+					log.Printf("Increasing batchSize by %d to %d\n", delta, atomic.LoadInt32(&volatileBatchSize))
 				}
 				if ingestionRateDebt != 0 {
 					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
