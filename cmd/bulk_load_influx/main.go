@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -71,6 +73,7 @@ var (
 	reportPassword         string
 	reportTagsCSV          string
 	notificationListenPort int
+	printInterval          uint64
 )
 
 // Global vars
@@ -89,10 +92,17 @@ var (
 	progressIntervalItems uint64
 	reportTags            [][2]string
 	reportHostname        string
-	ingestionRateGran     float32
+	ingestionRateGran     float64
 	endedPrematurely      bool
 	prematureEndReason    string
 	volatileBatchSize     int32
+	maxBatchSize          int
+	speedUpRequest        int32
+	statMapping           statsMap
+	statPool              sync.Pool
+	statChan              chan *Stat
+	statGroup             sync.WaitGroup
+	movingAverageStat     *TimedStatGroup
 )
 
 var consistencyChoices = map[string]struct{}{
@@ -101,6 +111,8 @@ var consistencyChoices = map[string]struct{}{
 	"quorum": struct{}{},
 	"all":    struct{}{},
 }
+
+type statsMap map[string]*StatGroup
 
 // Parse args:
 func init() {
@@ -132,6 +144,7 @@ func init() {
 	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.StringVar(&cpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
+	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many batches (0 to disable)")
 
 	flag.Parse()
 
@@ -190,8 +203,12 @@ func init() {
 		fmt.Printf("results report tags: %v\n", reportTags)
 	}
 
+	statChan = make(chan *Stat, workers)
+	statGroup.Add(1)
+	go processStats()
+
 	if ingestRateLimit > 0 {
-		ingestionRateGran = (float32(ingestRateLimit) / float32(workers)) / (float32(1000) / float32(RateControlGranularity))
+		ingestionRateGran = (float64(ingestRateLimit) / float64(workers)) / (float64(1000) / float64(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
 		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
@@ -200,6 +217,7 @@ func init() {
 		} else if recommendedBatchSize > batchSize {
 			recommendedBatchSize = batchSize
 		}
+		maxBatchSize = batchSize
 		if recommendedBatchSize != batchSize {
 			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
@@ -274,6 +292,15 @@ func main() {
 			return bytes.NewBuffer(make([]byte, 0, 4*1024*1024))
 		},
 	}
+
+	statPool = sync.Pool{
+		New: func() interface{} {
+			return &Stat{
+			}
+		},
+	}
+
+	movingAverageStat = NewTimedStatGroup(30 * time.Second, 30)
 
 	batchChan = make(chan *bytes.Buffer, workers)
 	inputDone = make(chan struct{})
@@ -463,7 +490,18 @@ outer:
 			}
 
 			if ingestRateLimit > 0 {
-				itemsPerBatch = int(atomic.LoadInt32(&volatileBatchSize))
+				if itemsPerBatch < maxBatchSize {
+					hint := atomic.LoadInt32(&speedUpRequest)
+					if hint > 0 {
+						atomic.StoreInt32(&speedUpRequest, 0)
+						itemsPerBatch += int(float32(maxBatchSize) * 0.10)
+						if itemsPerBatch > maxBatchSize {
+							itemsPerBatch = maxBatchSize
+						}
+						atomic.StoreInt32(&volatileBatchSize, int32(itemsPerBatch))
+						fmt.Printf("Increased batch size to %d\n", itemsPerBatch)
+					}
+				}
 			}
 		}
 		select {
@@ -501,19 +539,19 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	var batchesSeen int64
 
 	// Ingestion rate control vars
-	var gvCount float32
+	var gvCount float64
 	var gvStart time.Time
 	var ingestionRateDebt int64
-
-	if ingestRateLimit > 0 {
-		gvStart = time.Now()
-	}
 
 	for batch := range batchChan {
 		batchesSeen++
 
 		var bodySize int
 		ts := time.Now().UnixNano()
+
+		if ingestRateLimit > 0 && gvStart.Second() == 0 {
+			gvStart = time.Now()
+		}
 
 		// Write the batch: try until backoff is not needed.
 		if doLoad {
@@ -545,13 +583,34 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 		}
 
+		// lagMillis intentionally includes backoff time,
+		// and incidentally includes compression time:
+		lagMillis := float64(time.Now().UnixNano()-ts) / 1e6
+
+		// Return the batch buffer to the pool.
+		batch.Reset()
+		bufPool.Put(batch)
+
+		// Get current batch size
+		currentBatchSize := int32(batchSize)
 		if ingestRateLimit > 0 {
-			gvCount += float32(volatileBatchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
+			currentBatchSize = atomic.LoadInt32(&volatileBatchSize)
+		}
+
+		// Normally report after each batch
+		reportStat := true
+		valuesWritten := float64(currentBatchSize) * ValuesPerMeasurement
+
+		// Apply ingest rate control if set
+		if ingestRateLimit > 0 {
+			gvCount += float64(currentBatchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
-				remaining := now.Sub(gvStart)
-				remainingMs := RateControlGranularity - (remaining.Nanoseconds() / 1e6) + ingestionRateDebt
+				elapsed := now.Sub(gvStart)
+				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + ingestionRateDebt
 				ingestionRateDebt = 0
+				valuesWritten = gvCount
+				lagMillis = float64(elapsed.Nanoseconds() / 1e6)
 				if remainingMs > 0 {
 					time.Sleep(time.Duration(remainingMs) * time.Millisecond) // TODO discount 5 ms for syscalls (sleep & wakeup) overhead?
 					gvStart = time.Now()
@@ -559,15 +618,11 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					if realDelay != remainingMs {
 						ingestionRateDebt = -(realDelay - remainingMs) // TODO how about spurios wakeups?
 					}
+					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
 					ingestionRateDebt = remainingMs
-					currentBatchSize := atomic.LoadInt32(&volatileBatchSize)
-					if currentBatchSize < int32(batchSize) {
-						delta := int32(float32(volatileBatchSize) * 0.20)
-						newBatchSize := atomic.AddInt32(&volatileBatchSize, delta)
-						log.Printf("Increasing actual batch size by %d to %d\n", delta, newBatchSize)
-					}
+					atomic.StoreInt32(&speedUpRequest, 1)
 				}
 				if ingestionRateDebt != 0 {
 					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
@@ -576,16 +631,17 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					}
 				}
 				gvCount -= ingestionRateGran
+			} else {
+				reportStat = false
 			}
 		}
 
-		// lagMillis intentionally includes backoff time,
-		// and incidentally includes compression time:
-		lagMillis := float64(time.Now().UnixNano()-ts) / 1e6
-
-		// Return the batch buffer to the pool.
-		batch.Reset()
-		bufPool.Put(batch)
+		// Report sent batch statistic
+		if reportStat {
+			stat := statPool.Get().(*Stat)
+			stat.Value = valuesWritten / lagMillis * 1e3
+			statChan <- stat
+		}
 
 		// Report telemetry, if applicable:
 		if telemetrySink != nil {
@@ -636,7 +692,7 @@ func createDb(daemon_url, dbname string, replicationFactor int) error {
 	// serialize params the right way:
 	u.Path = "query"
 	v := u.Query()
-	v.Set("consistency", "all")
+	v.Set("consistency", consistency)
 	v.Set("q", fmt.Sprintf("CREATE DATABASE %s WITH REPLICATION %d", dbname, replicationFactor))
 	u.RawQuery = v.Encode()
 
@@ -699,4 +755,79 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		ret = append(ret, name)
 	}
 	return ret, nil
+}
+
+func processStats() {
+
+	statMapping = statsMap{
+		"*": &StatGroup{},
+	}
+
+	lastRefresh := time.Time{}
+	i := uint64(0)
+	for stat := range statChan {
+		now := time.Now()
+		if lastRefresh.Second() == 0 {
+			lastRefresh = now
+		}
+
+		movingAverageStat.Push(now, stat.Value)
+		statMapping["*"].Push(stat.Value)
+
+		statPool.Put(stat)
+
+		i++
+
+		if now.Sub(lastRefresh).Seconds() >= 1 {
+			movingAverageStat.UpdateAvg(now, workers)
+			lastRefresh = now
+		}
+
+		// print stats to stderr (if printInterval is greater than zero):
+		if printInterval > 0 && i > 0 && i%printInterval == 0 {
+			_, err := fmt.Fprintf(os.Stderr, "%s: after %d batches:\n", time.Now().String(), i)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fprintStats(os.Stderr, statMapping)
+			_, err = fmt.Fprintf(os.Stderr, "\n")
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+	}
+
+	// the final stats output goes to stdout:
+	_, err := fmt.Printf("run complete after %d batches:\n", i)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fprintStats(os.Stdout, statMapping)
+	statGroup.Done()
+}
+
+// fprintStats pretty-prints stats to the given writer.
+func fprintStats(w io.Writer, statGroups statsMap) {
+	maxKeyLength := 0
+	keys := make([]string, 0, len(statGroups))
+	for k := range statGroups {
+		if len(k) > maxKeyLength {
+			maxKeyLength = len(k)
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := statGroups[k]
+		paddedKey := fmt.Sprintf("%s", k)
+		for len(paddedKey) < maxKeyLength {
+			paddedKey += " "
+		}
+		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, v.Mean, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, v.Count, v.Sum/1e3)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
