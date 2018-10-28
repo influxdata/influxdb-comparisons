@@ -654,7 +654,7 @@ func processStats() {
 
 		i++
 
-		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() > 1 {
+		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() >= 1 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 		}
