@@ -144,7 +144,7 @@ func init() {
 	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.StringVar(&cpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
 	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
-	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many batches (0 to disable)")
+	flag.Uint64Var(&printInterval, "print-interval", 1000, "Print timing stats to stderr after this many batches (0 to disable)")
 	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean write rate on which moving average is calculated.")
 
 	flag.Parse()
