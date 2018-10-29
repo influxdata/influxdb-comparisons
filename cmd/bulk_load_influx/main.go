@@ -758,7 +758,7 @@ func processStats(telemetrySink chan *report.Point) {
 	i := uint64(0)
 	for stat := range statChan {
 		now := time.Now()
-		if lastRefresh.Second() == 0 {
+		if lastRefresh.Nanosecond() == 0 {
 			lastRefresh = now
 		}
 
