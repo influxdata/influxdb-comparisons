@@ -104,6 +104,12 @@ func (p *Point) AddInt64Field(k string, x int64) {
 	p.Fields = append(p.Fields, f)
 }
 
+func (p *Point) AddIntField(k string, x int) {
+	f := Field{}
+	f.SetInt64(k, int64(x))
+	p.Fields = append(p.Fields, f)
+}
+
 func (p *Point) AddBoolField(k string, x bool) {
 	f := Field{}
 	f.SetBool(k, x)
@@ -172,10 +178,10 @@ type Collector struct {
 	buf *bytes.Buffer
 }
 
-func NewCollector(influxhost, dbname, basicAuth string) *Collector {
+func NewCollector(influxhost, dbname, userName, password string) *Collector {
 	encodedBasicAuth := ""
-	if basicAuth != "" {
-		encodedBasicAuth = "Basic " + base64.StdEncoding.EncodeToString([]byte(basicAuth))
+	if userName != "" {
+		encodedBasicAuth = "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", userName, password)))
 	}
 	return &Collector{
 		buf:    new(bytes.Buffer),

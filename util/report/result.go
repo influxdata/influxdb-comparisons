@@ -1,7 +1,6 @@
 package report
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -80,11 +79,7 @@ func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate floa
 
 // initReport prepares a Point and a Collector instance for sending a result report
 func initReport(params *ReportParams, measurement string) (*Collector, *Point, error) {
-	var authString string
-	if len(params.ReportUser) > 0 {
-		authString = fmt.Sprintf("%s:%s", params.ReportUser, params.ReportPassword)
-	}
-	c := NewCollector(params.ReportHost, params.ReportDatabaseName, authString)
+	c := NewCollector(params.ReportHost, params.ReportDatabaseName, params.ReportUser, params.ReportPassword)
 
 	err := c.CreateDatabase()
 	if err != nil {
