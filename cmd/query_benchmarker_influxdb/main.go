@@ -39,11 +39,8 @@ var (
 	burnIn                 uint64
 	printInterval          uint64
 	memProfile             string
-	telemetryHost          string
 	telemetryStderr        bool
 	telemetryBatchSize     uint64
-	telemetryTagsCSV       string
-	telemetryBasicAuth     string
 	reportDatabase         string
 	reportHost             string
 	reportUser             string
@@ -66,6 +63,7 @@ var (
 	movingAverageInterval  time.Duration
 	clientIndex            int
 	scanFinished           bool
+	reportTelemetry        bool
 )
 
 // Global vars:
@@ -102,11 +100,9 @@ func init() {
 	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
 	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print JSON response bodies (for correctness checking) (default false).")
 	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
-	flag.StringVar(&telemetryHost, "telemetry-host", "", "InfluxDB host to write telegraf telemetry to (optional).")
-	flag.StringVar(&telemetryTagsCSV, "telemetry-tags", "", "Tag(s) for telemetry. Format: key0:val0,key1:val1,...")
-	flag.StringVar(&telemetryBasicAuth, "telemetry-basic-auth", "", "basic auth (username:password) for telemetry.")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
-	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 1000, "Telemetry batch size (lines).")
+	flag.Uint64Var(&telemetryBatchSize, "telemetry-batch-size", 1, "Telemetry batch size (lines).")
+	flag.BoolVar(&reportTelemetry, "report-telemetry", false, "Whether to report also progress info about mean, moving mean and #workers.")
 	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
 	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
 	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
@@ -158,30 +154,6 @@ func init() {
 		fmt.Printf("Response time limit set to %s\n", responseTimeLimit)
 	}
 
-	if telemetryHost != "" {
-		fmt.Printf("telemetry destination: %v\n", telemetryHost)
-		if telemetryBatchSize == 0 {
-			panic("invalid telemetryBatchSize")
-		}
-
-		var err error
-		telemetrySrcAddr, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("src addr for telemetry: %v\n", telemetrySrcAddr)
-
-		if telemetryTagsCSV != "" {
-			pairs := strings.Split(telemetryTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				telemetryTags = append(telemetryTags, tagpair)
-			}
-		}
-		fmt.Printf("telemetry tags: %v\n", telemetryTags)
-	}
-
 	if reportHost != "" {
 		fmt.Printf("results report destination: %v\n", reportHost)
 		fmt.Printf("results report database: %v\n", reportDatabase)
@@ -202,6 +174,10 @@ func init() {
 			}
 		}
 		fmt.Printf("results report tags: %v\n", reportTags)
+	}
+
+	if reportTelemetry && reportHost == "" {
+		log.Fatalf("invalid configuration: cannot report telemetry without specified report host")
 	}
 
 	if httpClientType == "fast" || httpClientType == "default" {
@@ -264,14 +240,18 @@ func main() {
 	}
 	statChan = make(chan *Stat, statChanBuff)
 
-	// Launch the stats processor:
-	statGroup.Add(1)
-	go processStats()
-
-	if telemetryHost != "" {
-		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+	if reportTelemetry {
+		telemetryCollector := report.NewCollector(reportHost, reportDatabase, reportUser, reportPassword)
+		err = telemetryCollector.CreateDatabase()
+		if err != nil {
+			log.Fatalf("Error creating temetry db: %v\n", err)
+		}
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
+
+	// Launch the stats processor:
+	statGroup.Add(1)
+	go processStats(telemetryChanPoints)
 
 	if initialHttpClients > 0 {
 		InitPools(initialHttpClients, daemonUrls, debug, dialTimeout, readTimeout, writeTimeout)
@@ -283,7 +263,7 @@ func main() {
 		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
 		workersGroup.Add(1)
 		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
-		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
+		go processQueries(w)
 	}
 	log.Printf("Started querying with %d workers\n", workers)
 
@@ -332,7 +312,7 @@ loop:
 					daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
 					workersGroup.Add(1)
 					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
-					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
+					go processQueries(w)
 					workers++
 				}
 				log.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
@@ -418,7 +398,7 @@ waitLoop:
 		log.Fatal(err)
 	}
 
-	if telemetryHost != "" {
+	if reportTelemetry {
 		fmt.Println("shutting down telemetry...")
 		close(telemetryChanPoints)
 		<-telemetryChanDone
@@ -555,7 +535,7 @@ loop:
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
+func processQueries(w HTTPClient) error {
 	opts := &HTTPClientDoOptions{
 		Debug:                debug,
 		PrettyPrintResponses: prettyPrintResponses,
@@ -563,7 +543,7 @@ func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWor
 	var queriesSeen int64
 	for queries := range queryChan {
 		if len(queries) == 1 {
-			if err := processSingleQuery(w, queries[0], opts, telemetrySink, telemetryWorkerLabel, queriesSeen, nil, nil); err != nil {
+			if err := processSingleQuery(w, queries[0], opts, nil, nil); err != nil {
 				log.Fatal(err)
 			}
 			queriesSeen++
@@ -574,7 +554,7 @@ func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWor
 			errCh := make(chan error)
 			doneCh := make(chan int, len(queries))
 			for _, q := range queries {
-				go processSingleQuery(w, q, opts, telemetrySink, telemetryWorkerLabel, queriesSeen, errCh, doneCh)
+				go processSingleQuery(w, q, opts, errCh, doneCh)
 				queriesSeen++
 			}
 
@@ -604,13 +584,12 @@ func processQueries(w HTTPClient, telemetrySink chan *report.Point, telemetryWor
 	return nil
 }
 
-func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, telemetrySink chan *report.Point, telemetryWorkerLabel string, queriesSeen int64, errCh chan error, doneCh chan int) error {
+func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, errCh chan error, doneCh chan int) error {
 	defer func() {
 		if doneCh != nil {
 			doneCh <- 1
 		}
 	}()
-	ts := time.Now().UnixNano()
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*Stat)
 	stat.Init(q.HumanLabel, lagMillis)
@@ -625,26 +604,13 @@ func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, telem
 			return qerr
 		}
 	}
-	// Report telemetry, if applicable:
-	if telemetrySink != nil {
-		p := report.GetPointFromGlobalPool()
-		p.Init("benchmark_query", ts)
-		for _, tagpair := range telemetryTags {
-			p.AddTag(tagpair[0], tagpair[1])
-		}
-		p.AddTag("src_addr", telemetrySrcAddr)
-		p.AddTag("dst_addr", w.HostString())
-		p.AddTag("worker_id", telemetryWorkerLabel)
-		p.AddFloat64Field("rtt_ms", lagMillis)
-		p.AddInt64Field("worker_req_num", queriesSeen)
-		telemetrySink <- p
-	}
+
 	return nil
 }
 
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
-func processStats() {
+func processStats(telemetrySink chan *report.Point) {
 
 	statMapping = statsMap{
 		allQueriesLabel: &StatGroup{},
@@ -682,6 +648,18 @@ func processStats() {
 		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() >= 1 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
+			// Report telemetry, if applicable:
+			if telemetrySink != nil {
+				p := report.GetPointFromGlobalPool()
+				p.Init("query_benchmarks_telemetry", now.UnixNano())
+				for _, tagpair := range reportTags {
+					p.AddTag(tagpair[0], tagpair[1])
+				}
+				p.AddFloat64Field("mean", statMapping[allQueriesLabel].Mean)
+				p.AddFloat64Field("moving_mean", movingAverageStat.Avg())
+				p.AddIntField("actual_workers", workers)
+				telemetrySink <- p
+			}
 		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
@@ -695,6 +673,7 @@ func processStats() {
 				log.Fatal(err)
 			}
 		}
+
 	}
 
 	// the final stats output goes to stdout:
