@@ -176,7 +176,7 @@ func main() {
 	go processStats()
 
 	if telemetryHost != "" {
-		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", reportUser, reportPassword)
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
 	}
 
@@ -243,7 +243,7 @@ func main() {
 			BurnIn: int64(burnIn),
 		}
 		stat := statMapping[allQueriesLabel]
-		err = report.ReportQueryResult(reportParams, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+		err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
 
 		if err != nil {
 			log.Fatal(err)

@@ -217,7 +217,7 @@ func main() {
 		}
 
 		stat := statMapping[allQueriesLabel]
-		err = report.ReportQueryResult(reportParams, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
+		err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
 
 		if err != nil {
 			log.Fatal(err)
@@ -303,7 +303,7 @@ func oneQuery(conn *pgx.Conn, q *Query) (float64, error) {
 	if doQueries {
 		rows, err := conn.Query(string(q.QuerySQL))
 		if err != nil {
-			log.Println("Error running query: '", string(q.QuerySQL), "'" )
+			log.Println("Error running query: '", string(q.QuerySQL), "'")
 			return 0, err
 		}
 		for rows.Next() {
