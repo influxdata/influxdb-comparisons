@@ -317,7 +317,7 @@ func main() {
 	backingOffSecs := make([]float64, workers)
 
 	if telemetryHost != "" {
-		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", reportUser, reportPassword)
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 
