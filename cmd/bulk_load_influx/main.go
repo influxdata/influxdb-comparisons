@@ -779,7 +779,7 @@ func processStats(telemetrySink chan *report.Point) {
 				for _, tagpair := range reportTags {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
-				p.AddIntField("workers", workers)
+				p.AddIntField("actual_workers", workers)
 				p.AddFloat64Field("mean", statMapping["*"].Mean)
 				p.AddFloat64Field("moving_mean", movingAverageStat.Avg())
 				telemetrySink <- p
