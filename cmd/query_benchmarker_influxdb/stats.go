@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"time"
@@ -132,13 +131,9 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 
 func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
 	item := -1
-	for i := len(m.statHistory) - 1; i >= 0; i-- {
-		if m.statHistory[i].value < val {
-			item = i + 1
-			if item == len(m.statHistory) {
-				log.Printf("FindHistoryItemBelow: Adjusting returned value from %d to %d\n", item, i)
-				item = i
-			}
+	for i := len(m.statHistory) - 2; i >= 0; i-- {
+		if m.statHistory[i].value < val && m.statHistory[i+1].value >= val {
+			item = i
 			break
 		}
 	}
