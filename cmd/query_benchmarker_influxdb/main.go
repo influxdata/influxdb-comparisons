@@ -645,7 +645,7 @@ func processStats(telemetrySink chan *report.Point) {
 
 		i++
 
-		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() >= 1 {
+		if lastRefresh.Nanosecond() == 0 || now.Sub(lastRefresh).Seconds() >= 1.0 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 			// Report telemetry, if applicable:
