@@ -30,7 +30,7 @@ func (d *InfluxDashboardCpuUtilization) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//c "telegraf"."default"."cpu" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: GROUP BY host, time(1m)
-	query = fmt.Sprintf("SELECT mean(\"usage_user\") FROM cpu WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by hostname,time(1m)", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT mean(\"usage_user\") FROM cpu WHERE cluster_id = '%s' and %s group by hostname,time(1m)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) CPU Utilization (Percent), rand cluster, %s by host, 1m", d.language.String(), interval.Duration())
 

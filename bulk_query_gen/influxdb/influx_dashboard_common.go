@@ -20,14 +20,14 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
 		panic("need influx database name")
 	}
-	clustersCount := scaleVar / dashboard.ClusterSizes[len(dashboard.ClusterSizes)/2]
+	clustersCount := scaleVar / dashboard.ClusterSize //ClusterSizes[len(dashboard.ClusterSizes)/2]
 	if clustersCount == 0 {
 		clustersCount = 1
 	}
 	return &InfluxDashboard{
 		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
 		ClustersCount: clustersCount,
-		TimeWindow: bulkQuerygen.TimeWindow{interval.Start, duration},
+		TimeWindow:    bulkQuerygen.TimeWindow{interval.Start, duration},
 	}
 }
 
@@ -41,7 +41,7 @@ func (d *InfluxDashboard) Dispatch(i int) bulkQuerygen.Query {
 func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQuerygen.TimeInterval) {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
 	var interval bulkQuerygen.TimeInterval
-	if (bulkQuerygen.TimeWindowShift > 0) {
+	if bulkQuerygen.TimeWindowShift > 0 {
 		interval = d.TimeWindow.SlidingWindow(&d.AllInterval)
 	} else {
 		interval = d.AllInterval.RandWindow(d.Duration)
@@ -49,6 +49,17 @@ func (d *InfluxDashboard) DispatchCommon(i int) (*bulkQuerygen.HTTPQuery, *bulkQ
 	return q, &interval
 }
 
+func (d *InfluxDashboard) GetTimeConstraint(interval *bulkQuerygen.TimeInterval) string {
+	var s string
+	switch bulkQuerygen.QueryIntervalType {
+	case "window":
+		s = fmt.Sprintf("time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
+	case "last":
+		s = fmt.Sprintf("time >= now() - %dh and time < now() - %dh", int64(2*interval.Duration().Hours()), int64(interval.Duration().Hours()))
+	}
+	return s
+}
+
 func (d *InfluxDashboard) GetRandomClusterId() string {
-	return fmt.Sprintf("%d", rand.Intn(d.ClustersCount))
+	return fmt.Sprintf("%d", rand.Intn(d.ClustersCount-1)+1)
 }

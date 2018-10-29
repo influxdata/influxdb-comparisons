@@ -28,9 +28,9 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 			Dial: func(addr string) (net.Conn, error) {
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
-			MaxIdleConnDuration: 1 * time.Hour,
-			ReadTimeout:         readTimeout,
-			WriteTimeout:        writeTimeout,
+			MaxIdleConnDuration: idleConnectionTimeout,
+			ReadTimeout: readTimeout,
+			WriteTimeout: writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),

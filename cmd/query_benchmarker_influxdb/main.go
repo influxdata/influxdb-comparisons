@@ -64,6 +64,8 @@ var (
 	initialHttpClients     int
 	trendSamples           int
 	movingAverageInterval  time.Duration
+	clientIndex            int
+	scanFinished           bool
 )
 
 // Global vars:
@@ -125,6 +127,7 @@ func init() {
 	flag.IntVar(&initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
 	flag.IntVar(&trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
 	flag.DurationVar(&movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
+	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 
 	flag.Parse()
 
@@ -133,6 +136,10 @@ func init() {
 		log.Fatal("missing 'urls' flag")
 	}
 	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+
+	if workers < 1 {
+		log.Fatalf("invalid number of workers: %d\n", workers)
+	}
 
 	batchSize = 1
 	if useCase == Dashboard {
@@ -199,7 +206,7 @@ func init() {
 
 	if httpClientType == "fast" || httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", httpClientType)
-		UseFastHttp = httpClientType == "fast"
+		useFastHttp = httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", httpClientType)
 	}
@@ -273,12 +280,12 @@ func main() {
 	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
-		daemonUrl := daemonUrls[i%len(daemonUrls)]
+		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", i))
 	}
-	fmt.Printf("Started querying with %d workers\n", workers)
+	log.Printf("Started querying with %d workers\n", workers)
 
 	wallStart := time.Now()
 
@@ -322,33 +329,50 @@ loop:
 			if gradualWorkersIncrease && !isBurnIn {
 				for i := 0; i < workersIncreaseStep; i++ {
 					//fmt.Printf("Adding worker %d\n", workers)
-					daemonUrl := daemonUrls[workers%len(daemonUrls)]
+					daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
 					workersGroup.Add(1)
-					w := CachedOrNewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
 					go processQueries(w, telemetryChanPoints, fmt.Sprintf("%d", workers))
 					workers++
 				}
-				fmt.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
+				log.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
-			if !responseTimeLimitReached && responseTimeLimit.Nanoseconds() > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
+			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				scanClose <- 1
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
 				if item == nil {
-					fmt.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+					log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
 					reponseTimeLimitWorkers = workers
 				} else {
-					fmt.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+					log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
 					reponseTimeLimitWorkers = item.item
 				}
 			}
 		case <-timeoutTicker.C:
 			if timeLimit && !timeoutReached {
 				timeoutReached = true
-				fmt.Println("Time out reached")
-				scanClose <- 1
+				log.Println("Time out reached")
+				if !scanFinished {
+					scanClose <- 1
+				} else {
+					log.Println("Scan already finished")
+				}
+				if responseTimeLimit > 0 {
+					//still try to find response time limit
+					respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
+					item := movingAverageStat.FindHistoryItemBelow(respLimitms)
+					if item == nil {
+						log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
+						reponseTimeLimitWorkers = workers
+					} else {
+						log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
+						reponseTimeLimitWorkers = item.item
+					}
+
+				}
 			}
 		}
 
@@ -360,7 +384,7 @@ loop:
 
 	// Block for workers to finish sending requests, closing the stats
 	// channel when done:
-	fmt.Println("Waiting for workers to finish")
+	log.Println("Waiting for workers to finish")
 	waitCh := make(chan int)
 	waitFinished := false
 	go func() {
@@ -376,7 +400,7 @@ waitLoop:
 			waitTimer.Stop()
 			break waitLoop
 		case <-waitTimer.C:
-			fmt.Println("Waiting for workers timeout")
+			log.Println("Waiting for workers timeout")
 			break waitLoop
 		}
 	}
@@ -526,6 +550,7 @@ loop:
 		}
 
 	}
+	scanFinished = true
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
@@ -701,7 +726,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving mean trend: %8.2fms + %3.3f * x, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.trendAvg.intercept, movingAverageStat.trendAvg.slope, movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), moving mean: %8.2fms, moving median: %8.2fms, max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, maxRate, v.Count, v.Sum/1e3)
 		if err != nil {
 			log.Fatal(err)
 		}
