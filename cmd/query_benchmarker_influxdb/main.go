@@ -658,6 +658,7 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddFloat64Field("mean", statMapping[allQueriesLabel].Mean)
 				p.AddFloat64Field("moving_mean", movingAverageStat.Avg())
 				p.AddIntField("actual_workers", workers)
+				p.AddInt64Field("queries", int64(i))
 				telemetrySink <- p
 			}
 		}
