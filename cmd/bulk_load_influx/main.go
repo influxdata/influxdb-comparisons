@@ -559,6 +559,8 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			gvStart = time.Now()
 		}
 
+		backOff := false
+
 		// Write the batch: try until backoff is not needed.
 		if doLoad {
 			var err error
@@ -577,6 +579,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				}
 
 				if err == BackoffError {
+					backOff = true
 					backoffSrc <- true
 					time.Sleep(backoff)
 				} else {
@@ -596,6 +599,11 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		// Return the batch buffer to the pool.
 		batch.Reset()
 		bufPool.Put(batch)
+
+		// Backoff means no data was written - nothing to report or calculate
+		if backOff {
+			continue
+		}
 
 		// Get current batch size
 		currentBatchSize := int32(batchSize)
@@ -776,13 +784,14 @@ func processStats(telemetrySink chan *report.Point) {
 			// Report telemetry, if applicable:
 			if telemetrySink != nil {
 				p := report.GetPointFromGlobalPool()
-				p.Init("load_benchmarks_telemetry", now.UnixNano())
+				p.Init("benchmarks_telemetry", now.UnixNano())
 				for _, tagpair := range reportTags {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
+				p.AddTag("client_type", "load")
+				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Mean)
+				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Avg())
 				p.AddIntField("actual_workers", workers)
-				p.AddFloat64Field("mean", statMapping["*"].Mean)
-				p.AddFloat64Field("moving_mean", movingAverageStat.Avg())
 				telemetrySink <- p
 			}
 		}
