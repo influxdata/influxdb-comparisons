@@ -329,7 +329,7 @@ func main() {
 			BackingOffChan: backingOffChans[i],
 			BackingOffDone: backingOffDones[i],
 		}
-		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], nil /*telemetryChanPoints*/, fmt.Sprintf("%d", i))
+		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], telemetryChanPoints, fmt.Sprintf("%d", i))
 		go func(w int) {
 			backingOffSecs[w] = processBackoffMessages(w, backingOffChans[w], backingOffDones[w])
 		}(i)
