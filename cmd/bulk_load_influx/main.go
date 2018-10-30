@@ -759,7 +759,7 @@ func processStats(telemetrySink chan *report.Point) {
 	for stat := range statChan {
 		now := time.Now()
 		if lastRefresh.Nanosecond() == 0 {
-			log.Printf("First statitic report received at %v", now)
+			log.Printf("First statistic report received at %v", now)
 			lastRefresh = now
 		}
 
