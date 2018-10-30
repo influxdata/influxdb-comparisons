@@ -542,7 +542,6 @@ outer:
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	var batchesSeen int64
-	var backOffsSeen int64
 
 	// Ingestion rate control vars
 	var gvCount float64
@@ -581,10 +580,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				if err == BackoffError {
 					backOff = true
 					backoffSrc <- true
-					if backOffsSeen == 0 {
-						log.Print("First backoff received")
-					}
-					backOffsSeen++
 					// Report telemetry, if applicable:
 					if telemetrySink != nil {
 						p := report.GetPointFromGlobalPool()
@@ -693,7 +688,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 			last = true
 		} else if !this && last {
 			took := time.Now().Sub(start)
-			fmt.Printf("[worker %d] backoff took %.02fsec\n", workerId, took.Seconds())
+			log.Printf("[worker %d] backoff took %.02fsec\n", workerId, took.Seconds())
 			totalBackoffSecs += took.Seconds()
 			last = false
 			start = time.Now()
