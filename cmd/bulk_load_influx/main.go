@@ -277,8 +277,7 @@ func main() {
 
 	statPool = sync.Pool{
 		New: func() interface{} {
-			return &Stat{
-			}
+			return &Stat{}
 		},
 	}
 
@@ -330,7 +329,7 @@ func main() {
 			BackingOffChan: backingOffChans[i],
 			BackingOffDone: backingOffDones[i],
 		}
-		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], nil/*telemetryChanPoints*/, fmt.Sprintf("%d", i))
+		go processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[i], backingOffDones[i], nil /*telemetryChanPoints*/, fmt.Sprintf("%d", i))
 		go func(w int) {
 			backingOffSecs[w] = processBackoffMessages(w, backingOffChans[w], backingOffDones[w])
 		}(i)
@@ -810,7 +809,7 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddTag("client_type", "load")
 				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Mean)
 				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Avg())
-				p.AddIntField("actual_workers", workers)
+				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
 		}
