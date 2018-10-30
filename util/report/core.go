@@ -251,7 +251,7 @@ func (c *Collector) SendBatch() error {
 	resp := fasthttp.AcquireResponse()
 	err := c.client.Do(req, resp)
 
-	if resp.StatusCode() != fasthttp.StatusNoContent {
+	if resp.StatusCode() != fasthttp.StatusNoContent && resp.StatusCode() != fasthttp.StatusOK {
 		return fmt.Errorf("collector error: unexpected status code %d: %s", resp.StatusCode(), resp.Body())
 	}
 

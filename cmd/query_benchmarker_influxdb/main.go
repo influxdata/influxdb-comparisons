@@ -246,7 +246,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error creating temetry db: %v\n", err)
 		}
-		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
+		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 
 	// Launch the stats processor:
@@ -645,7 +645,7 @@ func processStats(telemetrySink chan *report.Point) {
 
 		i++
 
-		if lastRefresh.Second() == 0 || now.Sub(lastRefresh).Seconds() >= 1 {
+		if lastRefresh.Nanosecond() == 0 || now.Sub(lastRefresh).Seconds() >= 1.0 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 			// Report telemetry, if applicable:
@@ -658,7 +658,8 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddTag("client_type", "query")
 				p.AddFloat64Field("query_response_time_mean", statMapping[allQueriesLabel].Mean)
 				p.AddFloat64Field("query_response_time_moving_mean", movingAverageStat.Avg())
-				p.AddIntField("actual_workers", workers)
+				p.AddIntField("query_workers", workers)
+				p.AddInt64Field("queries", int64(i))
 				telemetrySink <- p
 			}
 		}

@@ -277,8 +277,7 @@ func main() {
 
 	statPool = sync.Pool{
 		New: func() interface{} {
-			return &Stat{
-			}
+			return &Stat{}
 		},
 	}
 
@@ -809,7 +808,7 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddTag("client_type", "load")
 				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Mean)
 				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Avg())
-				p.AddIntField("actual_workers", workers)
+				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
 		}
