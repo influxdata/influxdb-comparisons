@@ -651,12 +651,13 @@ func processStats(telemetrySink chan *report.Point) {
 			// Report telemetry, if applicable:
 			if telemetrySink != nil {
 				p := report.GetPointFromGlobalPool()
-				p.Init("query_benchmarks_telemetry", now.UnixNano())
+				p.Init("benchmarks_telemetry", now.UnixNano())
 				for _, tagpair := range reportTags {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
-				p.AddFloat64Field("mean", statMapping[allQueriesLabel].Mean)
-				p.AddFloat64Field("moving_mean", movingAverageStat.Avg())
+				p.AddTag("client_type", "query")
+				p.AddFloat64Field("query_response_time_mean", statMapping[allQueriesLabel].Mean)
+				p.AddFloat64Field("query_response_time_moving_mean", movingAverageStat.Avg())
 				p.AddIntField("actual_workers", workers)
 				telemetrySink <- p
 			}
