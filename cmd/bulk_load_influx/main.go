@@ -548,6 +548,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	var gvCount float64
 	var gvStart time.Time
 	var ingestionRateDebt int64
+	var wasBackOff bool
 
 	for batch := range batchChan {
 		batchesSeen++
@@ -581,6 +582,18 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				if err == BackoffError {
 					backOff = true
 					backoffSrc <- true
+					// Report telemetry, if applicable:
+					if telemetrySink != nil {
+						p := report.GetPointFromGlobalPool()
+						p.Init("benchmarks_telemetry", ts)
+						for _, tagpair := range reportTags {
+							p.AddTag(tagpair[0], tagpair[1])
+						}
+						p.AddTag("client_type", "load")
+						p.AddTag("worker", telemetryWorkerLabel)
+						p.AddBoolField("backoff", true)
+						telemetrySink <- p
+					}
 					time.Sleep(backoff)
 				} else {
 					backoffSrc <- false
@@ -602,6 +615,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 
 		// Backoff means no data was written - nothing to report or calculate
 		if backOff {
+			wasBackOff = true
 			continue
 		}
 
@@ -635,8 +649,10 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
-					ingestionRateDebt = remainingMs
-					atomic.StoreInt32(&speedUpRequest, 1)
+					if !wasBackOff {
+						ingestionRateDebt = remainingMs
+						atomic.StoreInt32(&speedUpRequest, 1)
+					}
 				}
 				if ingestionRateDebt != 0 {
 					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
@@ -649,6 +665,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				reportStat = false
 			}
 		}
+
+		// Clear
+		wasBackOff = false
 
 		// Report sent batch statistic
 		if reportStat {
