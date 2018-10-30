@@ -695,7 +695,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 			start = time.Now()
 		}
 	}
-	log.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
+	fmt.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
 	dst <- struct{}{}
 	return totalBackoffSecs
 }
