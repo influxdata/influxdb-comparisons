@@ -542,6 +542,7 @@ outer:
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *report.Point, telemetryWorkerLabel string) {
 	var batchesSeen int64
+	var backOffsSeen int64
 
 	// Ingestion rate control vars
 	var gvCount float64
@@ -554,12 +555,11 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 
 		//var bodySize int
 		ts := time.Now().UnixNano()
+		backOff := false
 
 		if ingestRateLimit > 0 && gvStart.Second() == 0 {
 			gvStart = time.Now()
 		}
-
-		backOff := false
 
 		// Write the batch: try until backoff is not needed.
 		if doLoad {
@@ -581,6 +581,10 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				if err == BackoffError {
 					backOff = true
 					backoffSrc <- true
+					if backOffsSeen == 0 {
+						log.Print("First backoff received")
+					}
+					backOffsSeen++
 					// Report telemetry, if applicable:
 					if telemetrySink != nil {
 						p := report.GetPointFromGlobalPool()
@@ -785,7 +789,7 @@ func processStats(telemetrySink chan *report.Point) {
 	for stat := range statChan {
 		now := time.Now()
 		if lastRefresh.Nanosecond() == 0 {
-			log.Printf("First statistic report received at %v", now)
+			log.Print("First statistic report received")
 			lastRefresh = now
 		}
 
