@@ -246,7 +246,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error creating temetry db: %v\n", err)
 		}
-		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, burnIn)
+		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 
 	// Launch the stats processor:
