@@ -670,7 +670,8 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		// Report sent batch statistic
 		if reportStat {
 			stat := statPool.Get().(*Stat)
-			stat.Value = valuesWritten / lagMillis * 1e3
+			stat.Label = []byte(telemetryWorkerLabel)
+			stat.Value = valuesWritten
 			statChan <- stat
 		}
 	}
@@ -807,7 +808,7 @@ func processStats(telemetrySink chan *report.Point) {
 				}
 				p.AddTag("client_type", "load")
 				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Mean)
-				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Avg())
+				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Rate())
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
