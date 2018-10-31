@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"sync"
+	"time"
 
 	"crypto/tls"
 	"github.com/valyala/fasthttp"
@@ -191,6 +192,7 @@ func NewCollector(influxhost, dbname, userName, password string) *Collector {
 			TLSConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
+			MaxIdleConnDuration: 90 * time.Second,
 		},
 		baseUri:          influxhost,
 		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
