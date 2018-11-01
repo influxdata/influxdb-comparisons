@@ -501,7 +501,7 @@ outer:
 			if ingestRateLimit > 0 {
 				if itemsPerBatch < maxBatchSize {
 					hint := atomic.LoadInt32(&speedUpRequest)
-					if hint > 0 {
+					if hint > int32(workers * 2) { // we should wait for more requests (and this is just a magic number)
 						atomic.StoreInt32(&speedUpRequest, 0)
 						itemsPerBatch += int(float32(maxBatchSize) * 0.10)
 						if itemsPerBatch > maxBatchSize {
@@ -549,7 +549,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	// Ingestion rate control vars
 	var gvCount float64
 	var gvStart time.Time
-	var ingestionRateDebt int64
 	var wasBackOff bool
 
 	for batch := range batchChan {
@@ -630,33 +629,22 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
 				elapsed := now.Sub(gvStart)
-				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + ingestionRateDebt
-				ingestionRateDebt = 0
+				overdelay := (gvCount - ingestionRateGran) / (ingestionRateGran / float64(RateControlGranularity))
+				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + int64(overdelay)
 				valuesWritten = gvCount
 				lagMillis = float64(elapsed.Nanoseconds() / 1e6)
 				if remainingMs > 0 {
 					time.Sleep(time.Duration(remainingMs) * time.Millisecond)
 					gvStart = time.Now()
 					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6 // 'now' was before sleep
-					if realDelay != remainingMs {
-						ingestionRateDebt = -(realDelay - remainingMs)
-					}
 					lagMillis += float64(realDelay)
-					gvCount -= ingestionRateGran
 				} else {
 					gvStart = now
 					if !wasBackOff {
-						ingestionRateDebt = remainingMs
-						atomic.StoreInt32(&speedUpRequest, 1)
-					}
-					gvCount = 0
-				}
-				if ingestionRateDebt != 0 {
-					ingestionRateDebt += int64(float64(ingestionRateDebt) * float64(0.05))
-					if ingestionRateDebt < -RateControlGranularity { // trim to monitored period
-						ingestionRateDebt = -RateControlGranularity
+						atomic.AddInt32(&speedUpRequest, 1)
 					}
 				}
+				gvCount = 0
 			} else {
 				reportStat = false
 			}
