@@ -107,12 +107,16 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
 	c := 0
+	first := now
 
 	for _, ts := range m.stats {
 		if ts.timestamp.After(last) {
 			sum += ts.value
 			c++
 			newStats = append(newStats, ts)
+			if ts.timestamp.Before(first) {
+				first = ts.timestamp
+			}
 		}
 	}
 	m.stats = nil
@@ -129,7 +133,7 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 	}
 
 	m.lastAvg = sum / float64(c)
-	m.lastRate = sum / m.maxDuraton.Seconds()
+	m.lastRate = sum / now.Sub(first).Seconds()
 	m.statHistory = append(m.statHistory, &HistoryItem{m.lastRate, workers})
 	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian
