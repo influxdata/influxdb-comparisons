@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"time"
@@ -78,7 +77,7 @@ type TimedStatGroup struct {
 	stats       []timedStat
 	lastAvg     float64
 	lastMedian  float64
-	lastRate  float64
+	lastRate    float64
 	trendAvg    *TrendStat
 	statHistory []*HistoryItem
 }
@@ -135,27 +134,9 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 
 	m.lastAvg = sum / float64(c)
 	m.lastRate = sum / now.Sub(first).Seconds()
-	m.statHistory = append(m.statHistory, &HistoryItem{m.lastAvg, workers})
+	m.statHistory = append(m.statHistory, &HistoryItem{m.lastRate, workers})
 	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian
-}
-
-func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
-	item := -1
-	for i := len(m.statHistory) - 1; i >= 0; i-- {
-		if m.statHistory[i].value < val {
-			item = i + 1
-			if item == len(m.statHistory) {
-				log.Printf("FindHistoryItemBelow: Adjusting returned value from %d to %d\n", item, i)
-				item = i
-			}
-			break
-		}
-	}
-	if item > -1 {
-		return m.statHistory[item]
-	}
-	return nil
 }
 
 type TrendStat struct {
