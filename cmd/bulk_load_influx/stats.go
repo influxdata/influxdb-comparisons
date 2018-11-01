@@ -78,6 +78,7 @@ type TimedStatGroup struct {
 	stats       []timedStat
 	lastAvg     float64
 	lastMedian  float64
+	lastRate  float64
 	trendAvg    *TrendStat
 	statHistory []*HistoryItem
 }
@@ -94,6 +95,10 @@ func (m *TimedStatGroup) Avg() float64 {
 	return m.lastAvg
 }
 
+func (m *TimedStatGroup) Rate() float64 {
+	return m.lastRate
+}
+
 func (m *TimedStatGroup) Median() float64 {
 	return m.lastMedian
 }
@@ -103,12 +108,16 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 	last := now.Add(-m.maxDuraton)
 	sum := float64(0)
 	c := 0
+	first := now
 
 	for _, ts := range m.stats {
 		if ts.timestamp.After(last) {
 			sum += ts.value
 			c++
 			newStats = append(newStats, ts)
+			if ts.timestamp.Before(first) {
+				first = ts.timestamp
+			}
 		}
 	}
 	m.stats = nil
@@ -125,6 +134,7 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 	}
 
 	m.lastAvg = sum / float64(c)
+	m.lastRate = sum / now.Sub(first).Seconds()
 	m.statHistory = append(m.statHistory, &HistoryItem{m.lastAvg, workers})
 	m.trendAvg.Add(m.lastAvg)
 	return m.lastAvg, m.lastMedian

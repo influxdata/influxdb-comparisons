@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -36,7 +37,7 @@ import (
 )
 
 // TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.636 // dashboard use-case, original value was: 11.2222
+const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 11.2222
 
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
@@ -556,7 +557,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		ts := time.Now().UnixNano()
 		backOff := false
 
-		if ingestRateLimit > 0 && gvStart.Second() == 0 {
+		if ingestRateLimit > 0 && gvStart.Nanosecond() == 0 {
 			gvStart = time.Now()
 		}
 
@@ -670,7 +671,8 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		// Report sent batch statistic
 		if reportStat {
 			stat := statPool.Get().(*Stat)
-			stat.Value = valuesWritten / lagMillis * 1e3
+			stat.Label = []byte(telemetryWorkerLabel)
+			stat.Value = valuesWritten
 			statChan <- stat
 		}
 	}
@@ -773,6 +775,8 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	return ret, nil
 }
 
+var firstStat time.Time
+
 func processStats(telemetrySink chan *report.Point) {
 
 	statMapping = statsMap{
@@ -786,6 +790,7 @@ func processStats(telemetrySink chan *report.Point) {
 		if lastRefresh.Nanosecond() == 0 {
 			log.Print("First statistic report received")
 			lastRefresh = now
+			firstStat = now
 		}
 
 		movingAverageStat.Push(now, stat.Value)
@@ -806,8 +811,8 @@ func processStats(telemetrySink chan *report.Point) {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
 				p.AddTag("client_type", "load")
-				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Mean)
-				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Avg())
+				p.AddFloat64Field("ingest_rate_mean", /*statMapping["*"].Mean*/ statMapping["*"].Sum / now.Sub(firstStat).Seconds())
+				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Rate())
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
@@ -855,7 +860,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, v.Mean, movingAverageStat.Avg(), movingAverageStat.Median(), v.Max, v.Count, v.Sum/1e3)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %f \n", paddedKey, /*v.Min*/math.NaN(), /*v.Mean*/v.Sum / time.Now().Sub(firstStat).Seconds(), movingAverageStat.Rate(), /*movingAverageStat.Median()*/math.NaN(), /*v.Max*/math.NaN(), v.Count, v.Sum)
 		if err != nil {
 			log.Fatal(err)
 		}
