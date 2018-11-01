@@ -81,7 +81,7 @@ var (
 // Global vars
 var (
 	bufPool               sync.Pool
-	batchChan             chan *bytes.Buffer
+	batchChan             chan batch
 	inputDone             chan struct{}
 	workersGroup          sync.WaitGroup
 	backingOffChans       []chan bool
@@ -97,7 +97,6 @@ var (
 	ingestionRateGran     float64
 	endedPrematurely      bool
 	prematureEndReason    string
-	volatileBatchSize     int32
 	maxBatchSize          int
 	speedUpRequest        int32
 	statMapping           statsMap
@@ -115,6 +114,11 @@ var consistencyChoices = map[string]struct{}{
 }
 
 type statsMap map[string]*StatGroup
+
+type batch struct {
+	Buffer *bytes.Buffer
+	Items  int
+}
 
 // Parse args:
 func init() {
@@ -201,7 +205,6 @@ func init() {
 			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
-		volatileBatchSize = int32(batchSize)
 	} else {
 		log.Printf("Ingestion rate control is off")
 	}
@@ -284,7 +287,7 @@ func main() {
 
 	movingAverageStat = NewTimedStatGroup(movingAverageInterval, trendSamples)
 
-	batchChan = make(chan *bytes.Buffer, workers)
+	batchChan = make(chan batch, workers)
 	inputDone = make(chan struct{})
 	syncChanDone = make(chan int)
 
@@ -485,7 +488,7 @@ outer:
 			batchItemCount = 0
 
 			bytesRead += int64(buf.Len())
-			batchChan <- buf
+			batchChan <- batch{ buf, n }
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
 
@@ -504,8 +507,7 @@ outer:
 						if itemsPerBatch > maxBatchSize {
 							itemsPerBatch = maxBatchSize
 						}
-						atomic.StoreInt32(&volatileBatchSize, int32(itemsPerBatch))
-						fmt.Printf("Increased batch size to %d\n", itemsPerBatch)
+						log.Printf("Increased batch size to %d\n", itemsPerBatch)
 					}
 				}
 			}
@@ -523,7 +525,7 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- buf
+		batchChan <- batch { buf, n }
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -567,7 +569,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			for {
 				if useGzip {
 					compressedBatch := bufPool.Get().(*bytes.Buffer)
-					fasthttp.WriteGzip(compressedBatch, batch.Bytes())
+					fasthttp.WriteGzip(compressedBatch, batch.Buffer.Bytes())
 					//bodySize = len(compressedBatch.Bytes())
 					_, err = w.WriteLineProtocol(compressedBatch.Bytes(), true)
 					// Return the compressed batch buffer to the pool.
@@ -575,7 +577,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					bufPool.Put(compressedBatch)
 				} else {
 					//bodySize = len(batch.Bytes())
-					_, err = w.WriteLineProtocol(batch.Bytes(), false)
+					_, err = w.WriteLineProtocol(batch.Buffer.Bytes(), false)
 				}
 
 				if err == BackoffError {
@@ -609,8 +611,8 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		lagMillis := float64(time.Now().UnixNano()-ts) / 1e6
 
 		// Return the batch buffer to the pool.
-		batch.Reset()
-		bufPool.Put(batch)
+		batch.Buffer.Reset()
+		bufPool.Put(batch.Buffer)
 
 		// Backoff means no data was written - nothing to report or calculate
 		if backOff {
@@ -618,19 +620,13 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			continue
 		}
 
-		// Get current batch size
-		currentBatchSize := int32(batchSize)
-		if ingestRateLimit > 0 {
-			currentBatchSize = atomic.LoadInt32(&volatileBatchSize)
-		}
-
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(currentBatchSize) * ValuesPerMeasurement
+		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
 
 		// Apply ingest rate control if set
 		if ingestRateLimit > 0 {
-			gvCount += float64(currentBatchSize) * ValuesPerMeasurement // TODO last batch may not be full batchSize
+			gvCount += valuesWritten
 			if gvCount >= ingestionRateGran {
 				now := time.Now()
 				elapsed := now.Sub(gvStart)
@@ -639,27 +635,28 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				valuesWritten = gvCount
 				lagMillis = float64(elapsed.Nanoseconds() / 1e6)
 				if remainingMs > 0 {
-					time.Sleep(time.Duration(remainingMs) * time.Millisecond) // TODO discount 5 ms for syscalls (sleep & wakeup) overhead?
+					time.Sleep(time.Duration(remainingMs) * time.Millisecond)
 					gvStart = time.Now()
-					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6
+					realDelay := gvStart.Sub(now).Nanoseconds() / 1e6 // 'now' was before sleep
 					if realDelay != remainingMs {
-						ingestionRateDebt = -(realDelay - remainingMs) // TODO how about spurios wakeups?
+						ingestionRateDebt = -(realDelay - remainingMs)
 					}
 					lagMillis += float64(realDelay)
+					gvCount -= ingestionRateGran
 				} else {
 					gvStart = now
 					if !wasBackOff {
 						ingestionRateDebt = remainingMs
 						atomic.StoreInt32(&speedUpRequest, 1)
 					}
+					gvCount = 0
 				}
 				if ingestionRateDebt != 0 {
-					ingestionRateDebt = int64(float64(ingestionRateDebt) * float64(1.05))
+					ingestionRateDebt += int64(float64(ingestionRateDebt) * float64(0.05))
 					if ingestionRateDebt < -RateControlGranularity { // trim to monitored period
 						ingestionRateDebt = -RateControlGranularity
 					}
 				}
-				gvCount -= ingestionRateGran
 			} else {
 				reportStat = false
 			}
