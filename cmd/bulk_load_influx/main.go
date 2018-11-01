@@ -811,7 +811,7 @@ func processStats(telemetrySink chan *report.Point) {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
 				p.AddTag("client_type", "load")
-				p.AddFloat64Field("ingest_rate_mean", /*statMapping["*"].Mean*/ statMapping["*"].Sum / now.Sub(firstStat).Seconds())
+				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Sum / now.Sub(firstStat).Seconds()) /*statMapping["*"].Mean*/
 				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Rate())
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
@@ -860,7 +860,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %f \n", paddedKey, /*v.Min*/math.NaN(), /*v.Mean*/v.Sum / time.Now().Sub(firstStat).Seconds(), movingAverageStat.Rate(), /*movingAverageStat.Median()*/math.NaN(), /*v.Max*/math.NaN(), v.Count, v.Sum)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %f \n", paddedKey, math.NaN(), v.Sum / time.Now().Sub(firstStat).Seconds(), movingAverageStat.Rate(), math.NaN(), math.NaN(), v.Count, v.Sum)
 		if err != nil {
 			log.Fatal(err)
 		}
