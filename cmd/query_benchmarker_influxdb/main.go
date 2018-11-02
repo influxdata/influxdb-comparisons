@@ -297,7 +297,8 @@ func main() {
 		//we need a time limit to have timer set, so set some  long time
 		testDuration = time.Hour * 24
 	}
-	timeoutTicker := time.NewTimer(testDuration)
+	tickerQuaters := 0
+	timeoutTicker := time.NewTimer(testDuration / 4)
 	reponseTimeLimitWorkers := 0
 
 loop:
@@ -332,7 +333,13 @@ loop:
 				}
 			}
 		case <-timeoutTicker.C:
-			if timeLimit && !timeoutReached {
+			tickerQuaters++
+			if gradualWorkersIncrease && !responseTimeLimitReached && responseTimeLimit > 0 && !timeoutReached && tickerQuaters > 1 {
+				//if we didn't reached response time limit in 50% of time limit, double workers increase step
+				workersIncreaseStep = 2 * workersIncreaseStep
+				log.Printf("Response time limit has not reached yet. Increasing workers increase step 2x to %d\n", workersIncreaseStep)
+			}
+			if timeLimit && tickerQuaters > 3 && !timeoutReached {
 				timeoutReached = true
 				log.Println("Time out reached")
 				if !scanFinished {
@@ -354,6 +361,7 @@ loop:
 
 				}
 			}
+
 		}
 
 	}
