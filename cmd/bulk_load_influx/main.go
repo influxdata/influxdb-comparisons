@@ -392,7 +392,6 @@ func main() {
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
-		reportTags = append(reportTags, [2]string{"replication_factor", strconv.Itoa(int(replicationFactor))})
 		reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
 		reportTags = append(reportTags, [2]string{"consistency", consistency})
 		if endedPrematurely {
@@ -488,7 +487,7 @@ outer:
 			batchItemCount = 0
 
 			bytesRead += int64(buf.Len())
-			batchChan <- batch{ buf, n }
+			batchChan <- batch{buf, n}
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
 
@@ -501,7 +500,7 @@ outer:
 			if ingestRateLimit > 0 {
 				if itemsPerBatch < maxBatchSize {
 					hint := atomic.LoadInt32(&speedUpRequest)
-					if hint > int32(workers * 2) { // we should wait for more requests (and this is just a magic number)
+					if hint > int32(workers*2) { // we should wait for more requests (and this is just a magic number)
 						atomic.StoreInt32(&speedUpRequest, 0)
 						itemsPerBatch += int(float32(maxBatchSize) * 0.10)
 						if itemsPerBatch > maxBatchSize {
@@ -525,7 +524,7 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- batch { buf, n }
+		batchChan <- batch{buf, n}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -796,7 +795,7 @@ func processStats(telemetrySink chan *report.Point) {
 					p.AddTag(tagpair[0], tagpair[1])
 				}
 				p.AddTag("client_type", "load")
-				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Sum / now.Sub(firstStat).Seconds()) /*statMapping["*"].Mean*/
+				p.AddFloat64Field("ingest_rate_mean", statMapping["*"].Sum/now.Sub(firstStat).Seconds()) /*statMapping["*"].Mean*/
 				p.AddFloat64Field("ingest_rate_moving_mean", movingAverageStat.Rate())
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
@@ -845,7 +844,7 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %f \n", paddedKey, math.NaN(), v.Sum / time.Now().Sub(firstStat).Seconds(), movingAverageStat.Rate(), math.NaN(), math.NaN(), v.Count, v.Sum)
+		_, err := fmt.Fprintf(w, "%s : min: %8.2f/s, mean: %8.2f/s, moving mean: %8.2f/s, moving median: %8.2f/s, max: %7.2f/s, count: %8d, sum: %f \n", paddedKey, math.NaN(), v.Sum/time.Now().Sub(firstStat).Seconds(), movingAverageStat.Rate(), math.NaN(), math.NaN(), v.Count, v.Sum)
 		if err != nil {
 			log.Fatal(err)
 		}
