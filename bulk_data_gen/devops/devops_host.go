@@ -141,7 +141,7 @@ func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
 	sm := []SimulatedMeasurement{
 		NewCPUMeasurement(start),
 		NewDiskIOMeasurement(start),
-		NewDiskMeasurement(start),
+		NewDiskMeasurement(start, 0),
 		NewKernelMeasurement(start),
 		NewMemMeasurement(start),
 		NewNetMeasurement(start),

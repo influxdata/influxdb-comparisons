@@ -30,7 +30,7 @@ func (d *InfluxDashboardHttpRequestDuration) Dispatch(i int) bulkQuerygen.Query 
 
 	var query string
 	//SELECT non_negative_derivative(percentile("writeReqDurationNs", 99)) /  non_negative_derivative(max(writeReq)) FROM "telegraf"."default"."influxdb_httpd" WHERE "cluster_id" = :Cluster_Id: AND time > :dashboardTime: GROUP BY host, time(1m)
-	query = fmt.Sprintf("SELECT non_negative_derivative(percentile(\"uptime_in_seconds\", 99)) / non_negative_derivative(max(total_connections_received)) FROM redis WHERE cluster_id = '%s' and time >= '%s' and time < '%s' group by hostname, time(1m)", d.GetRandomClusterId(), interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT non_negative_derivative(percentile(\"uptime_in_seconds\", 99)) / non_negative_derivative(max(total_connections_received)) FROM redis WHERE cluster_id = '%s' and %s group by hostname, time(1m)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) HTTP Request Duration (99th %%), rand cluster, %s by host, 1m", d.language.String(), interval.Duration())
 

@@ -30,7 +30,7 @@ func (d *InfluxDashboardKapaLoad) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT "load5", "load15", "load1" FROM "telegraf"."autogen"."system" WHERE time > :dashboardTime: AND "host"='kapacitor'
-	query = fmt.Sprintf("SELECT \"load5\", \"load15\", \"load1\" FROM system WHERE hostname='kapacitor' and time >= '%s' and time < '%s'", interval.StartString(), interval.EndString())
+	query = fmt.Sprintf("SELECT \"load5\", \"load15\", \"load1\" FROM system WHERE hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) kapa load 1,5,15 in %s", d.language.String(), interval.Duration())
 

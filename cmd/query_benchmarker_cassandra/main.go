@@ -250,7 +250,7 @@ func main() {
 			},
 			BurnIn: int64(burnIn),
 		}
-		err = report.ReportQueryResult(reportParams, reportQueryStat.Min, reportQueryStat.Mean, reportQueryStat.Max, reportQueryStat.Count, wallTook)
+		err = report.ReportQueryResult(reportParams, "all queries", reportQueryStat.Min, reportQueryStat.Mean, reportQueryStat.Max, reportQueryStat.Count, wallTook)
 
 		if err != nil {
 			log.Fatal(err)

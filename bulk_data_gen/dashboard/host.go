@@ -11,6 +11,7 @@ import (
 const NHostSims = 11
 
 var ClusterSizes = []int{5, 6, 7, 8, 9, 10, 11, 12, 13}
+var ClusterSize = 10
 
 var ClusterIdTagkey = []byte("cluster_id")
 
@@ -27,7 +28,7 @@ func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
 	sm := []SimulatedMeasurement{
 		devops.NewCPUMeasurement(start),
 		devops.NewDiskIOMeasurement(start),
-		devops.NewDiskMeasurement(start),
+		devops.NewDiskMeasurement(start, 1),
 		devops.NewKernelMeasurement(start),
 		devops.NewMemMeasurement(start),
 		devops.NewNetMeasurement(start),
@@ -45,7 +46,7 @@ func NewHostMeasurements(start time.Time) []SimulatedMeasurement {
 }
 
 var (
-	curentClusterSize int
+	currentClusterSize int
 	clusterId         int
 	currentHostIndex  int
 )
@@ -53,19 +54,19 @@ var (
 func NewHost(i int, offset int, start time.Time) Host {
 	var hostname []byte
 	if i > 0 {
-		if curentClusterSize == 0 || currentHostIndex == curentClusterSize {
+		if currentClusterSize == 0 || currentHostIndex == currentClusterSize {
 			currentHostIndex = 0
-			curentClusterSize = ClusterSizes[rand.Intn(len(ClusterSizes))]
+			currentClusterSize = ClusterSize //ClusterSizes[rand.Intn(len(ClusterSizes))]
 			clusterId++
 		}
 
 		if currentHostIndex < 3 {
-			hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1+offset))
+			hostname = []byte(fmt.Sprintf("meta_%d", currentHostIndex+1/*+offset*/)) // hostname is 1-indexed in its cluster
 		} else {
-			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2+offset))
+			hostname = []byte(fmt.Sprintf("data_%d", currentHostIndex-2/*+offset*/)) // hostname is 1-indexed in its cluster
 		}
 	} else {
-		hostname = []byte(fmt.Sprintf("kapacitor_%d", 1+offset))
+		hostname = []byte(fmt.Sprintf("kapacitor_%d", 1/*+offset*/)) // hostname is 1-indexed in its cluster
 	}
 	sm := NewHostMeasurements(start)
 
@@ -74,6 +75,7 @@ func NewHost(i int, offset int, start time.Time) Host {
 	serviceId := rand.Int63n(devops.MachineServiceChoices)
 	serviceVersionId := rand.Int63n(devops.MachineServiceVersionChoices)
 	serviceEnvironment := RandChoice(devops.MachineServiceEnvironmentChoices)
+	clusterOffset := offset / ClusterSize
 
 	h := Host{
 		// Tag Values that are static throughout the life of a Host:
@@ -86,7 +88,7 @@ func NewHost(i int, offset int, start time.Time) Host {
 		Service:            []byte(fmt.Sprintf("%d", serviceId)),
 		ServiceVersion:     []byte(fmt.Sprintf("%d", serviceVersionId)),
 		ServiceEnvironment: serviceEnvironment,
-		ClusterId:          []byte(fmt.Sprintf("%d", clusterId)),
+		ClusterId:          []byte(fmt.Sprintf("%d", clusterId+clusterOffset)),
 
 		SimulatedMeasurements: sm,
 	}

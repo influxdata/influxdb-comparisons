@@ -147,6 +147,7 @@ var (
 	timestampEnd    time.Time
 	queryInterval   time.Duration
 	timeWindowShift time.Duration
+	queryIntervalType string
 
 	seed  int64
 	debug int
@@ -184,6 +185,7 @@ func init() {
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
 	flag.DurationVar(&queryInterval, "query-interval", bulkQueryGen.DefaultQueryInterval, "Time interval query should ask for.")
+	flag.StringVar(&queryIntervalType, "query-interval-type", "window", "Interval type query { window - either random or shifted, last - interval is defined relative to now() }")
 	flag.DurationVar(&timeWindowShift, "time-window-shift", -1, "Sliding time window shift. (When set to > 0s, queries option is ignored - number of queries is calculated.")
 
 	flag.Int64Var(&seed, "seed", 0, "PRNG seed (default, or 0, uses the current timestamp).")
@@ -246,9 +248,16 @@ func init() {
 		log.Fatal("Query interval must be greater than the grouping interval")
 	}
 
-	// TODO temporary for benchmarks
-	if useCase == Dashboard && timeWindowShift <= 0 { // when not set for dashboard, always use 5s default
-		timeWindowShift = 5 * time.Second
+	bulkQueryGen.QueryIntervalType = queryIntervalType
+	switch queryIntervalType {
+	case "window":
+		if useCase == Dashboard && timeWindowShift <= 0 { // when not set, always use 5s default for dashboard
+			timeWindowShift = 5 * time.Second
+		}
+	case "last":
+		timeWindowShift = 0
+	default:
+		log.Fatalf("Unsupported query interval type: %s\n", queryIntervalType)
 	}
 
 	if timeWindowShift > 0 {

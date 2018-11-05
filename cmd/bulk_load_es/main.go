@@ -276,7 +276,7 @@ func main() {
 	inputDone = make(chan struct{})
 
 	if telemetryHost != "" {
-		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", telemetryBasicAuth)
+		telemetryCollector := report.NewCollector(telemetryHost, "telegraf", reportUser, reportPassword)
 		telemetryChanPoints, telemetryChanDone = report.TelemetryRunAsync(telemetryCollector, telemetryBatchSize, telemetryStderr, 0)
 	}
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"sync"
+	"time"
 
 	"crypto/tls"
 	"github.com/valyala/fasthttp"
@@ -104,6 +105,12 @@ func (p *Point) AddInt64Field(k string, x int64) {
 	p.Fields = append(p.Fields, f)
 }
 
+func (p *Point) AddIntField(k string, x int) {
+	f := Field{}
+	f.SetInt64(k, int64(x))
+	p.Fields = append(p.Fields, f)
+}
+
 func (p *Point) AddBoolField(k string, x bool) {
 	f := Field{}
 	f.SetBool(k, x)
@@ -172,10 +179,10 @@ type Collector struct {
 	buf *bytes.Buffer
 }
 
-func NewCollector(influxhost, dbname, basicAuth string) *Collector {
+func NewCollector(influxhost, dbname, userName, password string) *Collector {
 	encodedBasicAuth := ""
-	if basicAuth != "" {
-		encodedBasicAuth = "Basic " + base64.StdEncoding.EncodeToString([]byte(basicAuth))
+	if userName != "" {
+		encodedBasicAuth = "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", userName, password)))
 	}
 	return &Collector{
 		buf:    new(bytes.Buffer),
@@ -185,6 +192,7 @@ func NewCollector(influxhost, dbname, basicAuth string) *Collector {
 			TLSConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
+			MaxIdleConnDuration: 90 * time.Second,
 		},
 		baseUri:          influxhost,
 		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
@@ -245,7 +253,7 @@ func (c *Collector) SendBatch() error {
 	resp := fasthttp.AcquireResponse()
 	err := c.client.Do(req, resp)
 
-	if resp.StatusCode() != fasthttp.StatusNoContent {
+	if resp.StatusCode() != fasthttp.StatusNoContent && resp.StatusCode() != fasthttp.StatusOK {
 		return fmt.Errorf("collector error: unexpected status code %d: %s", resp.StatusCode(), resp.Body())
 	}
 
