@@ -298,7 +298,7 @@ func main() {
 		testDuration = time.Hour * 24
 	}
 	tickerQuaters := 0
-	timeoutTicker := time.NewTimer(testDuration / 4)
+	timeoutTicker := time.NewTicker(testDuration / 4)
 	reponseTimeLimitWorkers := 0
 
 loop:
