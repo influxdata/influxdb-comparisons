@@ -565,6 +565,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		// Write the batch: try until backoff is not needed.
 		if doLoad {
 			var err error
+			var extraSleep time.Duration = 0
 			for {
 				if useGzip {
 					compressedBatch := bufPool.Get().(*bytes.Buffer)
@@ -594,7 +595,8 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 						p.AddBoolField("backoff", true)
 						telemetrySink <- p
 					}
-					time.Sleep(backoff)
+					time.Sleep(backoff + extraSleep)
+					extraSleep += backoff
 				} else {
 					backoffSrc <- false
 					break
