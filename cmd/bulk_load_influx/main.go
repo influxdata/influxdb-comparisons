@@ -646,10 +646,10 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
-/*					if !wasBackOff {
+					//if !wasBackOff {
 						atomic.AddInt32(&speedUpRequest, 1)
-					}
-*/				}
+					//}
+				}
 				gvCount = 0
 			} else {
 				reportStat = false
