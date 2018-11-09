@@ -11,6 +11,8 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+const DefaultIdleConnectionTimeout = 90 * time.Second
+
 var (
 	BackoffError        error  = fmt.Errorf("backpressure is needed")
 	backoffMagicWords0  []byte = []byte("engine: cache maximum memory size exceeded")
@@ -50,6 +52,7 @@ func NewHTTPWriter(c HTTPWriterConfig, consistency string) *HTTPWriter {
 	return &HTTPWriter{
 		client: fasthttp.Client{
 			Name: "bulk_load_influx",
+			MaxIdleConnDuration: DefaultIdleConnectionTimeout,
 		},
 
 		c:   c,
