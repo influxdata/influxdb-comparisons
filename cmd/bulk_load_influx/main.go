@@ -548,14 +548,14 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	// Ingestion rate control vars
 	var gvCount float64
 	var gvStart time.Time
-	var wasBackOff bool
+	//var wasBackOff bool
 
 	for batch := range batchChan {
 		batchesSeen++
 
 		//var bodySize int
 		ts := time.Now().UnixNano()
-		backOff := false
+		//backOff := false
 
 		if ingestRateLimit > 0 && gvStart.Nanosecond() == 0 {
 			gvStart = time.Now()
@@ -564,6 +564,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		// Write the batch: try until backoff is not needed.
 		if doLoad {
 			var err error
+			sleepTime := backoff
 			for {
 				if useGzip {
 					compressedBatch := bufPool.Get().(*bytes.Buffer)
@@ -579,7 +580,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				}
 
 				if err == BackoffError {
-					backOff = true
+					//backOff = true
 					backoffSrc <- true
 					// Report telemetry, if applicable:
 					if telemetrySink != nil {
@@ -593,7 +594,12 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 						p.AddBoolField("backoff", true)
 						telemetrySink <- p
 					}
-					time.Sleep(backoff)
+					time.Sleep(sleepTime)
+					sleepTime += backoff // sleep longer if backpressure comes again
+					if sleepTime > 10 * backoff { // but not longer than 10x default backoff time
+						log.Printf("Sleeping on backoff response way too long (10 x %v)", backoff)
+						sleepTime = 10 * backoff
+					}
 				} else {
 					backoffSrc <- false
 					break
@@ -612,12 +618,12 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		batch.Buffer.Reset()
 		bufPool.Put(batch.Buffer)
 
-		// Backoff means no data was written - nothing to report or calculate
+/*		// Backoff means no data was written - nothing to report or calculate
 		if backOff {
 			wasBackOff = true
 			continue
 		}
-
+*/
 		// Normally report after each batch
 		reportStat := true
 		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
@@ -639,9 +645,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
-					if !wasBackOff {
+					//if !wasBackOff {
 						atomic.AddInt32(&speedUpRequest, 1)
-					}
+					//}
 				}
 				gvCount = 0
 			} else {
@@ -649,9 +655,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 		}
 
-		// Clear
+/*		// Clear
 		wasBackOff = false
-
+*/
 		// Report sent batch statistic
 		if reportStat {
 			stat := statPool.Get().(*Stat)
