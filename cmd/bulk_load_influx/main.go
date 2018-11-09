@@ -597,7 +597,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					time.Sleep(sleepTime)
 					sleepTime += backoff // sleep longer if backpressure comes again
 					if sleepTime > 10 * backoff { // but not longer than 10x default backoff time
-						log.Printf("Sleeping on backoff response way too long (10 x %v)", backoff)
+						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel ,backoff)
 						sleepTime = 10 * backoff
 					}
 				} else {
