@@ -246,7 +246,7 @@ func main() {
 		}
 
 		if len(existingIndexTemplates) > 0 {
-			log.Fatal("There are index templates already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_template/*'")
+			log.Println("There are index templates already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_template/*'")
 		}
 
 		// check that there are no pre-existing indices:
@@ -256,7 +256,7 @@ func main() {
 		}
 
 		if len(existingIndices) > 0 {
-			log.Fatal("There are indices already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_all'")
+			log.Println("There are indices already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_all'")
 		}
 
 		// create the index template:
@@ -478,6 +478,7 @@ func createESTemplate(daemonUrl, indexTemplateName string, indexTemplateBodyTemp
 	if err != nil {
 		return err
 	}
+	req.Header.Add("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -488,7 +489,8 @@ func createESTemplate(daemonUrl, indexTemplateName string, indexTemplateBodyTemp
 	// does the body need to be read into the void?
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad mapping create")
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("bad mapping create: %s", body)
 	}
 	return nil
 }
