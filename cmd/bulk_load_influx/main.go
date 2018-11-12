@@ -617,9 +617,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 						telemetrySink <- p
 					}
 					time.Sleep(sleepTime)
-					sleepTime += backoff        // sleep longer if backpressure comes again
-					if sleepTime > 10*backoff { // but not longer than 10x default backoff time
-						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, backoff)
+					sleepTime += backoff // sleep longer if backpressure comes again
+					if sleepTime > 10 * backoff { // but not longer than 10x default backoff time
+						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel ,backoff)
 						sleepTime = 10 * backoff
 					}
 				} else {
@@ -640,12 +640,12 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		batch.Buffer.Reset()
 		bufPool.Put(batch.Buffer)
 
-		/*		// Backoff means no data was written - nothing to report or calculate
-				if backOff {
-					wasBackOff = true
-					continue
-				}
-		*/
+/*		// Backoff means no data was written - nothing to report or calculate
+		if backOff {
+			wasBackOff = true
+			continue
+		}
+*/
 		// Normally report after each batch
 		reportStat := true
 		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
@@ -668,7 +668,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				} else {
 					gvStart = now
 					//if !wasBackOff {
-					atomic.AddInt32(&speedUpRequest, 1)
+						atomic.AddInt32(&speedUpRequest, 1)
 					//}
 				}
 				gvCount = 0
@@ -677,9 +677,9 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 		}
 
-		/*		// Clear
-				wasBackOff = false
-		*/
+/*		// Clear
+		wasBackOff = false
+*/
 		// Report sent batch statistic
 		if reportStat {
 			stat := statPool.Get().(*Stat)
