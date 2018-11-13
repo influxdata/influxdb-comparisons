@@ -17,7 +17,7 @@ type HTTPWriterConfig struct {
 	Host string
 
 	// Name of the target database into which points will be written.
-//	Database string
+	//	Database string
 }
 
 // HTTPWriter is a Writer that writes to an InfluxDB HTTP server.
@@ -45,8 +45,9 @@ func NewHTTPWriter(c HTTPWriterConfig, refreshEachBatch bool) *HTTPWriter {
 }
 
 var (
-	post      = []byte("POST")
-	textPlain = []byte("text/plain")
+	post            = []byte("POST")
+	textPlain       = []byte("text/plain")
+	applicationJson = []byte("application/json")
 )
 
 // WriteLineProtocol writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
@@ -54,7 +55,7 @@ var (
 // or it returns a new error if the HTTP response isn't as expected.
 func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) {
 	req := fasthttp.AcquireRequest()
-	req.Header.SetContentTypeBytes(textPlain)
+	req.Header.SetContentTypeBytes(applicationJson)
 	req.Header.SetMethodBytes(post)
 	req.Header.SetRequestURIBytes(w.url)
 	if isGzip {
@@ -74,7 +75,9 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 	}
 
 	// anonymous type to get the 'errors' field from the response:
-	errorFlag := struct{ Errors bool `json:"errors"` }{}
+	errorFlag := struct {
+		Errors bool `json:"errors"`
+	}{}
 
 	if err == nil {
 		err = json.Unmarshal(resp.Body(), &errorFlag)
