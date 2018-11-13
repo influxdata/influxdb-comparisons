@@ -109,7 +109,7 @@ var aggregationTemplate = []byte(`
     }
   },
   "mappings": {
-    "_default_": {
+    "_doc": {
       "dynamic_templates": [
         {
           "all_string_fields_can_be_used_for_filtering": {
@@ -118,7 +118,7 @@ var aggregationTemplate = []byte(`
             "mapping": {
               "type": "string",
               "doc_values": true,
-              "index": "not_analyzed"
+              "index": true
             }
           }
         },
@@ -128,7 +128,7 @@ var aggregationTemplate = []byte(`
             "match_mapping_type": "*",
             "mapping": {
               "doc_values": true,
-              "index": "no"
+              "index": false
             }
           }
         }
@@ -139,7 +139,7 @@ var aggregationTemplate = []byte(`
         "timestamp": {
           "type": "date",
           "doc_values": true,
-          "index": "not_analyzed"
+          "index": true
         }
       }
     }
@@ -165,7 +165,7 @@ func init() {
 	flag.BoolVar(&doDBCreate, "do-db-create", true, "Whether to create the database.")
 
 	flag.UintVar(&numberOfReplicas, "number-of-replicas", 0, "Number of ES replicas (note: replicas == replication_factor - 1). Zero replicas means RF of 1.")
-	flag.UintVar(&numberOfShards, "number-of-shards", 5, "Number of ES shards. Typically you will set this to the number of nodes in the cluster.")
+	flag.UintVar(&numberOfShards, "number-of-shards", 1, "Number of ES shards. Typically you will set this to the number of nodes in the cluster.")
 
 	flag.StringVar(&telemetryHost, "telemetry-host", "", "InfluxDB host to write telegraf telemetry to (optional).")
 	flag.BoolVar(&telemetryStderr, "telemetry-stderr", false, "Whether to write telemetry also to stderr.")
