@@ -345,7 +345,6 @@ func main() {
 func scan(itemsPerBatch int) (int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
-	var n int
 	var linesRead int64
 	var itemsRead int64
 	var bytesRead int64
@@ -383,7 +382,7 @@ func scan(itemsPerBatch int) (int64, int64) {
 	}
 
 	// Finished reading input, make sure last batch goes out.
-	if n > 0 {
+	if itemsThisBatch > 0 {
 		batchChan <- buf
 	}
 
