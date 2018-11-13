@@ -11,6 +11,7 @@ import (
 )
 
 var bytesSlash = []byte("/") // heap optimization
+var applicationJson = []byte("application/json")
 
 // HTTPClient is a reusable HTTP Client.
 type HTTPClient struct {
@@ -55,6 +56,7 @@ func (w *HTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err e
 
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(w.uri)
+	req.Header.SetContentTypeBytes(applicationJson)
 	req.SetBody(q.Body)
 
 	// Perform the request while tracking latency:
