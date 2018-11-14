@@ -78,7 +78,7 @@ var (
 
 var defaultTemplate = []byte(`
 {
-  "template": "*",
+  "index_patterns": "*",
   "settings": {
     "index": {
       "refresh_interval": "5s",
@@ -87,7 +87,7 @@ var defaultTemplate = []byte(`
     }
   },
   "mappings": {
-    "point": {
+    "_doc": {
       "_all":            { "enabled": false },
       "_source":         { "enabled": true },
       "properties": {
