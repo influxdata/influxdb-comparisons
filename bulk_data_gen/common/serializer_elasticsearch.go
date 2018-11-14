@@ -28,7 +28,7 @@ func (s *SerializerElastic) SerializePoint(w io.Writer, p *Point) error {
 
 	buf = append(buf, "{ \"index\" : { \"_index\" : \""...)
 	buf = append(buf, p.MeasurementName...)
-	buf = append(buf, "\", \"_type\" : \"point\" } }\n"...)
+	buf = append(buf, "\", \"_type\" : \"_doc\" } }\n"...)
 
 	buf = append(buf, '{')
 
