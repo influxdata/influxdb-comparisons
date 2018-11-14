@@ -100,7 +100,7 @@ var defaultTemplate = []byte(`
 
 var aggregationTemplate = []byte(`
 {
-  "template": "*",
+  "index_patterns": "*",
   "settings": {
     "index": {
       "refresh_interval": "5s",
@@ -116,9 +116,8 @@ var aggregationTemplate = []byte(`
             "match": "*",
             "match_mapping_type": "string",
             "mapping": {
-              "type": "string",
-              "doc_values": true,
-              "index": true
+              "type": "keyword",
+              "doc_values": true
             }
           }
         },
@@ -145,7 +144,6 @@ var aggregationTemplate = []byte(`
     }
   }
 }
-
 `)
 
 // Parse args:
