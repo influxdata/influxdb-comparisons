@@ -63,7 +63,7 @@ func (m *NetMeasurement) ToPoint(p *Point) bool {
 	p.AppendTag(NetTags[0], m.interfaceName)
 
 	for i := range m.distributions {
-		p.AppendField(RedisFields[i].Label, int64(m.distributions[i].Get()))
+		p.AppendField(NetFields[i].Label, int64(m.distributions[i].Get()))
 	}
 	return true
 }
