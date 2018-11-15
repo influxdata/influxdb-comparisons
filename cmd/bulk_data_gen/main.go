@@ -27,7 +27,7 @@ import (
 )
 
 // Output data format choices:
-var formatChoices = []string{"influx-bulk", "es-bulk", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
+var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
 
 // Use case choices:
 var useCaseChoices = []string{"devops", "iot", "dashboard"}
@@ -40,7 +40,7 @@ var (
 	format  string
 	useCase string
 
-	scaleVar int64
+	scaleVar       int64
 	scaleVarOffset int64
 
 	timestampStartStr string
@@ -124,7 +124,7 @@ func main() {
 			Start: timestampStart,
 			End:   timestampEnd,
 
-			HostCount: scaleVar,
+			HostCount:  scaleVar,
 			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
@@ -133,7 +133,7 @@ func main() {
 			Start: timestampStart,
 			End:   timestampEnd,
 
-			HostCount: scaleVar,
+			HostCount:  scaleVar,
 			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
@@ -142,7 +142,7 @@ func main() {
 			Start: timestampStart,
 			End:   timestampEnd,
 
-			SmartHomeCount: scaleVar,
+			SmartHomeCount:  scaleVar,
 			SmartHomeOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
@@ -155,7 +155,9 @@ func main() {
 	case "influx-bulk":
 		serializer = common.NewSerializerInflux()
 	case "es-bulk":
-		serializer = common.NewSerializerElastic()
+		serializer = common.NewSerializerElastic("5x")
+	case "es-bulk6x":
+		serializer = common.NewSerializerElastic("6x")
 	case "cassandra":
 		serializer = common.NewSerializerCassandra()
 	case "mongo":

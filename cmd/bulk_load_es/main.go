@@ -70,13 +70,91 @@ var (
 
 // Args parsing vars
 var (
-	indexTemplateChoices = map[string][]byte{
-		"default":     defaultTemplate,
-		"aggregation": aggregationTemplate,
+	indexTemplateChoices = map[string]map[string][]byte{
+		"default": {
+			"5": defaultTemplate,
+			"6": defaultTemplate6x,
+		},
+		"aggregation": {
+			"5": aggregationTemplate,
+			"6": aggregationTemplate6x,
+		},
 	}
 )
 
 var defaultTemplate = []byte(`
+{
+  "template": "*",
+  "settings": {
+    "index": {
+      "refresh_interval": "5s",
+      "number_of_replicas": {{.NumberOfReplicas}},
+      "number_of_shards": {{.NumberOfShards}}
+    }
+  },
+  "mappings": {
+    "point": {
+      "_all":            { "enabled": false },
+      "_source":         { "enabled": true },
+      "properties": {
+        "timestamp":    { "type": "date", "doc_values": true }
+      }
+    }
+  }
+}
+`)
+
+var aggregationTemplate = []byte(`
+{
+  "template": "*",
+  "settings": {
+    "index": {
+      "refresh_interval": "5s",
+      "number_of_replicas": {{.NumberOfReplicas}},
+      "number_of_shards": {{.NumberOfShards}}
+    }
+  },
+  "mappings": {
+    "_default_": {
+      "dynamic_templates": [
+        {
+          "all_string_fields_can_be_used_for_filtering": {
+            "match": "*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "string",
+              "doc_values": true,
+              "index": "not_analyzed"
+            }
+          }
+        },
+        {
+          "all_nonstring_fields_are_just_stored_in_column_index": {
+            "match": "*",
+            "match_mapping_type": "*",
+            "mapping": {
+              "doc_values": true,
+              "index": "no"
+            }
+          }
+        }
+      ],
+      "_all": { "enabled": false },
+      "_source": { "enabled": false },
+      "properties": {
+        "timestamp": {
+          "type": "date",
+          "doc_values": true,
+          "index": "not_analyzed"
+        }
+      }
+    }
+  }
+}
+
+`)
+
+var defaultTemplate6x = []byte(`
 {
   "index_patterns": "*",
   "settings": {
@@ -98,7 +176,7 @@ var defaultTemplate = []byte(`
 }
 `)
 
-var aggregationTemplate = []byte(`
+var aggregationTemplate6x = []byte(`
 {
   "index_patterns": "*",
   "settings": {
@@ -236,32 +314,38 @@ func init() {
 }
 
 func main() {
-	if doLoad && doDBCreate {
-		// check that there are no pre-existing index templates:
-		existingIndexTemplates, err := listIndexTemplates(daemonUrls[0])
+	if doLoad {
+		v, err := checkServer(daemonUrls[0])
 		if err != nil {
 			log.Fatal(err)
 		}
+		if doDBCreate {
+			// check that there are no pre-existing index templates:
+			existingIndexTemplates, err := listIndexTemplates(daemonUrls[0])
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		if len(existingIndexTemplates) > 0 {
-			log.Println("There are index templates already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_template/*'")
-		}
+			if len(existingIndexTemplates) > 0 {
+				log.Println("There are index templates already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_template/*'")
+			}
 
-		// check that there are no pre-existing indices:
-		existingIndices, err := listIndices(daemonUrls[0])
-		if err != nil {
-			log.Fatal(err)
-		}
+			// check that there are no pre-existing indices:
+			existingIndices, err := listIndices(daemonUrls[0])
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		if len(existingIndices) > 0 {
-			log.Println("There are indices already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_all'")
-		}
+			if len(existingIndices) > 0 {
+				log.Println("There are indices already in the data store. If you know what you are doing, clear them first with a command like:\ncurl -XDELETE 'http://localhost:9200/_all'")
+			}
 
-		// create the index template:
-		indexTemplate := indexTemplateChoices[indexTemplateName]
-		err = createESTemplate(daemonUrls[0], "measurements_template", indexTemplate, numberOfReplicas, numberOfShards)
-		if err != nil {
-			log.Fatal(err)
+			// create the index template:
+			indexTemplate := indexTemplateChoices[indexTemplateName]
+			err = createESTemplate(daemonUrls[0], "measurements_template", indexTemplate[v], numberOfReplicas, numberOfShards)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 	bufPool = sync.Pool{
@@ -567,4 +651,37 @@ func listIndices(daemonUrl string) (map[string]interface{}, error) {
 	}
 
 	return listing, nil
+}
+
+// checkServer pings  ElasticSearch and returns major version string
+func checkServer(daemonUrl string) (string, error) {
+	majorVer := "5"
+	resp, err := http.Get(daemonUrl)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var listing map[string]interface{}
+	err = json.Unmarshal(body, &listing)
+	if err != nil {
+		return "", err
+	}
+	if v, ok := listing["version"]; ok {
+		vo := v.(map[string]interface{})
+		if ver, ok := vo["number"]; ok {
+			fmt.Printf("Elastic Search version %s\n", ver)
+			nums := strings.Split(ver.(string), ".")
+			if len(nums) > 0 {
+				majorVer = nums[0]
+			}
+		}
+	}
+
+	return majorVer, nil
 }
