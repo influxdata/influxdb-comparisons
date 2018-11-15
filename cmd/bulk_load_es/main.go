@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -24,9 +25,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"strconv"
 )
-
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 11.2222
 
 // Program option vars:
 var (
@@ -372,7 +370,7 @@ func main() {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead := scan(batchSize)
+	itemsRead, bytesRead, valuesRead := scan(batchSize)
 
 	<-inputDone
 	close(batchChan)
@@ -381,8 +379,7 @@ func main() {
 	took := end.Sub(start)
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
-
-	valuesRate := itemsRate * ValuesPerMeasurement
+	valuesRate := float64(valuesRead) / float64(took.Seconds())
 
 	if telemetryHost != "" {
 		close(telemetryChanPoints)
@@ -424,16 +421,27 @@ func main() {
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
 // format: two line pairs, the first line being an 'action' and the second line
 // being the payload. (2 lines = 1 item)
-func scan(itemsPerBatch int) (int64, int64) {
+func scan(itemsPerBatch int) (int64, int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
 	var linesRead int64
-	var itemsRead int64
-	var bytesRead int64
+	var err error
+	var itemsRead, bytesRead int64
+	var totalPoints, totalValues int64
+
 	var itemsThisBatch int
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for scanner.Scan() {
+
+		totalPoints, totalValues, err = common.CheckTotalValues(scanner.Text())
+		if totalPoints > 0 || totalValues > 0 {
+			continue
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		linesRead++
 
 		buf.Write(scanner.Bytes())
@@ -475,8 +483,11 @@ func scan(itemsPerBatch int) (int64, int64) {
 	if linesRead%2 != 0 {
 		log.Fatalf("the number of lines read was not a multiple of 2, which indicates a bad bulk format for Elastic")
 	}
+	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+		log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+	}
 
-	return itemsRead, bytesRead
+	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.

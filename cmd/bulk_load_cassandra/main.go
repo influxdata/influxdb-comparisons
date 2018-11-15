@@ -164,28 +164,19 @@ func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
 	}
 
 	var n int
+	var err error
 	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, common.DatasetSizeMarker) {
-			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
-			if parts == nil || len(parts[0]) != 3 {
-				log.Fatalf("Incorrent number of matched groups: %#v", parts)
-			}
-			if i, err := strconv.Atoi(parts[0][1]); err == nil {
-				totalPoints = int64(i)
-			} else {
-				log.Fatal(err)
-			}
-			if i, err := strconv.Atoi(parts[0][2]); err == nil {
-				totalValues = int64(i)
-			} else {
-				log.Fatal(err)
-			}
+		totalPoints, totalValues, err = common.CheckTotalValues(line)
+		if totalPoints > 0 || totalValues > 0 {
 			continue
+		}
+		if err != nil {
+			log.Fatal(err)
 		}
 		itemsRead++
 		bytesRead += int64(len(scanner.Bytes()))
