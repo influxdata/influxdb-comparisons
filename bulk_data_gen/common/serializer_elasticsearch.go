@@ -2,13 +2,22 @@ package common
 
 import (
 	"io"
+	"strings"
 )
 
+var typeName5x = []byte("point")
+var typeName6x = []byte("_doc")
+
 type SerializerElastic struct {
+	typeName []byte
 }
 
-func NewSerializerElastic() *SerializerElastic {
-	return &SerializerElastic{}
+func NewSerializerElastic(version string) *SerializerElastic {
+	typeName := typeName5x
+	if strings.HasPrefix(version, "6") {
+		typeName = typeName6x
+	}
+	return &SerializerElastic{typeName: typeName}
 }
 
 // SerializeESBulk writes Point data to the given writer, conforming to the
@@ -23,12 +32,15 @@ func NewSerializerElastic() *SerializerElastic {
 // { "tag_launx": "btkuw", "tag_gaijk": "jiypr", "field_wokxf": 0.08463898963964356, "field_zqstf": -0.043641533500086316, "timestamp": 171300 }\n
 //
 // TODO(rw): Speed up this function. The bulk of time is spent in strconv.
+
 func (s *SerializerElastic) SerializePoint(w io.Writer, p *Point) error {
 	buf := scratchBufPool.Get().([]byte)
 
 	buf = append(buf, "{ \"index\" : { \"_index\" : \""...)
 	buf = append(buf, p.MeasurementName...)
-	buf = append(buf, "\", \"_type\" : \"_doc\" } }\n"...)
+	buf = append(buf, "\", \"_type\" : \""...)
+	buf = append(buf, s.typeName...)
+	buf = append(buf, "\" } }\n"...)
 
 	buf = append(buf, '{')
 
