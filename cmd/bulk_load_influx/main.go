@@ -459,7 +459,6 @@ func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 	buf := bufPool.Get().(*bytes.Buffer)
 
 	var n int
-	var err error
 	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
@@ -478,14 +477,24 @@ outer:
 			break
 		}
 
-		totalPoints, totalValues, err = common.CheckTotalValues(scanner.Text())
-		if totalPoints > 0 || totalValues > 0 {
+		line := scanner.Text()
+		if strings.HasPrefix(line, common.DatasetSizeMarker) {
+			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+			if parts == nil || len(parts[0]) != 3 {
+				log.Fatalf("Incorrent number of matched groups: %#v", parts)
+			}
+			if i, err := strconv.Atoi(parts[0][1]); err == nil {
+				totalPoints = int64(i)
+			} else {
+				log.Fatal(err)
+			}
+			if i, err := strconv.Atoi(parts[0][2]); err == nil {
+				totalValues = int64(i)
+			} else {
+				log.Fatal(err)
+			}
 			continue
 		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		itemsRead++
 		batchItemCount++
 
