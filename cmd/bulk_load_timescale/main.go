@@ -312,29 +312,22 @@ func scan(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 	var n int
 	var linesRead, bytesRead int64
+	var err error
 	var totalPoints, totalValues int64
 
 	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
 	var buff = make([]string, 0, itemsPerBatch)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, common.DatasetSizeMarker) {
-			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
-			if parts == nil || len(parts[0]) != 3 {
-				log.Fatalf("Incorrent number of matched groups: %#v", parts)
-			}
-			if i, err := strconv.Atoi(parts[0][1]); err == nil {
-				totalPoints = int64(i)
-			} else {
-				log.Fatal(err)
-			}
-			if i, err := strconv.Atoi(parts[0][2]); err == nil {
-				totalValues = int64(i)
-			} else {
-				log.Fatal(err)
-			}
+
+		totalPoints, totalValues, err = common.CheckTotalValues(line)
+		if totalPoints > 0 || totalValues > 0 {
 			continue
 		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		linesRead++
 		buff = append(buff, line)
 		bytesRead += int64(len(line))

@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 type Serializer interface {
@@ -55,4 +56,26 @@ func fastFormatAppend(v interface{}, buf []byte, singleQuotesForString bool) []b
 	default:
 		panic(fmt.Sprintf("unknown field type for %#v", v))
 	}
+}
+
+func CheckTotalValues(line string) (totalPoints, totalValues int64, err error) {
+	if strings.HasPrefix(line, DatasetSizeMarker) {
+		parts := DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
+		if parts == nil || len(parts[0]) != 3 {
+			err = fmt.Errorf("incorrent number of matched groups: %#v", parts)
+			return
+		}
+		if i, e := strconv.Atoi(parts[0][1]); e == nil {
+			totalPoints = int64(i)
+		} else {
+			err = e
+			return
+		}
+		if i, e := strconv.Atoi(parts[0][2]); e == nil {
+			totalValues = int64(i)
+		} else {
+			err = e
+		}
+	}
+	return
 }
