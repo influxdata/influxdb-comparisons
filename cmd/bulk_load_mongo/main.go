@@ -137,6 +137,7 @@ func main() {
 		}
 
 		session.SetMode(mgo.Eventual, false)
+		session.SetSafe(&mgo.Safe{J: true})
 
 		defer session.Close()
 	}
