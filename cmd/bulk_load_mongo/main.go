@@ -137,7 +137,7 @@ func main() {
 		}
 
 		session.SetMode(mgo.Eventual, false)
-		session.SetSafe(&mgo.Safe{J: true})
+		//session.SetSafe(&mgo.Safe{J: true}) // ensure data were written to on-disk journal
 
 		defer session.Close()
 	}
