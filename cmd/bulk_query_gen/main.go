@@ -131,9 +131,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 
 // Program option vars:
 var (
-	useCase   string
-	queryType string
-	format    string
+	useCase        string
+	queryType      string
+	format         string
+	documentFormat string
 
 	scaleVar   int
 	queryCount int
@@ -143,10 +144,10 @@ var (
 	timestampStartStr string
 	timestampEndStr   string
 
-	timestampStart  time.Time
-	timestampEnd    time.Time
-	queryInterval   time.Duration
-	timeWindowShift time.Duration
+	timestampStart    time.Time
+	timestampEnd      time.Time
+	queryInterval     time.Duration
+	timeWindowShift   time.Duration
 	queryIntervalType string
 
 	seed  int64
@@ -175,6 +176,7 @@ func init() {
 	}
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleTags' si supported; leave empty for previous behaviour)")
 	flag.StringVar(&useCase, "use-case", "devops", "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
@@ -267,6 +269,14 @@ func init() {
 			queryCount *= 18
 		}
 		log.Printf("%v queries will be generated to cover time interval using %v shift", queryCount, timeWindowShift)
+	}
+
+	if format == "mongo" {
+		if documentFormat != mongodb.SimpleTagsFormat {
+			documentFormat = "default"
+		}
+		mongodb.DocumentFormat = documentFormat
+		log.Printf("Using '%s' mongo serialization", mongodb.DocumentFormat)
 	}
 
 	// the default seed is the current timestamp:

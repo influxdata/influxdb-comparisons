@@ -119,6 +119,14 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 		},
 	}
 
+	if DocumentFormat == SimpleTagsFormat {
+		match := pipelineQuery[0]["$match"]
+		delete(match.(M), "tags")
+		match.(M)["tags.hostname"] = M{
+			"$in": hostnames,
+		}
+	}
+
 	humanLabel := []byte(fmt.Sprintf("Mongo max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange))
 	q := qi.(*MongoQuery)
 	q.HumanLabel = humanLabel
