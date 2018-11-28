@@ -88,6 +88,14 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 		},
 	}
 
+	if DocumentFormat == SimpleTagsFormat {
+		match := pipelineQuery[0]["$match"]
+		delete(match.(M), "tags")
+		match.(M)["tags.home_id"] = M{
+			"$in": homes,
+		}
+	}
+
 	humanLabel := []byte(fmt.Sprintf("Mongo avg temperature, rand %4d homes, rand %s by 1h", nHomes, timeRange))
 	q := qi.(*MongoQuery)
 	q.HumanLabel = humanLabel

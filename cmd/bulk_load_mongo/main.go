@@ -19,6 +19,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
 	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"strconv"
@@ -32,6 +33,8 @@ var (
 	batchSize      int
 	limit          int64
 	doLoad         bool
+	useCase        string
+	documentFormat string
 	writeTimeout   time.Duration
 	reportDatabase string
 	reportHost     string
@@ -85,6 +88,9 @@ func init() {
 	flag.Int64Var(&limit, "limit", -1, "Number of items to insert (default unlimited).")
 	flag.DurationVar(&writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
 
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. ('simpleTags' is supported; leave empty for previous behaviour)")
+	flag.StringVar(&useCase, "use-case", "", "Use case modeled (used only for model-specific indexing with 'simpleTags' document format)")
+
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
 	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
@@ -94,6 +100,10 @@ func init() {
 	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 
 	flag.Parse()
+
+	if documentFormat == mongodb.SimpleTagsFormat {
+		log.Printf("Using simpleTags document serialization and indexing")
+	}
 
 	for i := 0; i < workers*batchSize; i++ {
 		bufPool.Put(bufPool.New())
@@ -137,7 +147,6 @@ func main() {
 		}
 
 		session.SetMode(mgo.Eventual, false)
-		//session.SetSafe(&mgo.Safe{J: true}) // ensure data were written to on-disk journal
 
 		defer session.Close()
 	}
@@ -278,6 +287,16 @@ func processBatches(session *mgo.Session) {
 		Val string `bson:"val"`
 	}
 
+	type SimpleTagsPoint struct {
+		// Use `string` here even though they are really `[]byte`.
+		// This is so the mongo data is human-readable.
+		MeasurementName string      `bson:"measurement"`
+		FieldName       string      `bson:"field"`
+		Timestamp       int64       `bson:"timestamp_ns"`
+		Tags            bson.M      `bson:"tags"`
+		Value           interface{} `bson:"value"`
+	}
+
 	type Point struct {
 		// Use `string` here even though they are really `[]byte`.
 		// This is so the mongo data is human-readable.
@@ -292,7 +311,13 @@ func processBatches(session *mgo.Session) {
 		doubleValue float64
 		stringValue string
 	}
-	pPool := &sync.Pool{New: func() interface{} { return &Point{} }}
+	pPool := &sync.Pool{New: func() interface{} {
+		if documentFormat == mongodb.SimpleTagsFormat {
+			return &SimpleTagsPoint{}
+		} else {
+			return &Point{}
+		}
+	}}
 	pvs := []interface{}{}
 
 	item := &mongo_serialization.Item{}
@@ -310,6 +335,39 @@ func processBatches(session *mgo.Session) {
 			// this ui could be improved on the library side:
 			n := flatbuffers.GetUOffsetT(itemBuf)
 			item.Init(itemBuf, n)
+
+			if documentFormat == mongodb.SimpleTagsFormat {
+				x := pPool.Get().(*SimpleTagsPoint)
+
+				x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
+				x.FieldName = unsafeBytesToString(item.FieldNameBytes())
+				x.Timestamp = item.TimestampNanos()
+
+				tagLength := item.TagsLength()
+				x.Tags = make(bson.M, tagLength)
+				for i := 0; i < tagLength; i++ {
+					*destTag = mongo_serialization.Tag{} // clear
+					item.Tags(destTag, i)
+					tagKey := unsafeBytesToString(destTag.KeyBytes())
+					tagValue := unsafeBytesToString(destTag.ValBytes())
+					x.Tags[tagKey] = tagValue
+				}
+
+				switch item.ValueType() {
+				case mongo_serialization.ValueTypeLong:
+					x.Value = item.LongValue()
+				case mongo_serialization.ValueTypeDouble:
+					x.Value = item.DoubleValue()
+				case mongo_serialization.ValueTypeString:
+					x.Value = unsafeBytesToString(item.StringValueBytes())
+				default:
+					panic("logic error")
+				}
+				pvs[i] = x
+
+				continue
+			}
+
 			x := pPool.Get().(*Point)
 
 			x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
@@ -359,6 +417,13 @@ func processBatches(session *mgo.Session) {
 
 		// cleanup pvs
 		for _, x := range pvs {
+			if documentFormat == mongodb.SimpleTagsFormat {
+				p := x.(*SimpleTagsPoint)
+				p.Timestamp = 0
+				p.Tags = nil
+				pPool.Put(p)
+				continue
+			}
 			p := x.(*Point)
 			p.Timestamp = 0
 			p.Value = nil
@@ -390,15 +455,6 @@ func mustCreateCollections(daemonUrl string) {
 	cmd := make(bson.D, 0, 4)
 	cmd = append(cmd, bson.DocElem{"create", pointCollectionName})
 
-	// wiredtiger settings
-	cmd = append(cmd, bson.DocElem{
-		"storageEngine", map[string]interface{}{
-			"wiredTiger": map[string]interface{}{
-				"configString": "block_compressor=snappy",
-			},
-		},
-	})
-
 	err = session.DB("benchmark_db").Run(cmd, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -411,6 +467,17 @@ func mustCreateCollections(daemonUrl string) {
 		DropDups:   true,
 		Background: false,
 		Sparse:     false,
+	}
+	if documentFormat == mongodb.SimpleTagsFormat { // for simple tags serialization format index only tags used in queries
+		log.Printf("Indexing specifically for '%s' usecase", useCase)
+		switch useCase {
+		case "devops":
+			index.Key = []string{"measurement", "tags.hostname", "field", "timestamp_ns"}
+		case "iot":
+			index.Key = []string{"measurement", "tags.home_id", "field", "timestamp_ns"}
+		default:
+			log.Printf("No specific indexing used, tags indexed completely")
+		}
 	}
 	err = collection.EnsureIndex(index)
 	if err != nil {
