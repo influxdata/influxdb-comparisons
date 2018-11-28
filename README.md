@@ -404,13 +404,13 @@ loaded 19440 items in 0.751433sec with 1 workers (mean rate 25870.568346/sec, 8.
 Querying the database is similar to loading data. Execute the bulk query generator and pipe it's output to the benchmark tool for the database under test. Each run requires a ``-query-type`` argument to determine what type of query to execute. These are meant to mimic actual queries such as searching for data on a single host out of many, multiple hosts from many or grouping by various tags. To find out what query types are available, execute ``$GOPATH/bin/bulk_query_gen -h`` and look for the ``use case matrix`` at the bottom of the output. An example run command looks like:
 
 ```
-$GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -url http://druidzoo-1.yms.gq1.yahoo.com:8086
+$GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -urls http://druidzoo-1.yms.gq1.yahoo.com:8086
 ```
 
 A successful run will execute multiple queries and periodically print status information to standard out. 
 
 ```
--bash-4.1$ $GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -url http://druidzoo-1.yms.gq1.yahoo.com:8086
+-bash-4.1$ $GOPATH/bin/bulk_query_gen -query-type "1-host-1-hr" | $GOPATH/bin/query_benchmarker_influxdb -urls http://druidzoo-1.yms.gq1.yahoo.com:8086
 using random seed 684941023
 after 100 queries with 1 workers:
 Influx max cpu, rand    1 hosts, rand 1h0m0s by 1m : min:     1.50ms ( 668.55/sec), mean:     1.98ms ( 506.32/sec), max:    3.10ms (322.34/sec), count:      100, sum:   0.2sec
