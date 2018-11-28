@@ -146,6 +146,9 @@ func init() {
 	}
 	if gradualWorkersIncrease {
 		fmt.Printf("Gradual workers increasing in %s interval\n", increaseInterval)
+		if gradualWorkersMax > 0 {
+			fmt.Printf("Maximum number of gradual workers is %d\n", gradualWorkersMax)
+		}
 	}
 
 	if testDuration.Nanoseconds() > 0 {
