@@ -102,7 +102,7 @@ func init() {
 	flag.Parse()
 
 	if documentFormat == mongodb.SimpleTagsFormat {
-		log.Printf("Using simpleTags document serialization and indexing")
+		log.Printf("Using '%s' document serialization", documentFormat)
 	}
 
 	for i := 0; i < workers*batchSize; i++ {
@@ -469,14 +469,16 @@ func mustCreateCollections(daemonUrl string) {
 		Sparse:     false,
 	}
 	if documentFormat == mongodb.SimpleTagsFormat { // for simple tags serialization format index only tags used in queries
-		log.Printf("Indexing specifically for '%s' usecase", useCase)
 		switch useCase {
 		case "devops":
+			log.Printf("Indexing specifically for '%s' usecase", useCase)
 			index.Key = []string{"measurement", "tags.hostname", "field", "timestamp_ns"}
 		case "iot":
+			log.Printf("Indexing specifically for '%s' usecase", useCase)
 			index.Key = []string{"measurement", "tags.home_id", "field", "timestamp_ns"}
 		default:
-			log.Printf("No specific indexing used, tags indexed completely")
+			log.Print("No usecase-specific indexing")
+			index.Key = []string{"measurement", "field", "timestamp_ns"} // tags not indexed at all
 		}
 	}
 	err = collection.EnsureIndex(index)
