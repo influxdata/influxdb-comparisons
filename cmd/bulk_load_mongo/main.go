@@ -33,7 +33,6 @@ var (
 	batchSize      int
 	limit          int64
 	doLoad         bool
-	useCase        string
 	documentFormat string
 	writeTimeout   time.Duration
 	reportDatabase string
@@ -89,7 +88,6 @@ func init() {
 	flag.DurationVar(&writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
 
 	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. ('simpleTags' is supported; leave empty for previous behaviour)")
-	flag.StringVar(&useCase, "use-case", "", "Use case modeled (used only for model-specific indexing with 'simpleTags' document format)")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -467,19 +465,6 @@ func mustCreateCollections(daemonUrl string) {
 		DropDups:   true,
 		Background: false,
 		Sparse:     false,
-	}
-	if documentFormat == mongodb.SimpleTagsFormat { // for simple tags serialization format index only tags used in queries
-		switch useCase {
-		case "devops":
-			log.Printf("Indexing specifically for '%s' usecase", useCase)
-			index.Key = []string{"measurement", "tags.hostname", "field", "timestamp_ns"}
-		case "iot":
-			log.Printf("Indexing specifically for '%s' usecase", useCase)
-			index.Key = []string{"measurement", "tags.home_id", "field", "timestamp_ns"}
-		default:
-			log.Print("No usecase-specific indexing")
-			index.Key = []string{"measurement", "field", "timestamp_ns"} // tags not indexed at all
-		}
 	}
 	err = collection.EnsureIndex(index)
 	if err != nil {
