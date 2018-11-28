@@ -52,6 +52,7 @@ var (
 	responseTimeLimit      time.Duration
 	testDuration           time.Duration
 	gradualWorkersIncrease bool
+	gradualWorkersMax      int
 	increaseInterval       time.Duration
 	notificationHostPort   string
 	dialTimeout            time.Duration
@@ -112,6 +113,7 @@ func init() {
 	flag.IntVar(&queriesBatch, "batch-size", 18, "Number of queries in batch per worker for Dashboard use-case")
 	flag.DurationVar(&waitInterval, "wait-interval", time.Second*0, "Delay between sending batches of queries in the dashboard use-case")
 	flag.BoolVar(&gradualWorkersIncrease, "grad-workers-inc", false, "Whether to gradually increase number of workers. The 'workers' params defines initial number of workers in this case.")
+	flag.IntVar(&gradualWorkersMax, "grad-workers-max", -1, "Maximum number of workers when are added gradually.")
 	flag.DurationVar(&increaseInterval, "increase-interval", time.Second*30, "Interval when number of workers will increase")
 	flag.DurationVar(&testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
@@ -308,15 +310,19 @@ loop:
 			break loop
 		case <-workersTicker.C:
 			if gradualWorkersIncrease && !isBurnIn {
-				for i := 0; i < workersIncreaseStep; i++ {
-					//fmt.Printf("Adding worker %d\n", workers)
-					daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
-					workersGroup.Add(1)
-					w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
-					go processQueries(w)
-					workers++
+				if gradualWorkersMax <= 0 || workers <= gradualWorkersMax {
+					for i := 0; i < workersIncreaseStep; i++ {
+						//fmt.Printf("Adding worker %d\n", workers)
+						daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
+						workersGroup.Add(1)
+						w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+						go processQueries(w)
+						workers++
+					}
+					log.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
+				} else {
+					log.Printf("Maximum %d workers already reached: %d\n", gradualWorkersMax, workers)
 				}
-				log.Printf("Added %d workers, total: %d\n", workersIncreaseStep, workers)
 			}
 		case <-responseTicker.C:
 			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
