@@ -145,6 +145,8 @@ func main() {
 		}
 
 		session.SetMode(mgo.Eventual, false)
+		session.SetSyncTimeout(180 * time.Second)
+		session.SetSocketTimeout(180 * time.Second)
 
 		defer session.Close()
 	}
