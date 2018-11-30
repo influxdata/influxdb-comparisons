@@ -8,8 +8,8 @@ type MongoDevops8Hosts1Hr struct {
 	MongoDevops
 }
 
-func NewMongoDevops8Hosts1Hr(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := NewMongoDevops(queriesFullRange, queryInterval, scaleVar).(*MongoDevops)
+func NewMongoDevops8Hosts1Hr(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewMongoDevops(dbConfig, queriesFullRange, queryInterval, scaleVar).(*MongoDevops)
 	return &MongoDevops8Hosts1Hr{
 		MongoDevops: *underlying,
 	}

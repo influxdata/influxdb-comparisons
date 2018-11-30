@@ -11,12 +11,14 @@ import (
 // MongoIot produces Mongo-specific queries for the devops use case.
 type MongoIot struct {
 	bulkQuerygen.CommonParams
+	DatabaseName string
 }
 
 // NewMongoIot makes an MongoIot object ready to generate Queries.
-func NewMongoIot(interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+func NewMongoIot(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	return &MongoIot{
 		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
+		DatabaseName: dbConfig[bulkQuerygen.DatabaseName],
 	}
 }
 
@@ -94,13 +96,23 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 		match.(M)["tags.home_id"] = M{
 			"$in": homes,
 		}
+	} else if DocumentFormat == SimpleTagsArrayFormat {
+		homeClauses = []M{}
+		for _, h := range homes {
+			homeClauses = append(homeClauses, M{"home_id": h})
+		}
+		match := pipelineQuery[0]["$match"]
+		delete(match.(M), "tags")
+		match.(M)["tags"] = M{
+			"$in": homeClauses,
+		}
 	}
 
 	humanLabel := []byte(fmt.Sprintf("Mongo avg temperature, rand %4d homes, rand %s by 1h", nHomes, timeRange))
 	q := qi.(*MongoQuery)
 	q.HumanLabel = humanLabel
 	q.BsonDoc = pipelineQuery
-	q.DatabaseName = []byte("benchmark_db")
+	q.DatabaseName = []byte(d.DatabaseName)
 	q.CollectionName = []byte("point_data")
 	q.MeasurementName = []byte("air_condition_room")
 	q.FieldName = []byte("temperature")

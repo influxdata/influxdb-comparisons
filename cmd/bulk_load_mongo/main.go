@@ -293,7 +293,7 @@ func processBatches(session *mgo.Session) {
 		MeasurementName string      `bson:"measurement"`
 		FieldName       string      `bson:"field"`
 		Timestamp       int64       `bson:"timestamp_ns"`
-		Tags            bson.M      `bson:"tags"`
+		Tags            interface{} `bson:"tags"`
 		Value           interface{} `bson:"value"`
 	}
 
@@ -312,7 +312,7 @@ func processBatches(session *mgo.Session) {
 		stringValue string
 	}
 	pPool := &sync.Pool{New: func() interface{} {
-		if documentFormat == mongodb.SimpleTagsFormat {
+		if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
 			return &SimpleTagsPoint{}
 		} else {
 			return &Point{}
@@ -336,7 +336,7 @@ func processBatches(session *mgo.Session) {
 			n := flatbuffers.GetUOffsetT(itemBuf)
 			item.Init(itemBuf, n)
 
-			if documentFormat == mongodb.SimpleTagsFormat {
+			if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
 				x := pPool.Get().(*SimpleTagsPoint)
 
 				x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
@@ -344,15 +344,24 @@ func processBatches(session *mgo.Session) {
 				x.Timestamp = item.TimestampNanos()
 
 				tagLength := item.TagsLength()
-				x.Tags = make(bson.M, tagLength)
+				switch documentFormat {
+				case mongodb.SimpleTagsFormat:
+					x.Tags = make(bson.M, tagLength)
+				case mongodb.SimpleTagsArrayFormat:
+					x.Tags = make([]bson.M, tagLength)
+				}
 				for i := 0; i < tagLength; i++ {
 					*destTag = mongo_serialization.Tag{} // clear
 					item.Tags(destTag, i)
 					tagKey := unsafeBytesToString(destTag.KeyBytes())
 					tagValue := unsafeBytesToString(destTag.ValBytes())
-					x.Tags[tagKey] = tagValue
+					switch documentFormat {
+					case mongodb.SimpleTagsFormat:
+						x.Tags.(bson.M)[tagKey] = tagValue
+					case mongodb.SimpleTagsArrayFormat:
+						x.Tags.([]bson.M)[i] = bson.M{tagKey:tagValue}
+					}
 				}
-
 				switch item.ValueType() {
 				case mongo_serialization.ValueTypeLong:
 					x.Value = item.LongValue()
@@ -417,7 +426,7 @@ func processBatches(session *mgo.Session) {
 
 		// cleanup pvs
 		for _, x := range pvs {
-			if documentFormat == mongodb.SimpleTagsFormat {
+			if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
 				p := x.(*SimpleTagsPoint)
 				p.Timestamp = 0
 				p.Tags = nil
@@ -455,12 +464,12 @@ func mustCreateCollections(daemonUrl string) {
 	cmd := make(bson.D, 0, 4)
 	cmd = append(cmd, bson.DocElem{"create", pointCollectionName})
 
-	err = session.DB("benchmark_db").Run(cmd, nil)
+	err = session.DB(dbName).Run(cmd, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	collection := session.DB("benchmark_db").C("point_data")
+	collection := session.DB(dbName).C("point_data")
 	index := mgo.Index{
 		Key:        []string{"measurement", "tags", "field", "timestamp_ns"},
 		Unique:     false, // Unique does not work on the entire array of tags!

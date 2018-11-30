@@ -8,8 +8,8 @@ type MongoIotSingleHost struct {
 	MongoIot
 }
 
-func NewMongoIotSingleHost(_ bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
-	underlying := NewMongoIot(queriesFullRange, queryInterval, scaleVar).(*MongoIot)
+func NewMongoIotSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+	underlying := NewMongoIot(dbConfig, queriesFullRange, queryInterval, scaleVar).(*MongoIot)
 	return &MongoIotSingleHost{
 		MongoIot: *underlying,
 	}

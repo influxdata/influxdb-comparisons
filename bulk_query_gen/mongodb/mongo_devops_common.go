@@ -10,12 +10,14 @@ import (
 // MongoDevops produces Mongo-specific queries for the devops use case.
 type MongoDevops struct {
 	bulkQuerygen.CommonParams
+	DatabaseName string
 }
 
 // NewMongoDevops makes an MongoDevops object ready to generate Queries.
-func NewMongoDevops(interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+func NewMongoDevops(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuerygen.TimeInterval, duration time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	return &MongoDevops{
 		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
+		DatabaseName: dbConfig[bulkQuerygen.DatabaseName],
 	}
 }
 
@@ -125,13 +127,23 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 		match.(M)["tags.hostname"] = M{
 			"$in": hostnames,
 		}
+	} else if DocumentFormat == SimpleTagsArrayFormat {
+		hostnameClauses = []M{}
+		for _, h := range hostnames {
+			hostnameClauses = append(hostnameClauses, M{"hostname": h})
+		}
+		match := pipelineQuery[0]["$match"]
+		delete(match.(M), "tags")
+		match.(M)["tags"] = M{
+			"$in": hostnameClauses,
+		}
 	}
 
 	humanLabel := []byte(fmt.Sprintf("Mongo max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange))
 	q := qi.(*MongoQuery)
 	q.HumanLabel = humanLabel
 	q.BsonDoc = pipelineQuery
-	q.DatabaseName = []byte("benchmark_db")
+	q.DatabaseName = []byte(d.DatabaseName)
 	q.CollectionName = []byte("point_data")
 	q.MeasurementName = []byte("cpu")
 	q.FieldName = []byte("usage_user")
