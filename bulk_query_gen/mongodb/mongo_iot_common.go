@@ -103,7 +103,7 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 		}
 		match := pipelineQuery[0]["$match"]
 		delete(match.(M), "tags")
-		match.(M)["tags.home_id"] = M{
+		match.(M)["tags"] = M{
 			"$in": homeClauses,
 		}
 	}
