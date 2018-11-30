@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	flatbuffers "github.com/google/flatbuffers/go"
+	"github.com/google/flatbuffers/go"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -99,7 +99,7 @@ func init() {
 
 	flag.Parse()
 
-	if documentFormat == mongodb.SimpleTagsFormat {
+	if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
 		log.Printf("Using '%s' document serialization", documentFormat)
 	}
 
