@@ -77,10 +77,26 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 
 	hostnameClauses := []M{}
 	for _, h := range hostnames {
-		hostnameClauses = append(hostnameClauses, M{"key": "hostname", "val": h})
+		if DocumentFormat == SimpleArraysFormat {
+			hostnameClauses = append(hostnameClauses, M{"hostname": h})
+		} else {
+			hostnameClauses = append(hostnameClauses, M{"key": "hostname", "val": h})
+		}
 	}
 
-	var bucketNano int64 = time.Minute.Nanoseconds()
+	var fieldSpec, fieldPath string
+	var fieldExpr interface{}
+	if DocumentFormat == SimpleArraysFormat {
+		fieldSpec = "fields.usage_user"
+		fieldExpr = 1
+		fieldPath = "fields.usage_user"
+	} else {
+		fieldSpec = "fields"
+		fieldExpr = M{ "$filter": M{ "input": "$fields", "as": "field", "cond": M{ "$eq": []string{ "$$field.key", "usage_user" } } } }
+		fieldPath = "fields.val"
+	}
+
+	var bucketNano = time.Minute.Nanoseconds()
 	pipelineQuery := []M{
 		{
 			"$match": M{
@@ -89,7 +105,6 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 					"$gte": interval.StartUnixNano(),
 					"$lt":  interval.EndUnixNano(),
 				},
-				"field": "usage_user",
 				"tags": M{
 					"$in": hostnameClauses,
 				},
@@ -104,39 +119,19 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 						M{"$mod": S{"$timestamp_ns", bucketNano}},
 					},
 				},
-
-				"field":       1,
-				"value":       1,
+				fieldSpec: fieldExpr, // was value: 1
 				"measurement": 1,
 			},
 		},
 		{
 			"$group": M{
 				"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
-				"agg_value": M{"$max": "$value"},
+				"agg_value": M{"$max": "$"+fieldPath}, // was: $value
 			},
 		},
 		{
 			"$sort": M{"_id.time_bucket": 1},
 		},
-	}
-
-	if DocumentFormat == SimpleTagsFormat {
-		match := pipelineQuery[0]["$match"]
-		delete(match.(M), "tags")
-		match.(M)["tags.hostname"] = M{
-			"$in": hostnames,
-		}
-	} else if DocumentFormat == SimpleTagsArrayFormat {
-		hostnameClauses = []M{}
-		for _, h := range hostnames {
-			hostnameClauses = append(hostnameClauses, M{"hostname": h})
-		}
-		match := pipelineQuery[0]["$match"]
-		delete(match.(M), "tags")
-		match.(M)["tags"] = M{
-			"$in": hostnameClauses,
-		}
 	}
 
 	humanLabel := []byte(fmt.Sprintf("Mongo max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange))

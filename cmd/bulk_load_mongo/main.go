@@ -33,6 +33,7 @@ var (
 	batchSize      int
 	limit          int64
 	doLoad         bool
+	dbName         string
 	documentFormat string
 	writeTimeout   time.Duration
 	reportDatabase string
@@ -53,7 +54,6 @@ var (
 
 // Magic database constants
 const (
-	dbName              = "benchmark_db"
 	pointCollectionName = "point_data"
 )
 
@@ -87,7 +87,8 @@ func init() {
 	flag.Int64Var(&limit, "limit", -1, "Number of items to insert (default unlimited).")
 	flag.DurationVar(&writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
 
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. ('simpleTags' is supported; leave empty for previous behaviour)")
+	flag.StringVar(&dbName, "db", "benchmark_db", "Database for influx to use (ignored for ElasticSearch).")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. ('simpleArrays' is supported; leave empty for previous behaviour)")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -99,7 +100,7 @@ func init() {
 
 	flag.Parse()
 
-	if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
+	if documentFormat == mongodb.SimpleArraysFormat {
 		log.Printf("Using '%s' document serialization", documentFormat)
 	}
 
@@ -287,41 +288,25 @@ func processBatches(session *mgo.Session) {
 		Val string `bson:"val"`
 	}
 
-	type SimpleTagsPoint struct {
-		// Use `string` here even though they are really `[]byte`.
-		// This is so the mongo data is human-readable.
-		MeasurementName string      `bson:"measurement"`
-		FieldName       string      `bson:"field"`
-		Timestamp       int64       `bson:"timestamp_ns"`
-		Tags            interface{} `bson:"tags"`
-		Value           interface{} `bson:"value"`
+	type Field struct {
+		Key string `bson:"key"`
+		Val interface{} `bson:"val"`
 	}
 
 	type Point struct {
 		// Use `string` here even though they are really `[]byte`.
 		// This is so the mongo data is human-readable.
 		MeasurementName string      `bson:"measurement"`
-		FieldName       string      `bson:"field"`
 		Timestamp       int64       `bson:"timestamp_ns"`
-		Tags            []Tag       `bson:"tags"`
-		Value           interface{} `bson:"value"`
-
-		// a private union-like section
-		longValue   int64
-		doubleValue float64
-		stringValue string
+		Tags            []interface{}  `bson:"tags"`
+		Fields          []interface{}  `bson:"fields"`
 	}
-	pPool := &sync.Pool{New: func() interface{} {
-		if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
-			return &SimpleTagsPoint{}
-		} else {
-			return &Point{}
-		}
-	}}
+	pPool := &sync.Pool{New: func() interface{} { return &Point{} }}
 	pvs := []interface{}{}
 
 	item := &mongo_serialization.Item{}
 	destTag := &mongo_serialization.Tag{}
+	destField := &mongo_serialization.Field{}
 	collection := db.C(pointCollectionName)
 	for batch := range batchChan {
 		bulk := collection.Bulk()
@@ -336,80 +321,57 @@ func processBatches(session *mgo.Session) {
 			n := flatbuffers.GetUOffsetT(itemBuf)
 			item.Init(itemBuf, n)
 
-			if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
-				x := pPool.Get().(*SimpleTagsPoint)
-
-				x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
-				x.FieldName = unsafeBytesToString(item.FieldNameBytes())
-				x.Timestamp = item.TimestampNanos()
-
-				tagLength := item.TagsLength()
-				switch documentFormat {
-				case mongodb.SimpleTagsFormat:
-					x.Tags = make(bson.M, tagLength)
-				case mongodb.SimpleTagsArrayFormat:
-					x.Tags = make([]bson.M, tagLength)
-				}
-				for i := 0; i < tagLength; i++ {
-					*destTag = mongo_serialization.Tag{} // clear
-					item.Tags(destTag, i)
-					tagKey := unsafeBytesToString(destTag.KeyBytes())
-					tagValue := unsafeBytesToString(destTag.ValBytes())
-					switch documentFormat {
-					case mongodb.SimpleTagsFormat:
-						x.Tags.(bson.M)[tagKey] = tagValue
-					case mongodb.SimpleTagsArrayFormat:
-						x.Tags.([]bson.M)[i] = bson.M{tagKey:tagValue}
-					}
-				}
-				switch item.ValueType() {
-				case mongo_serialization.ValueTypeLong:
-					x.Value = item.LongValue()
-				case mongo_serialization.ValueTypeDouble:
-					x.Value = item.DoubleValue()
-				case mongo_serialization.ValueTypeString:
-					x.Value = unsafeBytesToString(item.StringValueBytes())
-				default:
-					panic("logic error")
-				}
-				pvs[i] = x
-
-				continue
-			}
-
 			x := pPool.Get().(*Point)
 
 			x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
-			x.FieldName = unsafeBytesToString(item.FieldNameBytes())
 			x.Timestamp = item.TimestampNanos()
 
 			tagLength := item.TagsLength()
 			if cap(x.Tags) < tagLength {
-				x.Tags = make([]Tag, 0, tagLength)
+				x.Tags = make([]interface{}, 0, tagLength)
 			}
 			x.Tags = x.Tags[:tagLength]
 			for i := 0; i < tagLength; i++ {
 				*destTag = mongo_serialization.Tag{} // clear
 				item.Tags(destTag, i)
-				x.Tags[i].Key = unsafeBytesToString(destTag.KeyBytes())
-				x.Tags[i].Val = unsafeBytesToString(destTag.ValBytes())
+				tagKey := unsafeBytesToString(destTag.KeyBytes())
+				tagValue := unsafeBytesToString(destTag.ValBytes())
+				if documentFormat == mongodb.SimpleArraysFormat {
+					x.Tags[i] = bson.M{tagKey:tagValue}
+				} else {
+					x.Tags[i] = &Tag{Key:tagKey,Val:tagValue}
+				}
 			}
 
-			// this complexity is the result of trying to minimize
-			// allocs while using an interface{} type for
-			// (*Point).Value.
-			switch item.ValueType() {
-			case mongo_serialization.ValueTypeLong:
-				x.longValue = item.LongValue()
-				x.Value = &x.longValue
-			case mongo_serialization.ValueTypeDouble:
-				x.doubleValue = item.DoubleValue()
-				x.Value = &x.doubleValue
-			case mongo_serialization.ValueTypeString:
-				x.stringValue = unsafeBytesToString(item.StringValueBytes())
-				x.Value = &x.stringValue
-			default:
-				panic("logic error")
+			fieldLength := item.FieldsLength()
+			if cap(x.Fields) < fieldLength {
+				x.Fields = make([]interface{}, 0, fieldLength)
+			}
+			x.Fields = x.Fields[:fieldLength]
+			for i := 0; i < fieldLength; i++ {
+				*destField = mongo_serialization.Field{} // clear
+				item.Fields(destField, i)
+				fieldKey := unsafeBytesToString(destField.KeyBytes())
+				var fieldValue interface{}
+				switch destField.ValueType() {
+				case mongo_serialization.ValueTypeInt:
+					fieldValue = destField.IntValue()
+				case mongo_serialization.ValueTypeLong:
+					fieldValue = destField.LongValue()
+				case mongo_serialization.ValueTypeFloat:
+					fieldValue = destField.FloatValue()
+				case mongo_serialization.ValueTypeDouble:
+					fieldValue = destField.DoubleValue()
+				case mongo_serialization.ValueTypeString:
+					fieldValue = unsafeBytesToString(destField.StringValueBytes())
+				default:
+					panic("logic error")
+				}
+				if documentFormat == mongodb.SimpleArraysFormat {
+					x.Fields[i] = bson.M{fieldKey:fieldValue}
+				} else {
+					x.Fields[i] = &Field{Key:fieldKey,Val:fieldValue}
+				}
 			}
 			pvs[i] = x
 
@@ -426,19 +388,10 @@ func processBatches(session *mgo.Session) {
 
 		// cleanup pvs
 		for _, x := range pvs {
-			if documentFormat == mongodb.SimpleTagsFormat || documentFormat == mongodb.SimpleTagsArrayFormat {
-				p := x.(*SimpleTagsPoint)
-				p.Timestamp = 0
-				p.Tags = nil
-				pPool.Put(p)
-				continue
-			}
 			p := x.(*Point)
 			p.Timestamp = 0
-			p.Value = nil
-			p.longValue = 0
-			p.doubleValue = 0
 			p.Tags = p.Tags[:0]
+			p.Fields = p.Fields[:0]
 			pPool.Put(p)
 		}
 
@@ -471,7 +424,7 @@ func mustCreateCollections(daemonUrl string) {
 
 	collection := session.DB(dbName).C("point_data")
 	index := mgo.Index{
-		Key:        []string{"measurement", "tags", "field", "timestamp_ns"},
+		Key:        []string{"measurement", "tags", "timestamp_ns"},
 		Unique:     false, // Unique does not work on the entire array of tags!
 		DropDups:   true,
 		Background: false,
