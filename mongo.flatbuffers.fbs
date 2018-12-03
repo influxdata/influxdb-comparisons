@@ -1,21 +1,28 @@
 namespace mongo_serialization;
+
+enum ValueType:byte { Int = 0, Long = 1, Float = 2, Double = 3, String = 4 }
+
 table Tag {
   key:[ubyte];
   val:[ubyte];
 }
-enum ValueType:byte { Long = 0, Double = 1, String = 2 }
-table Item {
-  seriesId:[ubyte];
 
-  measurement_name:[ubyte];
-  tags:[Tag];
-  field_name:[ubyte];
-
-  timestamp_nanos:long;
-
+table Field {
+  key:[ubyte];
   value_type:ValueType;
+  int_value:int;
   long_value:long;
+  float_value:float;
   double_value:double;
   string_value:[ubyte];
 }
+
+table Item {
+  seriesId:[ubyte];
+  measurement_name:[ubyte];
+  tags:[Tag];
+  fields:[Field];
+  timestamp_nanos:long;
+}
+
 root_type Item;
