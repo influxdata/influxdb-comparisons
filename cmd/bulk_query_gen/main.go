@@ -176,7 +176,7 @@ func init() {
 	}
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleTags' and 'simpleTagsArray' are supported; leave empty for previous behaviour)")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleArrays'; leave empty for previous behaviour)")
 	flag.StringVar(&useCase, "use-case", "devops", "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
@@ -272,7 +272,7 @@ func init() {
 	}
 
 	if format == "mongo" {
-		if documentFormat != mongodb.SimpleTagsFormat && documentFormat != mongodb.SimpleTagsArrayFormat {
+		if documentFormat != mongodb.SimpleArraysFormat {
 			documentFormat = "default"
 		}
 		mongodb.DocumentFormat = documentFormat

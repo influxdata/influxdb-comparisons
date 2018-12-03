@@ -46,10 +46,26 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 
 	homeClauses := []M{}
 	for _, h := range homes {
-		homeClauses = append(homeClauses, M{"key": "home_id", "val": h})
+		if DocumentFormat == SimpleArraysFormat {
+			homeClauses = append(homeClauses, M{"home_id": h})
+		} else {
+			homeClauses = append(homeClauses, M{"key": "home_id", "val": h})
+		}
 	}
 
-	var bucketNano int64 = time.Hour.Nanoseconds()
+	var fieldSpec, fieldPath string
+	var fieldExpr interface{}
+	if DocumentFormat == SimpleArraysFormat {
+		fieldSpec = "fields.temperature"
+		fieldExpr = 1
+		fieldPath = "fields.temperature"
+	} else {
+		fieldSpec = "fields"
+		fieldExpr = M{ "$filter": M{ "input": "$fields", "as": "field", "cond": M{ "$eq": []string{ "$$field.key", "temperature" } } } }
+		fieldPath = "fields.val"
+	}
+
+	var bucketNano = time.Hour.Nanoseconds()
 	pipelineQuery := []M{
 		{
 			"$match": M{
@@ -58,7 +74,6 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 					"$gte": interval.StartUnixNano(),
 					"$lt":  interval.EndUnixNano(),
 				},
-				"field": "temperature",
 				"tags": M{
 					"$in": homeClauses,
 				},
@@ -73,39 +88,22 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 						M{"$mod": S{"$timestamp_ns", bucketNano}},
 					},
 				},
-
-				"field":       1,
-				"value":       1,
+				fieldSpec: fieldExpr, // was value: 1
 				"measurement": 1,
 			},
 		},
 		{
+			"$unwind": "$fields",
+		},
+		{
 			"$group": M{
 				"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
-				"agg_value": M{"$avg": "$value"},
+				"agg_value": M{"$avg": "$"+fieldPath}, // was: $value
 			},
 		},
 		{
 			"$sort": M{"_id.time_bucket": 1},
 		},
-	}
-
-	if DocumentFormat == SimpleTagsFormat {
-		match := pipelineQuery[0]["$match"]
-		delete(match.(M), "tags")
-		match.(M)["tags.home_id"] = M{
-			"$in": homes,
-		}
-	} else if DocumentFormat == SimpleTagsArrayFormat {
-		homeClauses = []M{}
-		for _, h := range homes {
-			homeClauses = append(homeClauses, M{"home_id": h})
-		}
-		match := pipelineQuery[0]["$match"]
-		delete(match.(M), "tags")
-		match.(M)["tags"] = M{
-			"$in": homeClauses,
-		}
 	}
 
 	humanLabel := []byte(fmt.Sprintf("Mongo avg temperature, rand %4d homes, rand %s by 1h", nHomes, timeRange))

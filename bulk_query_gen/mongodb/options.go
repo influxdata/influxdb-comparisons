@@ -1,8 +1,7 @@
 package mongodb
 
 const (
-	SimpleTagsFormat = "simpleTags"
-	SimpleTagsArrayFormat = "simpleTagsArray"
+	SimpleArraysFormat = "simpleArrays"
 )
 
 var DocumentFormat = ""
