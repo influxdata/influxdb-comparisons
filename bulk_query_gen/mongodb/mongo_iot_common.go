@@ -93,6 +93,9 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 			},
 		},
 		{
+			"$unwind": "$fields",
+		},
+		{
 			"$group": M{
 				"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
 				"agg_value": M{"$avg": "$"+fieldPath}, // was: $value
