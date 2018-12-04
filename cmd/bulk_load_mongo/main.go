@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/flatbuffers/go"
@@ -50,6 +51,7 @@ var (
 	workersGroup   sync.WaitGroup
 	reportTags     [][2]string
 	reportHostname string
+	valuesRead     int64
 )
 
 // Magic database constants
@@ -170,8 +172,9 @@ func main() {
 	took := end.Sub(start)
 	itemRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
+	valuesRate := float64(valuesRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d values in %fsec with %d workers (mean values rate %f values/sec, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemRate, valuesRate, bytesRate/(1<<20))
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
@@ -281,6 +284,8 @@ func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
 // them to the target server. Note that mgo forcibly incurs serialization
 // overhead (it always encodes to BSON).
 func processBatches(session *mgo.Session) {
+	var workerValuesRead int64
+
 	db := session.DB(dbName)
 
 	type Tag struct {
@@ -374,7 +379,7 @@ func processBatches(session *mgo.Session) {
 				}
 			}
 			pvs[i] = x
-
+			workerValuesRead += int64(fieldLength)
 		}
 		bulk.Insert(pvs...)
 
@@ -402,6 +407,7 @@ func processBatches(session *mgo.Session) {
 		batch.ClearReferences()
 		batchPool.Put(batch)
 	}
+	atomic.AddInt64(&valuesRead, workerValuesRead)
 	workersGroup.Done()
 }
 
