@@ -87,7 +87,7 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 		sc := resp.StatusCode()
 		if sc == 500 && backpressurePred(resp.Body()) {
 			err = BackoffError
-			log.Printf("backoff: %s\n", string(resp.Body()))
+			log.Printf("backoff:\n%s\n---\n%s\n", string(resp.Body()), resp.String())
 		} else if sc != fasthttp.StatusNoContent {
 			err = fmt.Errorf("[DebugInfo: %s] Invalid write response (status %d): %s", w.c.DebugInfo, sc, resp.Body())
 		}
