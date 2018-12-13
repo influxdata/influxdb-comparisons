@@ -85,13 +85,9 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 	lat := time.Since(start).Nanoseconds()
 	if err == nil {
 		sc := resp.StatusCode()
-		if sc == 500 {
-			if backpressurePred(resp.Body()) {
-				err = BackoffError
-				log.Printf("backoff suggested, reason: %s\n", resp.Body())
-			} else {
-				err = fmt.Errorf("unknown error: %s", resp.Body())
-			}
+		if sc == 500 && backpressurePred(resp.Body()) {
+			err = BackoffError
+			log.Printf("backoff suggested, reason: %s\n", resp.Body())
 		} else if sc != fasthttp.StatusNoContent {
 			err = fmt.Errorf("[DebugInfo: %s] Invalid write response (status %d): %s", w.c.DebugInfo, sc, resp.Body())
 		}
