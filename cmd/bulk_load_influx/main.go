@@ -568,7 +568,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 	// Ingestion rate control vars
 	var gvCount float64
 	var gvStart time.Time
-	//var wasBackOff bool
+
 	defer workersGroup.Done()
 
 	for batch := range batchChan {
@@ -576,7 +576,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 
 		//var bodySize int
 		ts := time.Now().UnixNano()
-		//backOff := false
 
 		if ingestRateLimit > 0 && gvStart.Nanosecond() == 0 {
 			gvStart = time.Now()
@@ -601,7 +600,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 				}
 
 				if err == BackoffError {
-					//backOff = true
 					backoffSrc <- true
 					// Report telemetry, if applicable:
 					if telemetrySink != nil {
@@ -639,12 +637,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 		batch.Buffer.Reset()
 		bufPool.Put(batch.Buffer)
 
-		/*		// Backoff means no data was written - nothing to report or calculate
-				if backOff {
-					wasBackOff = true
-					continue
-				}
-		*/
 		// Normally report after each batch
 		reportStat := true
 		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
@@ -666,9 +658,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
-					//if !wasBackOff {
 					atomic.AddInt32(&speedUpRequest, 1)
-					//}
 				}
 				gvCount = 0
 			} else {
@@ -676,9 +666,6 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{
 			}
 		}
 
-		/*		// Clear
-				wasBackOff = false
-		*/
 		// Report sent batch statistic
 		if reportStat {
 			stat := statPool.Get().(*Stat)
