@@ -16,7 +16,7 @@ func NewCassandraDevopsSingleHost(dbConfig bulkQuerygen.DatabaseConfig, queriesF
 }
 
 func (d *CassandraDevopsSingleHost) Dispatch(i int) bulkQuerygen.Query {
-	q := NewCassandraQuery() // from pool
+	q := NewCQLQuery() // from pool
 	d.MaxCPUUsageHourByMinuteOneHost(q)
 	return q
 }
