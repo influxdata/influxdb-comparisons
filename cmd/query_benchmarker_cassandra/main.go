@@ -27,20 +27,7 @@ import (
 )
 
 const (
-	BucketDuration   time.Duration = 24 * time.Hour
-	BucketTimeLayout string        = "2006-01-02"
-	BlessedKeyspace  string        = "measurements"
-)
-
-// Blessed tables that hold benchmark data:
-var (
-	BlessedTables []string = []string{
-		"series_bigint",
-		"series_float",
-		"series_double",
-		"series_boolean",
-		"series_blob",
-	}
+	BlessedKeyspace string = "measurements"
 )
 
 // Program option vars:
@@ -67,7 +54,7 @@ var (
 
 // Helpers for choice-like flags:
 var (
-	aggrPlanChoices map[string]int = map[string]int{
+	aggrPlanChoices = map[string]int{
 		"server": AggrPlanTypeWithServerAggregation,
 		"client": AggrPlanTypeWithoutServerAggregation,
 	}
@@ -97,7 +84,7 @@ func init() {
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.StringVar(&aggrPlanLabel, "aggregation-plan", "", "Aggregation plan (choices: server, client)")
 	flag.IntVar(&subQueryParallelism, "subquery-workers", 1, "Number of concurrent subqueries to make (because the client does a scatter+gather operation).")
-	flag.DurationVar(&requestTimeout, "request-timeout", 1*time.Second, "Maximum request timeout.")
+	flag.DurationVar(&requestTimeout, "request-timeout", 60*time.Second, "Maximum request timeout.")
 	flag.DurationVar(&csiTimeout, "client-side-index-timeout", 10*time.Second, "Maximum client-side index timeout (only used at initialization).")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
@@ -162,7 +149,7 @@ func main() {
 				MeasurementName:  make([]byte, 0, 1024),
 				FieldName:        make([]byte, 0, 1024),
 				AggregationType:  make([]byte, 0, 1024),
-				TagSets:          make([][]string, 0, 10),
+				TagsCondition:    make([]byte, 0, 1024),
 			}
 		},
 	}
@@ -174,9 +161,6 @@ func main() {
 			}
 		},
 	}
-
-	// Make client-side index:
-	csi := NewClientSideIndex(FetchSeriesCollection(daemonUrl, csiTimeout))
 
 	// Make database connection pool:
 	session := NewCassandraSession(daemonUrl, requestTimeout)
@@ -191,7 +175,7 @@ func main() {
 	go processStats()
 
 	// Launch the query processors:
-	qe := NewHLQueryExecutor(session, csi, debug)
+	qe := NewHLQueryExecutor(session, debug)
 	for i := 0; i < workers; i++ {
 		workersGroup.Add(1)
 		go processQueries(qe)
