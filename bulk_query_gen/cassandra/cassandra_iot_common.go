@@ -5,6 +5,7 @@ import (
 	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -40,14 +41,17 @@ func (d *CassandraIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, 
 	interval := d.AllInterval.RandWindow(timeRange)
 	nn := rand.Perm(d.ScaleVar)[:nHomes]
 
-	tagSets := [][]string{}
-	tagSet := []string{}
+	homes := []string{}
 	for _, n := range nn {
-		home := fmt.Sprintf(bulkDataGenIot.SmartHomeIdFormat, n)
-		tag := fmt.Sprintf("home_id=%s", home)
-		tagSet = append(tagSet, tag)
+		homes = append(homes, fmt.Sprintf(bulkDataGenIot.SmartHomeIdFormat, n))
 	}
-	tagSets = append(tagSets, tagSet)
+
+	homeClauses := []string{}
+	for _, s := range homes {
+		homeClauses = append(homeClauses, fmt.Sprintf("home_id = '%s'", s))
+	}
+
+	combinedHomesClause := strings.Join(homeClauses, " or ")
 
 	humanLabel := fmt.Sprintf("Cassandra average temperature, rand %4d homes, rand %s by 1h", nHomes, timeRange)
 	q := qi.(*CassandraQuery)
@@ -62,5 +66,5 @@ func (d *CassandraIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, 
 	q.TimeEnd = interval.End
 	q.GroupByDuration = time.Hour
 
-	q.TagSets = tagSets
+	q.TagsCondition = []byte(combinedHomesClause)
 }

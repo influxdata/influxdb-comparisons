@@ -18,7 +18,7 @@ type CassandraQuery struct {
 	TimeStart       time.Time
 	TimeEnd         time.Time
 	GroupByDuration time.Duration
-	TagSets         [][]string // semantically, each subgroup is OR'ed and they are all AND'ed together
+	TagsCondition   []byte
 }
 
 var CassandraQueryPool sync.Pool = sync.Pool{
@@ -29,7 +29,7 @@ var CassandraQueryPool sync.Pool = sync.Pool{
 			MeasurementName:  []byte{},
 			FieldName:        []byte{},
 			AggregationType:  []byte{},
-			TagSets:          [][]string{},
+			TagsCondition:    []byte{},
 		}
 	},
 }
@@ -40,7 +40,7 @@ func NewCassandraQuery() *CassandraQuery {
 
 // String produces a debug-ready description of a Query.
 func (q *CassandraQuery) String() string {
-	return fmt.Sprintf("HumanLabel: %s, HumanDescription: %s, MeasurementName: %s, AggregationType: %s, TimeStart: %s, TimeEnd: %s, GroupByDuration: %s, TagSets: %s", q.HumanLabel, q.HumanDescription, q.MeasurementName, q.AggregationType, q.TimeStart, q.TimeEnd, q.GroupByDuration, q.TagSets)
+	return fmt.Sprintf("HumanLabel: %s, HumanDescription: %s, MeasurementName: %s, AggregationType: %s, TimeStart: %s, TimeEnd: %s, GroupByDuration: %s, TagSets: %s", q.HumanLabel, q.HumanDescription, q.MeasurementName, q.AggregationType, q.TimeStart, q.TimeEnd, q.GroupByDuration, q.TagsCondition)
 }
 
 func (q *CassandraQuery) HumanLabelName() []byte {
@@ -60,51 +60,7 @@ func (q *CassandraQuery) Release() {
 	q.GroupByDuration = 0
 	q.TimeStart = time.Time{}
 	q.TimeEnd = time.Time{}
-	q.TagSets = q.TagSets[:0]
+	q.TagsCondition = q.TagsCondition[:0]
 
 	CassandraQueryPool.Put(q)
-}
-
-var CQLQueryPool sync.Pool = sync.Pool{
-	New: func() interface{} {
-		return &CQLQuery{
-			HumanLabel:       []byte{},
-			HumanDescription: []byte{},
-			QueryCQL:         []byte{},
-		}
-	},
-}
-
-// CQLQuery encodes an full constructed CQL query. This will typically by serialized for use
-// by the query_benchmarker program.
-type CQLQuery struct {
-	HumanLabel       []byte
-	HumanDescription []byte
-	QueryCQL         []byte
-	AggregationType  []byte
-	GroupByDuration  time.Duration
-}
-
-func NewCQLQuery() *CQLQuery {
-	return CQLQueryPool.Get().(*CQLQuery)
-}
-
-// String produces a debug-ready description of a Query.
-func (q *CQLQuery) String() string {
-	return fmt.Sprintf("HumanLabel: \"%s\", HumanDescription: \"%s\", Query: \"%s\"", q.HumanLabel, q.HumanDescription, q.QueryCQL)
-}
-
-func (q *CQLQuery) HumanLabelName() []byte {
-	return q.HumanLabel
-}
-func (q *CQLQuery) HumanDescriptionName() []byte {
-	return q.HumanDescription
-}
-
-func (q *CQLQuery) Release() {
-	q.HumanLabel = q.HumanLabel[:0]
-	q.HumanDescription = q.HumanDescription[:0]
-	q.QueryCQL = q.QueryCQL[:0]
-
-	CQLQueryPool.Put(q)
 }

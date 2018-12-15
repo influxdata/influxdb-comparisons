@@ -25,13 +25,13 @@ func newCassandraDevopsCommon(dbConfig bulkQuerygen.DatabaseConfig, queriesFullR
 
 // Dispatch fulfills the QueryGenerator interface.
 func (d *CassandraDevops) Dispatch(i int) bulkQuerygen.Query {
-	q := NewCQLQuery() // from pool
+	q := NewCassandraQuery() // from pool
 	bulkQuerygen.DevopsDispatchAll(d, i, q, d.ScaleVar)
 	return q
 }
 
 func (d *CassandraDevops) MaxCPUUsageHourByMinuteOneHost(q bulkQuerygen.Query) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*CQLQuery), 1, time.Hour)
+	d.maxCPUUsageHourByMinuteNHosts(q.(*CassandraQuery), 1, time.Hour)
 }
 
 func (d *CassandraDevops) MaxCPUUsageHourByMinuteTwoHosts(q bulkQuerygen.Query) {
@@ -55,7 +55,7 @@ func (d *CassandraDevops) MaxCPUUsageHourByMinuteThirtyTwoHosts(q bulkQuerygen.Q
 }
 
 func (d *CassandraDevops) MaxCPUUsage12HoursByMinuteOneHost(q bulkQuerygen.Query) {
-	d.maxCPUUsageHourByMinuteNHosts(q.(*CQLQuery), 1, 12*time.Hour)
+	d.maxCPUUsageHourByMinuteNHosts(q.(*CassandraQuery), 1, 12*time.Hour)
 }
 
 // MaxCPUUsageHourByMinuteThirtyTwoHosts populates a Query with a query that looks like:
@@ -77,12 +77,19 @@ func (d *CassandraDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, n
 	combinedHostnameClause := strings.Join(hostnameClauses, " or ")
 
 	humanLabel := fmt.Sprintf("Cassandra max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange)
-	q := qi.(*CQLQuery)
+	q := qi.(*CassandraQuery)
 	q.HumanLabel = []byte(humanLabel)
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
-	q.QueryCQL = []byte(fmt.Sprintf("select usage_user from measurements.cpu where (%s) and time >=%d and time < %d order by time;", combinedHostnameClause, interval.StartUnixNano(), interval.EndUnixNano()))
+
 	q.AggregationType = []byte("max")
+	q.MeasurementName = []byte("measurements.cpu")
+	q.FieldName = []byte("usage_user")
+
+	q.TimeStart = interval.Start
+	q.TimeEnd = interval.End
 	q.GroupByDuration = time.Minute
+
+	q.TagsCondition = []byte(combinedHostnameClause)
 }
 
 // MeanCPUUsageDayByHourAllHosts populates a Query with a query that looks like:
