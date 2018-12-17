@@ -22,43 +22,40 @@ func NewSerializerCassandra() *SerializerCassandra {
 // For example:
 // INSERT INTO all_series (series_id, timestamp_ns, value) VALUES ('cpu,hostname=host_01#user#2016-01-01', 12345, 42.1)\n
 func (m *SerializerCassandra) SerializePoint(w io.Writer, p *Point) (err error) {
-	seriesIdPrefix := make([]byte, 0, 256)
-	seriesIdPrefix = append(seriesIdPrefix, p.MeasurementName...)
+	timestampNanos := p.Timestamp.UTC().UnixNano()
+	buf := make([]byte, 0, 4096)
+	buf = append(buf, []byte("INSERT INTO measurements.")...)
+	buf = append(buf, []byte(p.MeasurementName)...)
+	buf = append(buf, []byte(" (time")...)
+
 	for i := 0; i < len(p.TagKeys); i++ {
-		seriesIdPrefix = append(seriesIdPrefix, ',')
-		seriesIdPrefix = append(seriesIdPrefix, p.TagKeys[i]...)
-		seriesIdPrefix = append(seriesIdPrefix, '=')
-		seriesIdPrefix = append(seriesIdPrefix, p.TagValues[i]...)
+		buf = append(buf, ","...)
+		buf = append(buf, p.TagKeys[i]...)
 	}
 
-	timestampNanos := p.Timestamp.UTC().UnixNano()
-	timestampBucket := p.Timestamp.UTC().Format("2006-01-02")
+	for i := 0; i < len(p.FieldKeys); i++ {
+		buf = append(buf, ","...)
+		buf = append(buf, p.FieldKeys[i]...)
+	}
+	buf = append(buf, []byte(") VALUES (")...)
+	buf = append(buf, []byte(fmt.Sprintf("%d", timestampNanos))...)
 
-	for fieldId := 0; fieldId < len(p.FieldKeys); fieldId++ {
-		v := p.FieldValues[fieldId]
-		tableName := fmt.Sprintf("measurements.series_%s", typeNameForCassandra(v))
-
-		buf := make([]byte, 0, 256)
-		buf = append(buf, []byte("INSERT INTO ")...)
-		buf = append(buf, []byte(tableName)...)
-		buf = append(buf, []byte(" (series_id, timestamp_ns, value) VALUES ('")...)
-		buf = append(buf, seriesIdPrefix...)
-		buf = append(buf, byte('#'))
-		buf = append(buf, p.FieldKeys[fieldId]...)
-		buf = append(buf, byte('#'))
-		buf = append(buf, []byte(timestampBucket)...)
+	for i := 0; i < len(p.TagValues); i++ {
+		buf = append(buf, ",'"...)
+		buf = append(buf, p.TagValues[i]...)
 		buf = append(buf, byte('\''))
-		buf = append(buf, ", "...)
-		buf = append(buf, []byte(fmt.Sprintf("%d, ", timestampNanos))...)
+	}
 
+	for i := 0; i < len(p.FieldValues); i++ {
+		buf = append(buf, ","...)
+		v := p.FieldValues[i]
 		buf = fastFormatAppendCassandra(v, buf, true)
+	}
+	buf = append(buf, []byte(");\n")...)
 
-		buf = append(buf, []byte(")\n")...)
-
-		_, err := w.Write(buf)
-		if err != nil {
-			return err
-		}
+	_, err = w.Write(buf)
+	if err != nil {
+		return err
 	}
 
 	return nil

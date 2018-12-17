@@ -18,7 +18,7 @@ type CassandraQuery struct {
 	TimeStart       time.Time
 	TimeEnd         time.Time
 	GroupByDuration time.Duration
-	TagSets         [][]string // semantically, each subgroup is OR'ed and they are all AND'ed together
+	TagsCondition   []byte
 }
 
 var CassandraQueryPool sync.Pool = sync.Pool{
@@ -29,7 +29,7 @@ var CassandraQueryPool sync.Pool = sync.Pool{
 			MeasurementName:  []byte{},
 			FieldName:        []byte{},
 			AggregationType:  []byte{},
-			TagSets:          [][]string{},
+			TagsCondition:    []byte{},
 		}
 	},
 }
@@ -40,7 +40,7 @@ func NewCassandraQuery() *CassandraQuery {
 
 // String produces a debug-ready description of a Query.
 func (q *CassandraQuery) String() string {
-	return fmt.Sprintf("HumanLabel: %s, HumanDescription: %s, MeasurementName: %s, AggregationType: %s, TimeStart: %s, TimeEnd: %s, GroupByDuration: %s, TagSets: %s", q.HumanLabel, q.HumanDescription, q.MeasurementName, q.AggregationType, q.TimeStart, q.TimeEnd, q.GroupByDuration, q.TagSets)
+	return fmt.Sprintf("HumanLabel: %s, HumanDescription: %s, MeasurementName: %s, AggregationType: %s, TimeStart: %s, TimeEnd: %s, GroupByDuration: %s, TagSets: %s", q.HumanLabel, q.HumanDescription, q.MeasurementName, q.AggregationType, q.TimeStart, q.TimeEnd, q.GroupByDuration, q.TagsCondition)
 }
 
 func (q *CassandraQuery) HumanLabelName() []byte {
@@ -60,7 +60,7 @@ func (q *CassandraQuery) Release() {
 	q.GroupByDuration = 0
 	q.TimeStart = time.Time{}
 	q.TimeEnd = time.Time{}
-	q.TagSets = q.TagSets[:0]
+	q.TagsCondition = q.TagsCondition[:0]
 
 	CassandraQueryPool.Put(q)
 }

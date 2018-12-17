@@ -17,16 +17,14 @@ const (
 // context of a particular Cassandra session and data set.
 type HLQueryExecutor struct {
 	session *gocql.Session
-	csi     *ClientSideIndex
 	debug   int
 }
 
 // NewHLQueryExecutor creates an HLQueryExecutor from a ClientSideIndex and
 // Cassandra session.
-func NewHLQueryExecutor(session *gocql.Session, csi *ClientSideIndex, debug int) *HLQueryExecutor {
+func NewHLQueryExecutor(session *gocql.Session, debug int) *HLQueryExecutor {
 	return &HLQueryExecutor{
 		session: session,
-		csi:     csi,
 		debug:   debug,
 	}
 }
@@ -52,9 +50,9 @@ func (qe *HLQueryExecutor) Do(q *HLQuery, opts HLQueryExecutorDoOptions) (qpLagM
 	qpStart := time.Now()
 	switch opts.AggregationPlan {
 	case AggrPlanTypeWithServerAggregation:
-		qp, err = q.ToQueryPlanWithServerAggregation(qe.csi)
+		qp, err = q.ToQueryPlanWithServerAggregation()
 	case AggrPlanTypeWithoutServerAggregation:
-		qp, err = q.ToQueryPlanWithoutServerAggregation(qe.csi)
+		qp, err = q.ToQueryPlanWithoutServerAggregation()
 	default:
 		panic("logic error: invalid aggregation plan option")
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -63,14 +64,17 @@ func (d *CassandraDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, n
 	interval := d.AllInterval.RandWindow(timeRange)
 	nn := rand.Perm(d.ScaleVar)[:nhosts]
 
-	tagSets := [][]string{}
-	tagSet := []string{}
+	hostnames := []string{}
 	for _, n := range nn {
-		hostname := fmt.Sprintf("host_%d", n)
-		tag := fmt.Sprintf("hostname=%s", hostname)
-		tagSet = append(tagSet, tag)
+		hostnames = append(hostnames, fmt.Sprintf("host_%d", n))
 	}
-	tagSets = append(tagSets, tagSet)
+
+	hostnameClauses := []string{}
+	for _, s := range hostnames {
+		hostnameClauses = append(hostnameClauses, fmt.Sprintf("hostname = '%s'", s))
+	}
+
+	combinedHostnameClause := strings.Join(hostnameClauses, " or ")
 
 	humanLabel := fmt.Sprintf("Cassandra max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange)
 	q := qi.(*CassandraQuery)
@@ -78,14 +82,14 @@ func (d *CassandraDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, n
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
 
 	q.AggregationType = []byte("max")
-	q.MeasurementName = []byte("cpu")
+	q.MeasurementName = []byte("measurements.cpu")
 	q.FieldName = []byte("usage_user")
 
 	q.TimeStart = interval.Start
 	q.TimeEnd = interval.End
 	q.GroupByDuration = time.Minute
 
-	q.TagSets = tagSets
+	q.TagsCondition = []byte(combinedHostnameClause)
 }
 
 // MeanCPUUsageDayByHourAllHosts populates a Query with a query that looks like:

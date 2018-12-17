@@ -32,6 +32,7 @@ var (
 	reportUser     string
 	reportPassword string
 	reportTagsCSV  string
+	compressor     string
 )
 
 // Global vars
@@ -49,7 +50,8 @@ func init() {
 
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.DurationVar(&writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
+	flag.DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
+	flag.StringVar(&compressor, "compressor", "DeflateCompressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -86,6 +88,7 @@ func init() {
 
 func main() {
 	if doLoad {
+		log.Println("Creating keyspace")
 		createKeyspace(daemonUrl)
 	}
 
@@ -107,7 +110,7 @@ func main() {
 
 	batchChan = make(chan *gocql.Batch, workers)
 	inputDone = make(chan struct{})
-
+	log.Println("Starting workers")
 	for i := 0; i < workers; i++ {
 		workersGroup.Add(1)
 		go processBatches(session)
@@ -122,11 +125,11 @@ func main() {
 	end := time.Now()
 	took := end.Sub(start)
 
-	//itemsRate := float64(itemsRead) / float64(took.Seconds())
+	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
 	valuesRate := float64(valuesRead) / float64(took.Seconds())
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, valuesRate, bytesRate/(1<<20))
+	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %.2f/s, mean value rate %.2f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
 
 	if reportHost != "" {
 		//append db specific tags to custom tags
@@ -207,7 +210,7 @@ func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(inputDone)
 	//cassandra's schema stores each value separately, point is represented in series_id
-	if itemsRead != totalValues {
+	if itemsRead != totalPoints {
 		log.Fatalf("Incorrent number of read items: %d, expected: %d:", itemsRead, totalPoints)
 	}
 
@@ -230,11 +233,25 @@ func processBatches(session *gocql.Session) {
 	workersGroup.Done()
 }
 
+var tableOptionsFmt = "with compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': 1, 'compaction_window_unit': 'DAYS'} and compression = {'class':'%s'}"
+
+var createTablesCQLDevops = []string{
+	"CREATE table measurements.cpu(time bigint,hostname TEXT,region TEXT,datacenter TEXT,rack TEXT,os TEXT,arch TEXT,team TEXT,service TEXT,service_version TEXT,service_environment TEXT,usage_user double,usage_system double,usage_idle double,usage_nice double,usage_iowait double,usage_irq double,usage_softirq double,usage_steal double,usage_guest double,usage_guest_nice double, primary key(hostname, time)) %s;",
+	"CREATE table measurements.diskio(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, serial TEXT, reads bigint, writes bigint, read_bytes bigint, write_bytes bigint, read_time bigint, write_time bigint, io_time bigint , primary key(hostname, time)) %s;",
+	"CREATE table measurements.disk(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, path TEXT, fstype TEXT, total bigint, free bigint, used bigint, used_percent bigint, inodes_total bigint, inodes_free bigint, inodes_used bigint, primary key(hostname, time)) %s;",
+	"CREATE table measurements.kernel(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, boot_time bigint, interrupts bigint, context_switches bigint, processes_forked bigint, disk_pages_in bigint, disk_pages_out bigint, primary key(hostname, time)) %s;",
+	"CREATE table measurements.mem(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, total bigint, available bigint, used bigint, free bigint, cached bigint, buffered bigint, used_percent double, available_percent double, buffered_percent double, primary key(hostname, time)) %s;",
+	"CREATE table measurements.Net(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, interface TEXT, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint , primary key(hostname, time)) %s;",
+	"CREATE table measurements.nginx(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, accepts bigint, active bigint, handled bigint, reading bigint, requests bigint, waiting bigint, writing bigint , primary key(hostname, time)) %s;",
+	"CREATE table measurements.postgresl(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, numbackends bigint, xact_commit bigint, xact_rollback bigint, blks_read bigint, blks_hit bigint, tup_returned bigint, tup_fetched bigint, tup_inserted bigint, tup_updated bigint, tup_deleted bigint, conflicts bigint, temp_files bigint, temp_bytes bigint, deadlocks bigint, blk_read_time bigint, blk_write_time bigint , primary key(hostname, time)) %s;",
+	"CREATE table measurements.redis(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, uptime_in_seconds bigint, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint, connected_clients bigint, used_memory bigint, used_memory_rss bigint, used_memory_peak bigint, used_memory_lua bigint, rdb_changes_since_last_save bigint, sync_full bigint, sync_partial_ok bigint, sync_partial_err bigint, pubsub_channels bigint, pubsub_patterns bigint, latest_fork_usec bigint, connected_slaves bigint, master_repl_offset bigint, repl_backlog_active bigint, repl_backlog_size bigint, repl_backlog_histlen bigint, mem_fragmentation_ratio bigint, used_cpu_sys bigint, used_cpu_user bigint, used_cpu_sys_children bigint, used_cpu_user_children bigint , primary key(hostname, time)) %s;",
+}
+
 func createKeyspace(daemon_url string) {
-	cluster := gocql.NewCluster(daemonUrl)
+	cluster := gocql.NewCluster(daemon_url)
 	cluster.Consistency = gocql.Quorum
 	cluster.ProtoVersion = 4
-	cluster.Timeout = 10 * time.Second
+	cluster.Timeout = writeTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
 		log.Fatal(err)
@@ -246,16 +263,11 @@ func createKeyspace(daemon_url string) {
 		log.Print("echo 'drop keyspace measurements;' | cqlsh <host>")
 		log.Fatal(err)
 	}
-	for _, cassandraTypename := range []string{"bigint", "float", "double", "boolean", "blob"} {
-		q := fmt.Sprintf(`CREATE TABLE measurements.series_%s (
-					series_id text,
-					timestamp_ns bigint,
-					value %s,
-					PRIMARY KEY (series_id, timestamp_ns)
-				 )
-				 WITH COMPACT STORAGE;`,
-			cassandraTypename, cassandraTypename)
-		if err := session.Query(q).Exec(); err != nil {
+	tableOptions := fmt.Sprintf(tableOptionsFmt, compressor)
+
+	for _, tableCQLFormat := range createTablesCQLDevops {
+		tableCQL := fmt.Sprintf(tableCQLFormat, tableOptions)
+		if err := session.Query(tableCQL).Exec(); err != nil {
 			log.Fatal(err)
 		}
 	}
