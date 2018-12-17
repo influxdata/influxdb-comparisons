@@ -32,6 +32,7 @@ var (
 	reportUser     string
 	reportPassword string
 	reportTagsCSV  string
+	compressor     string
 )
 
 // Global vars
@@ -50,6 +51,7 @@ func init() {
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
+	flag.StringVar(&compressor, "compressor", "DeflateCompressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -231,7 +233,7 @@ func processBatches(session *gocql.Session) {
 	workersGroup.Done()
 }
 
-var tableOptions = "with compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': 1, 'compaction_window_unit': 'DAYS'} and compression = {'class':'DeflateCompressor'}"
+var tableOptionsFmt = "with compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': 1, 'compaction_window_unit': 'DAYS'} and compression = {'class':'%s'}"
 
 var createTablesCQLDevops = []string{
 	"CREATE table measurements.cpu(time bigint,hostname TEXT,region TEXT,datacenter TEXT,rack TEXT,os TEXT,arch TEXT,team TEXT,service TEXT,service_version TEXT,service_environment TEXT,usage_user double,usage_system double,usage_idle double,usage_nice double,usage_iowait double,usage_irq double,usage_softirq double,usage_steal double,usage_guest double,usage_guest_nice double, primary key(hostname, time)) %s;",
@@ -261,6 +263,8 @@ func createKeyspace(daemon_url string) {
 		log.Print("echo 'drop keyspace measurements;' | cqlsh <host>")
 		log.Fatal(err)
 	}
+	tableOptions := fmt.Sprintf(tableOptionsFmt, compressor)
+
 	for _, tableCQLFormat := range createTablesCQLDevops {
 		tableCQL := fmt.Sprintf(tableCQLFormat, tableOptions)
 		if err := session.Query(tableCQL).Exec(); err != nil {
