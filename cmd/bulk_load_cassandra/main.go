@@ -51,7 +51,7 @@ func init() {
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
-	flag.StringVar(&compressor, "compressor", "DeflateCompressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
+	flag.StringVar(&compressor, "compressor", "LZ4Compressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
