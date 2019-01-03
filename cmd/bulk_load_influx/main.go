@@ -322,6 +322,7 @@ func main() {
 	statChan = make(chan *Stat, workers)
 	statGroup.Add(1)
 	go processStats(telemetryChanPoints)
+	var once sync.Once
 
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
@@ -339,12 +340,14 @@ func main() {
 			err := processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[w], backingOffDones[w], telemetryChanPoints, fmt.Sprintf("%d", w))
 			if err != nil {
 				fmt.Println(err.Error())
-				endedPrematurely = true
-				prematureEndReason = "Worker error"
-				if !scanFinished {
-					syncChanDone <- 1
-				}
-				exitCode = 1
+				once.Do(func() {
+					endedPrematurely = true
+					prematureEndReason = "Worker error"
+					if !scanFinished {
+						syncChanDone <- 1
+					}
+					exitCode = 1
+				})
 			}
 		}(i)
 		go func(w int) {
