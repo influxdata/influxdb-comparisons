@@ -344,6 +344,11 @@ func main() {
 					endedPrematurely = true
 					prematureEndReason = "Worker error"
 					if !scanFinished {
+						go func() {
+							for range batchChan {
+								//read out remaining batches
+							}
+						}()
 						syncChanDone <- 1
 					}
 					exitCode = 1
