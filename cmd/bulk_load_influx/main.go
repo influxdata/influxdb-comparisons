@@ -95,7 +95,6 @@ var (
 	ingestionRateGran     float64
 	endedPrematurely      bool
 	prematureEndReason    string
-	volatileBatchSize     int32
 	maxBatchSize          int
 	speedUpRequest        int32
 	statMapping           statsMap
@@ -107,10 +106,10 @@ var (
 )
 
 var consistencyChoices = map[string]struct{}{
-	"any":    struct{}{},
-	"one":    struct{}{},
-	"quorum": struct{}{},
-	"all":    struct{}{},
+	"any":    {},
+	"one":    {},
+	"quorum": {},
+	"all":    {},
 }
 
 type statsMap map[string]*StatGroup
@@ -205,7 +204,6 @@ func init() {
 			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
-		volatileBatchSize = int32(batchSize)
 	} else {
 		log.Printf("Ingestion rate control is off")
 	}
@@ -322,6 +320,7 @@ func main() {
 	statChan = make(chan *Stat, workers)
 	statGroup.Add(1)
 	go processStats(telemetryChanPoints)
+	var once sync.Once
 
 	for i := 0; i < workers; i++ {
 		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
@@ -336,15 +335,22 @@ func main() {
 			BackingOffDone: backingOffDones[i],
 		}
 		go func(w int) {
-			err := processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[w], backingOffDones[w], telemetryChanPoints, fmt.Sprintf("%d", w))
+			err := processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[w], telemetryChanPoints, fmt.Sprintf("%d", w))
 			if err != nil {
 				fmt.Println(err.Error())
-				endedPrematurely = true
-				prematureEndReason = "Worker error"
-				if !scanFinished {
-					syncChanDone <- 1
-				}
-				exitCode = 1
+				once.Do(func() {
+					endedPrematurely = true
+					prematureEndReason = "Worker error"
+					if !scanFinished {
+						go func() {
+							for range batchChan {
+								//read out remaining batches
+							}
+						}()
+						syncChanDone <- 1
+					}
+					exitCode = 1
+				})
 			}
 		}(i)
 		go func(w int) {
@@ -562,7 +568,7 @@ outer:
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(w *HTTPWriter, backoffSrc chan bool, backoffDst chan struct{}, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
+func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *report.Point, telemetryWorkerLabel string) error {
 	var batchesSeen int64
 
 	// Ingestion rate control vars
@@ -699,8 +705,8 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 	return totalBackoffSecs
 }
 
-func createDb(daemon_url, dbname string, replicationFactor int) error {
-	u, err := url.Parse(daemon_url)
+func createDb(daemonUrl, dbname string, replicationFactor int) error {
+	u, err := url.Parse(daemonUrl)
 	if err != nil {
 		return err
 	}
