@@ -42,6 +42,7 @@ var (
 
 	scaleVar       int64
 	scaleVarOffset int64
+	samplingInterval time.Duration
 
 	timestampStartStr string
 	timestampEndStr   string
@@ -63,6 +64,7 @@ func init() {
 	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 	flag.Int64Var(&scaleVarOffset, "scale-var-offset", 0, "Scaling variable offset specific to the use case.")
+	flag.DurationVar(&samplingInterval, "sampling-interval", devops.EpochDuration, "Simulated sampling interval.")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
@@ -108,6 +110,12 @@ func init() {
 		log.Fatal(err)
 	}
 	timestampEnd = timestampEnd.UTC()
+
+	if samplingInterval <= 0 {
+		log.Fatal("Invalid sampling interval")
+	}
+	devops.EpochDuration = samplingInterval
+	log.Printf("Using sampling interval %v\n", devops.EpochDuration)
 }
 
 func main() {

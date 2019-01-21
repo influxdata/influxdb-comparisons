@@ -159,7 +159,10 @@ var defaultTemplate6x = []byte(`
     "index": {
       "refresh_interval": "5s",
       "number_of_replicas": {{.NumberOfReplicas}},
-      "number_of_shards": {{.NumberOfShards}}
+      "number_of_shards": {{.NumberOfShards}},
+      "translog.retention.size": "20mb",
+      "translog.retention.age" : "10s",
+      "translog.flush_threshold_size" : "20mb"
     }
   },
   "mappings": {
@@ -181,7 +184,10 @@ var aggregationTemplate6x = []byte(`
     "index": {
       "refresh_interval": "5s",
       "number_of_replicas": {{.NumberOfReplicas}},
-      "number_of_shards": {{.NumberOfShards}}
+      "number_of_shards": {{.NumberOfShards}},
+      "translog.retention.size": "20mb",
+      "translog.retention.age" : "10s",
+      "translog.flush_threshold_size" : "20mb"
     }
   },
   "mappings": {
