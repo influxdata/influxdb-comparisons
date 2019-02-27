@@ -385,7 +385,6 @@ func processTupleBatches(conn net.Conn) int64 {
 	enc := ogórek.NewEncoderWithConfig(buf, &ogórek.EncoderConfig{
 		Protocol: 2,
 	})
-	ogórek.NewEncoder()
 
 	for batch := range batchChanLines {
 		if !doLoad {
