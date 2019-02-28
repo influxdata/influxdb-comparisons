@@ -23,14 +23,11 @@ import (
 )
 
 const (
-	DevOps                          = "devops"
 	DevOpsOneHostOneHour            = "1-host-1-hr"
 	DevOpsOneHostTwelveHours        = "1-host-12-hr"
 	DevOpsEightHostsOneHour         = "8-host-1-hr"
 	DevOpsGroupBy                   = "groupby"
-	Iot                             = "iot"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
-	Dashboard                       = "dashboard"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -55,7 +52,7 @@ const (
 // query generator choices {use-case, query-type, format}
 // (This object is shown to the user when flag.Usage is called.)
 var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGeneratorMaker{
-	DevOps: {
+	common.UseCaseDevOps: {
 		DevOpsOneHostOneHour: {
 			"cassandra":        cassandra.NewCassandraDevopsSingleHost,
 			"es-http":          elasticsearch.NewElasticSearchDevopsSingleHost,
@@ -91,7 +88,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"timescaledb":      timescaledb.NewTimescaleDevopsGroupby,
 		},
 	},
-	Iot: {
+	common.UseCaseIot: {
 		IotOneHomeTwelveHours: {
 			"influx-flux-http": influxdb.NewFluxIotSingleHost,
 			"influx-http":      influxdb.NewInfluxQLIotSingleHost,
@@ -100,7 +97,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"mongo":            mongodb.NewMongoIotSingleHost,
 		},
 	},
-	Dashboard: {
+	common.UseCaseDashboard: {
 		DashboardAll: {
 			"influx-http": influxdb.NewInfluxQLDashboardAll,
 		},
@@ -177,7 +174,7 @@ func init() {
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
 	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleArrays'; leave empty for previous behaviour)")
-	flag.StringVar(&useCase, "use-case", "devops", "Use case to model. (Choices are in the use case matrix.)")
+	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
 	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scalevar used for data generation).")
@@ -253,7 +250,7 @@ func init() {
 	bulkQueryGen.QueryIntervalType = queryIntervalType
 	switch queryIntervalType {
 	case "window":
-		if useCase == Dashboard && timeWindowShift <= 0 { // when not set, always use 5s default for dashboard
+		if useCase == common.UseCaseDashboard && timeWindowShift <= 0 { // when not set, always use 5s default for dashboard
 			timeWindowShift = 5 * time.Second
 		}
 	case "last":

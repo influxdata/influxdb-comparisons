@@ -5,7 +5,13 @@ import "time"
 const (
 	DefaultDateTimeStart = "2018-01-01T00:00:00Z"
 	DefaultDateTimeEnd   = "2018-01-02T00:00:00Z"
+	UseCaseDevOps        = "devops"
+	UseCaseIot           = "iot"
+	UseCaseDashboard     = "dashboard"
 )
+
+// Use case choices:
+var UseCaseChoices = []string{UseCaseDevOps, UseCaseIot, UseCaseDashboard}
 
 // Simulator simulates a use case.
 type Simulator interface {

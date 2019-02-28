@@ -33,6 +33,7 @@ var (
 	reportPassword string
 	reportTagsCSV  string
 	compressor     string
+	useCase        string
 )
 
 // Global vars
@@ -51,7 +52,8 @@ func init() {
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
-	flag.StringVar(&compressor, "compressor", "DeflateCompressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
+	flag.StringVar(&compressor, "compressor", "LZ4Compressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
+	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to set specific load behavior. Options: "+strings.Join(common.UseCaseChoices, ","))
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -87,9 +89,18 @@ func init() {
 }
 
 func main() {
+	var ucTablesMap = map[string][]string{
+		common.UseCaseDevOps: createTablesCQLDevops,
+		common.UseCaseIot:    createTablesCQLIot,
+	}
+
 	if doLoad {
 		log.Println("Creating keyspace")
-		createKeyspace(daemonUrl)
+		if tablesCql, ok := ucTablesMap[useCase]; ok {
+			createKeyspace(daemonUrl, tablesCql)
+		} else {
+			log.Fatalf("Unsupport use-case: %s\n", useCase)
+		}
 	}
 
 	var session *gocql.Session
@@ -247,8 +258,24 @@ var createTablesCQLDevops = []string{
 	"CREATE table measurements.redis(time bigint, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, uptime_in_seconds bigint, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint, connected_clients bigint, used_memory bigint, used_memory_rss bigint, used_memory_peak bigint, used_memory_lua bigint, rdb_changes_since_last_save bigint, sync_full bigint, sync_partial_ok bigint, sync_partial_err bigint, pubsub_channels bigint, pubsub_patterns bigint, latest_fork_usec bigint, connected_slaves bigint, master_repl_offset bigint, repl_backlog_active bigint, repl_backlog_size bigint, repl_backlog_histlen bigint, mem_fragmentation_ratio bigint, used_cpu_sys bigint, used_cpu_user bigint, used_cpu_sys_children bigint, used_cpu_user_children bigint , primary key(hostname, time)) %s;",
 }
 
-func createKeyspace(daemon_url string) {
-	cluster := gocql.NewCluster(daemon_url)
+var createTablesCQLIot = []string{
+	"CREATE TABLE measurements.air_quality_room (time bigint,room_id TEXT,sensor_id TEXT,home_id TEXT, co2_level double,co_level double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.air_condition_room (time bigint,room_id TEXT,sensor_id TEXT,home_id TEXT, temperature double,humidity double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.air_condition_outdoor (time bigint,sensor_id TEXT,home_id TEXT, temperature double,humidity double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.camera_detection (time bigint,sensor_id TEXT,home_id TEXT, object_type blob,object_kind blob,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.door_state (time bigint,door_id TEXT,sensor_id TEXT, home_id TEXT, state double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.home_config (time bigint,sensor_id TEXT,home_id TEXT, config_string blob, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.home_state (time bigint,sensor_id TEXT,home_id TEXT, state BIGINT,state_string blob, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.light_level_room (time bigint,room_id TEXT,sensor_id TEXT,home_id TEXT, level double, battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.radiator_valve_room (time bigint,room_id TEXT,radiator TEXT,sensor_id TEXT,home_id TEXT, opening_level double, battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.water_leakage_room (time bigint,sensor_id TEXT,room_id TEXT,home_id TEXT, leakage double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.water_level (time bigint,sensor_id TEXT,home_id TEXT, level double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.weather_outdoor (time bigint,sensor_id TEXT,home_id TEXT, pressure double,wind_speed double,wind_direction double,precipitation double,battery_voltage double, primary key(home_id, time)) %s;",
+	"CREATE TABLE measurements.window_state_room (time bigint,room_id TEXT,sensor_id TEXT,window_id TEXT,home_id TEXT, state double,battery_voltage double, primary key(home_id, time)) %s;",
+}
+
+func createKeyspace(daemonUrl string, tableSchema []string) {
+	cluster := gocql.NewCluster(daemonUrl)
 	cluster.Consistency = gocql.Quorum
 	cluster.ProtoVersion = 4
 	cluster.Timeout = writeTimeout
@@ -265,7 +292,7 @@ func createKeyspace(daemon_url string) {
 	}
 	tableOptions := fmt.Sprintf(tableOptionsFmt, compressor)
 
-	for _, tableCQLFormat := range createTablesCQLDevops {
+	for _, tableCQLFormat := range tableSchema {
 		tableCQL := fmt.Sprintf(tableCQLFormat, tableOptions)
 		if err := session.Query(tableCQL).Exec(); err != nil {
 			log.Fatal(err)

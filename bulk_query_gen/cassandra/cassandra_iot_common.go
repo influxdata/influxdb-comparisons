@@ -32,7 +32,7 @@ func (d *CassandraIot) Dispatch(i int) bulkQuerygen.Query {
 }
 
 func (d *CassandraIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query) {
-	d.averageTemperatureDayByHourNHomes(q.(*CassandraQuery), 1, time.Hour)
+	d.averageTemperatureDayByHourNHomes(q.(*CassandraQuery), 1, time.Hour*6)
 }
 
 // averageTemperatureHourByMinuteNHomes populates a Query with a query that looks like:
