@@ -250,7 +250,7 @@ func init() {
 	bulkQueryGen.QueryIntervalType = queryIntervalType
 	switch queryIntervalType {
 	case "window":
-		if useCase == Dashboard && timeWindowShift <= 0 { // when not set, always use 5s default for dashboard
+		if useCase == common.UseCaseDashboard && timeWindowShift <= 0 { // when not set, always use 5s default for dashboard
 			timeWindowShift = 5 * time.Second
 		}
 	case "last":
