@@ -29,9 +29,6 @@ import (
 // Output data format choices:
 var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
 
-// Use case choices:
-var useCaseChoices = []string{"devops", "iot", "dashboard"}
-
 // Program option vars:
 var (
 	daemonUrl string
@@ -40,8 +37,8 @@ var (
 	format  string
 	useCase string
 
-	scaleVar       int64
-	scaleVarOffset int64
+	scaleVar         int64
+	scaleVarOffset   int64
 	samplingInterval time.Duration
 
 	timestampStartStr string
@@ -61,7 +58,7 @@ var (
 func init() {
 	flag.StringVar(&format, "format", formatChoices[0], fmt.Sprintf("Format to emit. (choices: %s)", strings.Join(formatChoices, ", ")))
 
-	flag.StringVar(&useCase, "use-case", useCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(useCaseChoices, ", ")))
+	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(common.UseCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 	flag.Int64Var(&scaleVarOffset, "scale-var-offset", 0, "Scaling variable offset specific to the use case.")
 	flag.DurationVar(&samplingInterval, "sampling-interval", devops.EpochDuration, "Simulated sampling interval.")
@@ -127,7 +124,7 @@ func main() {
 	var sim common.Simulator
 
 	switch useCase {
-	case useCaseChoices[0]:
+	case common.UseCaseChoices[0]:
 		cfg := &devops.DevopsSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
@@ -136,7 +133,7 @@ func main() {
 			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
-	case useCaseChoices[2]:
+	case common.UseCaseChoices[2]:
 		cfg := &dashboard.DashboardSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
@@ -145,7 +142,7 @@ func main() {
 			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
-	case useCaseChoices[1]:
+	case common.UseCaseChoices[1]:
 		cfg := &iot.IotSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
