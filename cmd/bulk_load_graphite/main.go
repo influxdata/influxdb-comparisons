@@ -299,9 +299,14 @@ func processBatches(conn net.Conn) int64 {
 		}
 
 		// Write the batch.
+		t0 := time.Now()
 		_, err := conn.Write(batch.Bytes())
 		if err != nil {
 			log.Fatalf("Error writing: %s\n", err.Error())
+		}
+		dt := time.Now().Sub(t0)
+		if dt >= 250*time.Millisecond {
+			log.Printf("Relay stalled; %d ms", dt/time.Millisecond)
 		}
 
 		// Return the batch buffer to the pool.
