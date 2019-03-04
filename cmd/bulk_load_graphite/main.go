@@ -305,7 +305,7 @@ func processBatches(conn net.Conn) int64 {
 			log.Fatalf("Error writing: %s\n", err.Error())
 		}
 		dt := time.Now().Sub(t0)
-		if dt >= 250*time.Millisecond {
+		if dt >= 50*time.Millisecond {
 			log.Printf("Relay stalled; %d ms", dt/time.Millisecond)
 			time.Sleep(1*time.Second)
 		}
