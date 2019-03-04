@@ -306,7 +306,7 @@ func processBatches(conn net.Conn) int64 {
 		}
 		dt := time.Now().Sub(t0)
 		if dt >= 50*time.Millisecond {
-			log.Printf("Relay stalled; %d ms", dt/time.Millisecond)
+			log.Printf("Relay stalled; %d ms [%s -> %s]", dt/time.Millisecond, conn.LocalAddr().String(), conn.RemoteAddr().String())
 			time.Sleep(1*time.Second)
 		}
 
