@@ -26,11 +26,14 @@ import (
 // TODO VH: This should be calculated from available simulation data
 const ValuesPerMeasurement = 11.2222
 
+const StallThreshold = 100*time.Millisecond
+
 // Program option vars:
 var (
 	daemonUrl           string
 	workers             int
 	batchSize           int
+	backoff             time.Duration
 	doLoad              bool
 	reportDatabase      string
 	reportHost          string
@@ -71,6 +74,7 @@ func init() {
 	flag.StringVar(&format, "format", formatChoices[0], "Input data format. One of: "+strings.Join(formatChoices, ","))
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
+	flag.DurationVar(&backoff, "backoff", 1*time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -305,9 +309,9 @@ func processBatches(conn net.Conn) int64 {
 			log.Fatalf("Error writing: %s\n", err.Error())
 		}
 		dt := time.Now().Sub(t0)
-		if dt >= 100*time.Millisecond {
+		if dt >= StallThreshold {
 			log.Printf("Relay stalled; %d ms [%s -> %s]", dt/time.Millisecond, conn.LocalAddr().String(), conn.RemoteAddr().String())
-			time.Sleep(1*time.Second)
+			time.Sleep(backoff)
 		}
 
 		// Return the batch buffer to the pool.
