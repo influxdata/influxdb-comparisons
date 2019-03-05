@@ -30,8 +30,7 @@ const Dashboard = "dashboard"
 
 // Program option vars:
 var (
-	csvDaemonUrls          string
-	daemonUrls             []string
+	graphiteUrl            string
 	workers                int
 	debug                  int
 	prettyPrintResponses   bool
@@ -92,7 +91,7 @@ const allQueriesLabel = "all queries"
 
 // Parse args:
 func init() {
-	flag.StringVar(&csvDaemonUrls, "urls", "http://localhost:8080", "Daemon URLs, comma-separated. Will be used in a round-robin fashion.")
+	flag.StringVar(&graphiteUrl, "url", "http://localhost:8080", "Graphite URL.")
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
@@ -126,12 +125,6 @@ func init() {
 	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 
 	flag.Parse()
-
-	daemonUrls = strings.Split(csvDaemonUrls, ",")
-	if len(daemonUrls) == 0 {
-		log.Fatal("missing 'urls' flag")
-	}
-	fmt.Printf("daemon URLs: %v\n", daemonUrls)
 
 	if workers < 1 {
 		log.Fatalf("invalid number of workers: %d\n", workers)
@@ -259,9 +252,8 @@ func main() {
 	workersIncreaseStep := workers
 	// Launch the query processors:
 	for i := 0; i < workers; i++ {
-		daemonUrl := daemonUrls[(i+clientIndex)%len(daemonUrls)]
 		workersGroup.Add(1)
-		w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+		w := NewHTTPClient(graphiteUrl, debug, dialTimeout, readTimeout, writeTimeout)
 		go processQueries(w)
 	}
 	log.Printf("Started querying with %d workers\n", workers)
@@ -310,9 +302,8 @@ loop:
 				if gradualWorkersMax <= 0 || workers <= gradualWorkersMax {
 					for i := 0; i < workersIncreaseStep; i++ {
 						//fmt.Printf("Adding worker %d\n", workers)
-						daemonUrl := daemonUrls[(workers+clientIndex)%len(daemonUrls)]
 						workersGroup.Add(1)
-						w := NewHTTPClient(daemonUrl, debug, dialTimeout, readTimeout, writeTimeout)
+						w := NewHTTPClient(graphiteUrl, debug, dialTimeout, readTimeout, writeTimeout)
 						go processQueries(w)
 						workers++
 					}
@@ -462,7 +453,7 @@ waitLoop:
 				ReportPassword:     reportPassword,
 				ReportTags:         reportTags,
 				Hostname:           reportHostname,
-				DestinationUrl:     csvDaemonUrls,
+				DestinationUrl:     graphiteUrl,
 				Workers:            workers,
 				ItemLimit:          int(limit),
 			},

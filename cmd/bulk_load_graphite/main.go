@@ -68,7 +68,7 @@ var processes = map[string]struct {
 
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:2003", "Carbon port.")
+	flag.StringVar(&daemonUrl, "url", "localhost:2003", "Carbon-cache port.")
 	flag.StringVar(&file, "file", "", "Input file")
 
 	flag.StringVar(&format, "format", formatChoices[0], "Input data format. One of: "+strings.Join(formatChoices, ","))
