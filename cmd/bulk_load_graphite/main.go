@@ -30,7 +30,8 @@ const StallThreshold = 100*time.Millisecond
 
 // Program option vars:
 var (
-	daemonUrl           string
+	carbonUrl           string
+	graphiteUrl         string
 	workers             int
 	batchSize           int
 	backoff             time.Duration
@@ -68,13 +69,14 @@ var processes = map[string]struct {
 
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:2003", "Carbon-cache port.")
+	flag.StringVar(&carbonUrl, "carbon-url", "localhost:2003", "Carbon-cache or carbon-relay host:port.")
+	flag.StringVar(&graphiteUrl, "url", "http://localhost:8080", "Graphite URL.")
 	flag.StringVar(&file, "file", "", "Input file")
 
 	flag.StringVar(&format, "format", formatChoices[0], "Input data format. One of: "+strings.Join(formatChoices, ","))
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.DurationVar(&backoff, "backoff", 1*time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
+	flag.DurationVar(&backoff, "backoff", 1*time.Second, "Time to sleep between requests when server indicates stall is needed.")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -154,7 +156,7 @@ func main() {
 		var conn net.Conn
 		var err error
 		if doLoad {
-			conn, err = net.Dial("tcp", daemonUrl)
+			conn, err = net.Dial("tcp", carbonUrl)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -208,14 +210,14 @@ func main() {
 		reportTags = append(reportTags, [2]string{"format", format})
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
-				DBType:             "TimeScaleDB",
+				DBType:             "Graphite",
 				ReportDatabaseName: reportDatabase,
 				ReportHost:         reportHost,
 				ReportUser:         reportUser,
 				ReportPassword:     reportPassword,
 				ReportTags:         reportTags,
 				Hostname:           reportHostname,
-				DestinationUrl:     daemonUrl,
+				DestinationUrl:     carbonUrl,
 				Workers:            workers,
 				ItemLimit:          -1,
 			},
