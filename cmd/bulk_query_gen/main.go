@@ -11,12 +11,14 @@ import (
 	bulkQueryGen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/cassandra"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/elasticsearch"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/graphite"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/influxdb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/opentsdb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
 	"log"
 	"math/rand"
+	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -64,6 +66,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"mongo":            mongodb.NewMongoDevopsSingleHost,
 			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost,
 			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost,
+			"graphite":         graphite.NewGraphiteDevopsSingleHost,
 		},
 		DevOpsOneHostTwelveHours: {
 			"cassandra":        cassandra.NewCassandraDevopsSingleHost12hr,
@@ -73,6 +76,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"mongo":            mongodb.NewMongoDevopsSingleHost12hr,
 			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost12hr,
 			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost12hr,
+			"graphite":         graphite.NewGraphiteDevopsSingleHost12hr,
 		},
 		DevOpsEightHostsOneHour: {
 			"cassandra":        cassandra.NewCassandraDevops8Hosts,
@@ -82,6 +86,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"mongo":            mongodb.NewMongoDevops8Hosts1Hr,
 			"opentsdb":         opentsdb.NewOpenTSDBDevops8Hosts,
 			"timescaledb":      timescaledb.NewTimescaleDevops8Hosts1Hr,
+			"graphite":         graphite.NewGraphiteDevops8Hosts,
 		},
 		DevOpsGroupBy: {
 			"cassandra":        cassandra.NewCassandraDevopsGroupBy,
@@ -89,6 +94,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxDevopsGroupBy,
 			"influx-http":      influxdb.NewInfluxQLDevopsGroupBy,
 			"timescaledb":      timescaledb.NewTimescaleDevopsGroupby,
+			"graphite":         graphite.NewGraphiteDevopsGroupBy,
 		},
 	},
 	Iot: {
@@ -332,7 +338,8 @@ func main() {
 					log.Fatal(err)
 				}
 			} else if debug >= 3 {
-				_, err := fmt.Fprintf(os.Stderr, "%s\n", q.String())
+				qUnescaped, _ := url.QueryUnescape(q.String())
+				_, err := fmt.Fprintf(os.Stderr, "%s\n", /*q.String()*/qUnescaped)
 				if err != nil {
 					log.Fatal(err)
 				}
