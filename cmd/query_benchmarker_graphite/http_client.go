@@ -43,7 +43,7 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 
 // Do performs the action specified by the given Query. It uses fasthttp, and
 // tries to minimize heap allocations.
-func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, size int64, err error) {
+func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
 	// populate uri from the reusable byte slice:
 	uri := make([]byte, 0, 100)
 	uri = append(uri, w.Host...)
@@ -77,8 +77,6 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 			return
 		}
 	}
-
-	size = int64(len(respBody))
 
 	if opts != nil {
 		// Print debug messages, if applicable:

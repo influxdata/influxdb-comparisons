@@ -592,12 +592,11 @@ func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, errCh
 			doneCh <- 1
 		}
 	}()
-	lagMillis, respSize, err := w.Do(q, opts)
+	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*Stat)
 	stat.Init(q.HumanLabel, lagMillis)
 	statChan <- stat
 	queryPool.Put(q)
-	log.Printf("response size = %d", respSize)
 	if err != nil {
 		qerr := fmt.Errorf("Error during request of query %s: %s\n", q.String(), err.Error())
 		if errCh != nil {
