@@ -23,11 +23,6 @@ import (
 	"time"
 )
 
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 11.2222
-
-const StallThreshold = 100*time.Millisecond
-
 // Program option vars:
 var (
 	carbonUrl           string
@@ -35,6 +30,7 @@ var (
 	workers             int
 	batchSize           int
 	backoff             time.Duration
+	stallThreshold      time.Duration
 	doLoad              bool
 	reportDatabase      string
 	reportHost          string
@@ -77,6 +73,7 @@ func init() {
 	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
 	flag.DurationVar(&backoff, "backoff", 1*time.Second, "Time to sleep between requests when server indicates stall is needed.")
+	flag.DurationVar(&stallThreshold, "stall-threshold", 100*time.Millisecond, "Amount of time that represents relay stall.")
 
 	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
 
@@ -91,6 +88,8 @@ func init() {
 	if _, ok := processes[format]; !ok {
 		log.Fatal("Invalid format choice '", format, "'. Available are: ", strings.Join(formatChoices, ","))
 	}
+
+	log.Printf("relay stall time: %v, backoff: %v", stallThreshold, backoff)
 
 	if reportHost != "" {
 		fmt.Printf("results report destination: %v\n", reportHost)
@@ -311,7 +310,7 @@ func processBatches(conn net.Conn) int64 {
 			log.Fatalf("Error writing: %s\n", err.Error())
 		}
 		dt := time.Now().Sub(t0)
-		if dt >= StallThreshold {
+		if dt >= stallThreshold {
 			log.Printf("Relay stalled; %d ms [%s -> %s]", dt/time.Millisecond, conn.LocalAddr().String(), conn.RemoteAddr().String())
 			time.Sleep(backoff)
 		}
