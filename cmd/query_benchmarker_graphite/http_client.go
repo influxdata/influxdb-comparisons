@@ -121,7 +121,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 		}
 	}
 
-	return lag, size, err
+	return lag, err
 }
 
 func (w *DefaultHTTPClient) HostString() string {
