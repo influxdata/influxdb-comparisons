@@ -24,7 +24,7 @@ type HTTPClientDoOptions struct {
 type HTTPClient interface {
 	HostString() string
 	Ping()
-	Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error)
+	Do(q *Query, opts *HTTPClientDoOptions) (lag float64, size int64, err error)
 }
 
 func NewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) HTTPClient {

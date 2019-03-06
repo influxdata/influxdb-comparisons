@@ -18,7 +18,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
 	"log"
 	"math/rand"
-	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -338,8 +337,7 @@ func main() {
 					log.Fatal(err)
 				}
 			} else if debug >= 3 {
-				qUnescaped, _ := url.QueryUnescape(q.String())
-				_, err := fmt.Fprintf(os.Stderr, "%s\n", /*q.String()*/qUnescaped)
+				_, err := fmt.Fprintf(os.Stderr, "%s\n", q.String())
 				if err != nil {
 					log.Fatal(err)
 				}
