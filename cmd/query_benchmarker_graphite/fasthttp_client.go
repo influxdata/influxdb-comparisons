@@ -126,13 +126,3 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 func (w *FastHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
-
-func (w *FastHTTPClient) Ping() {
-	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
-	req.Header.SetMethod("GET")
-	req.Header.SetRequestURI(w.HTTPClientCommon.HostString + "/ping")
-	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(resp)
-	_ = w.client.Do(req, resp)
-}

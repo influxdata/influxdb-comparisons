@@ -127,9 +127,3 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 func (w *DefaultHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
-
-func (w *DefaultHTTPClient) Ping() {
-	req, _ := http.NewRequest("GET", w.HTTPClientCommon.HostString + "/ping", nil)
-	resp, _ := w.client.Do(req)
-	defer resp.Body.Close()
-}
