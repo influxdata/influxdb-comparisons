@@ -14,6 +14,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
@@ -65,17 +66,15 @@ var (
 	queryPool       sync.Pool
 	hlQueryChan     chan *HLQuery
 	statPool        sync.Pool
-	statChan        chan *Stat
+	statChan        chan *bulk_query.Stat
 	workersGroup    sync.WaitGroup
 	statGroup       sync.WaitGroup
 	aggrPlan        int
 	reportTags      [][2]string
 	reportHostname  string
-	reportQueryStat StatGroup
+	reportQueryStat bulk_query.StatGroup
 	sourceReader    *os.File
 )
-
-type statsMap map[string]*StatGroup
 
 // Parse args:
 func init() {
@@ -156,7 +155,7 @@ func main() {
 
 	statPool = sync.Pool{
 		New: func() interface{} {
-			return &Stat{
+			return &bulk_query.Stat{
 				Label: make([]byte, 0, 1024),
 			}
 		},
@@ -168,7 +167,7 @@ func main() {
 
 	// Make data and stat channels:
 	hlQueryChan = make(chan *HLQuery, workers)
-	statChan = make(chan *Stat, workers)
+	statChan = make(chan *bulk_query.Stat, workers)
 
 	// Launch the stats processor:
 	statGroup.Add(1)
@@ -293,18 +292,18 @@ func processQueries(qc *HLQueryExecutor) {
 		ls := labels[string(q.HumanLabel)]
 
 		// total lag stat:
-		stat := statPool.Get().(*Stat)
-		stat.Init(ls[0], qpLagMs+reqLagMs, true)
+		stat := statPool.Get().(*bulk_query.Stat)
+		stat.InitWithActual(ls[0], qpLagMs+reqLagMs, true)
 		statChan <- stat
 
 		// qp lag stat:
-		stat = statPool.Get().(*Stat)
-		stat.Init(ls[1], qpLagMs, false)
+		stat = statPool.Get().(*bulk_query.Stat)
+		stat.InitWithActual(ls[1], qpLagMs, false)
 		statChan <- stat
 
 		// req lag stat:
-		stat = statPool.Get().(*Stat)
-		stat.Init(ls[2], reqLagMs, false)
+		stat = statPool.Get().(*bulk_query.Stat)
+		stat.InitWithActual(ls[2], reqLagMs, false)
 		statChan <- stat
 
 		queryPool.Put(q)
@@ -318,7 +317,7 @@ func processQueries(qc *HLQueryExecutor) {
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	statMapping := statsMap{}
+	statMapping := bulk_query.StatsMap{}
 
 	i := uint64(0)
 	for stat := range statChan {
@@ -333,7 +332,7 @@ func processStats() {
 			}
 		}
 		if _, ok := statMapping[string(stat.Label)]; !ok {
-			statMapping[string(stat.Label)] = &StatGroup{}
+			statMapping[string(stat.Label)] = &bulk_query.StatGroup{}
 		}
 
 		statMapping[string(stat.Label)].Push(stat.Value)
@@ -369,7 +368,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups statsMap) {
+func fprintStats(w io.Writer, statGroups bulk_query.StatsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {

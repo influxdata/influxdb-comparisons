@@ -1,4 +1,4 @@
-package main
+package bulk_query
 
 import (
 	"fmt"
@@ -11,13 +11,20 @@ import (
 type Stat struct {
 	Label []byte
 	Value float64
+	IsActual bool
 }
+
 
 // Init safely initializes a stat while minimizing heap allocations.
 func (s *Stat) Init(label []byte, value float64) {
+	s.InitWithActual(label,value, true)
+}
+
+func (s *Stat) InitWithActual(label []byte, value float64, isActual bool) {
 	s.Label = s.Label[:0] // clear
 	s.Label = append(s.Label, label...)
 	s.Value = value
+	s.IsActual = isActual
 }
 
 // StatGroup collects simple streaming statistics.
@@ -30,7 +37,9 @@ type StatGroup struct {
 	Count int64
 }
 
-// Push updates a StatGroup with a new value.
+type StatsMap map[string]*StatGroup
+
+// Push updates a StatGroup with a new Value.
 func (s *StatGroup) Push(n float64) {
 	if s.Count == 0 {
 		s.Min = n
@@ -68,8 +77,8 @@ type timedStat struct {
 }
 
 type HistoryItem struct {
-	value float64
-	item  int
+	Value float64
+	Item  int
 }
 
 type TimedStatGroup struct {
@@ -132,7 +141,7 @@ func (m *TimedStatGroup) UpdateAvg(now time.Time, workers int) (float64, float64
 func (m *TimedStatGroup) FindHistoryItemBelow(val float64) *HistoryItem {
 	item := -1
 	for i := len(m.statHistory) - 2; i >= 0; i-- {
-		if m.statHistory[i].value < val && m.statHistory[i+1].value >= val {
+		if m.statHistory[i].Value < val && m.statHistory[i+1].Value >= val {
 			item = i
 			break
 		}

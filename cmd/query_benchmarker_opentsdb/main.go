@@ -12,6 +12,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
@@ -46,15 +47,13 @@ var (
 	queryPool      sync.Pool
 	queryChan      chan *Query
 	statPool       sync.Pool
-	statChan       chan *Stat
+	statChan       chan *bulk_query.Stat
 	workersGroup   sync.WaitGroup
 	statGroup      sync.WaitGroup
-	statMapping    statsMap
+	statMapping    bulk_query.StatsMap
 	reportTags     [][2]string
 	reportHostname string
 )
-
-type statsMap map[string]*StatGroup
 
 const allQueriesLabel = "all queries"
 
@@ -121,7 +120,7 @@ func main() {
 
 	statPool = sync.Pool{
 		New: func() interface{} {
-			return &Stat{
+			return &bulk_query.Stat{
 				Label: make([]byte, 0, 1024),
 				Value: 0.0,
 			}
@@ -130,7 +129,7 @@ func main() {
 
 	// Make data and control channels:
 	queryChan = make(chan *Query, workers)
-	statChan = make(chan *Stat, workers)
+	statChan = make(chan *bulk_query.Stat, workers)
 
 	// Launch the stats processor:
 	statGroup.Add(1)
@@ -240,7 +239,7 @@ func processQueries(w *HTTPClient) {
 	for q := range queryChan {
 		lag, err := w.Do(q, opts)
 
-		stat := statPool.Get().(*Stat)
+		stat := statPool.Get().(*bulk_query.Stat)
 		stat.Init(q.HumanLabel, lag)
 		statChan <- stat
 
@@ -255,8 +254,8 @@ func processQueries(w *HTTPClient) {
 // processStats collects latency results, aggregating them into summary
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats() {
-	statMapping = statsMap{
-		allQueriesLabel: &StatGroup{},
+	statMapping = bulk_query.StatsMap{
+		allQueriesLabel: &bulk_query.StatGroup{},
 	}
 
 	i := uint64(0)
@@ -273,7 +272,7 @@ func processStats() {
 		}
 
 		if _, ok := statMapping[string(stat.Label)]; !ok {
-			statMapping[string(stat.Label)] = &StatGroup{}
+			statMapping[string(stat.Label)] = &bulk_query.StatGroup{}
 		}
 
 		statMapping[allQueriesLabel].Push(stat.Value)
@@ -307,7 +306,7 @@ func processStats() {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups statsMap) {
+func fprintStats(w io.Writer, statGroups bulk_query.StatsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {

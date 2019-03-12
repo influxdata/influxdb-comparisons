@@ -11,6 +11,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
 	"io"
 	"log"
 	"net/rpc"
@@ -72,22 +73,21 @@ var (
 	queryPool           sync.Pool
 	queryChan           chan []*Query
 	statPool            sync.Pool
-	statChan            chan *Stat
+	statChan            chan *bulk_query.Stat
 	workersGroup        sync.WaitGroup
 	statGroup           sync.WaitGroup
 	telemetryChanPoints chan *report.Point
 	telemetryChanDone   chan struct{}
 	telemetrySrcAddr    string
 	telemetryTags       [][2]string
-	statMapping         statsMap
+	statMapping         bulk_query.StatsMap
 	reportTags          [][2]string
 	reportHostname      string
 	batchSize           int
-	movingAverageStat   *TimedStatGroup
+	movingAverageStat   *bulk_query.TimedStatGroup
 	isBurnIn            bool
 )
 
-type statsMap map[string]*StatGroup
 
 const allQueriesLabel = "all queries"
 
@@ -213,7 +213,7 @@ func main() {
 
 	statPool = sync.Pool{
 		New: func() interface{} {
-			return &Stat{
+			return &bulk_query.Stat{
 				Label: make([]byte, 0, 1024),
 				Value: 0.0,
 			}
@@ -223,7 +223,7 @@ func main() {
 	if movingAverageInterval <= 0 {
 		movingAverageInterval = increaseInterval
 	}
-	movingAverageStat = NewTimedStatGroup(movingAverageInterval, trendSamples)
+	movingAverageStat = bulk_query.NewTimedStatGroup(movingAverageInterval, trendSamples)
 	fmt.Println("Reading queries to buffer ")
 	queriesData, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
@@ -243,7 +243,7 @@ func main() {
 		}
 
 	}
-	statChan = make(chan *Stat, statChanBuff)
+	statChan = make(chan *bulk_query.Stat, statChanBuff)
 
 	if reportTelemetry {
 		telemetryCollector := report.NewCollector(reportHost, reportDatabase, reportUser, reportPassword)
@@ -337,8 +337,8 @@ loop:
 					log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
 					reponseTimeLimitWorkers = workers
 				} else {
-					log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
-					reponseTimeLimitWorkers = item.item
+					log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.Value, respLimitms, item.Item)
+					reponseTimeLimitWorkers = item.Item
 				}
 			}
 		case <-timeoutTicker.C:
@@ -364,8 +364,8 @@ loop:
 						log.Printf("Couln't find reponse time limit %.2f, maybe it's too low\n", respLimitms)
 						reponseTimeLimitWorkers = workers
 					} else {
-						log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.value, respLimitms, item.item)
-						reponseTimeLimitWorkers = item.item
+						log.Printf("Mean response time reached threshold: %.2fms > %.2fms, with %d workers\n", item.Value, respLimitms, item.Item)
+						reponseTimeLimitWorkers = item.Item
 					}
 
 				}
@@ -608,7 +608,7 @@ func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, errCh
 		}
 	}()
 	lagMillis, err := w.Do(q, opts)
-	stat := statPool.Get().(*Stat)
+	stat := statPool.Get().(*bulk_query.Stat)
 	stat.Init(q.HumanLabel, lagMillis)
 	statChan <- stat
 	queryPool.Put(q)
@@ -629,8 +629,8 @@ func processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, errCh
 // statistics. Optionally, they are printed to stderr at regular intervals.
 func processStats(telemetrySink chan *report.Point) {
 
-	statMapping = statsMap{
-		allQueriesLabel: &StatGroup{},
+	statMapping = bulk_query.StatsMap{
+		allQueriesLabel: &bulk_query.StatGroup{},
 	}
 
 	lastRefresh := time.Time{}
@@ -649,7 +649,7 @@ func processStats(telemetrySink chan *report.Point) {
 		}
 
 		if _, ok := statMapping[string(stat.Label)]; !ok {
-			statMapping[string(stat.Label)] = &StatGroup{}
+			statMapping[string(stat.Label)] = &bulk_query.StatGroup{}
 		}
 
 		now := time.Now()
@@ -705,7 +705,7 @@ func processStats(telemetrySink chan *report.Point) {
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups statsMap) {
+func fprintStats(w io.Writer, statGroups bulk_query.StatsMap) {
 	maxKeyLength := 0
 	keys := make([]string, 0, len(statGroups))
 	for k := range statGroups {
