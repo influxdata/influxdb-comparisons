@@ -1,6 +1,7 @@
 package bulk_query
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -26,8 +27,8 @@ type BulkQuery interface {
 }
 
 type QueryBenchmarker struct {
-	debug int
-
+	//program options
+	debug                  int
 	workers                int
 	prettyPrintResponses   bool
 	limit                  int64
@@ -53,12 +54,12 @@ type QueryBenchmarker struct {
 	trendSamples           int
 	movingAverageInterval  time.Duration
 	reportTelemetry        bool
-
-	statMapping StatsMap
-	statChan    chan *Stat
-	statPool    sync.Pool
-	statGroup   sync.WaitGroup
-
+	file                   string
+	//runtime vars
+	statMapping       StatsMap
+	statChan          chan *Stat
+	statPool          sync.Pool
+	statGroup         sync.WaitGroup
 	telemetrySrcAddr  string
 	telemetryTags     [][2]string
 	reportTags        [][2]string
@@ -66,6 +67,7 @@ type QueryBenchmarker struct {
 	batchSize         int
 	movingAverageStat *TimedStatGroup
 	isBurnIn          bool
+	sourceReader      *os.File
 }
 
 const (
@@ -122,7 +124,7 @@ func (q *QueryBenchmarker) Init() {
 	flag.StringVar(&q.notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
 	flag.IntVar(&q.trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
 	flag.DurationVar(&q.movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
-
+	flag.StringVar(&q.file, "file", "", "Input file")
 }
 
 func (q *QueryBenchmarker) Validate() {
@@ -179,6 +181,17 @@ func (q *QueryBenchmarker) Validate() {
 	if q.trendSamples <= 0 {
 		q.trendSamples = int(q.increaseInterval.Seconds())
 	}
+
+	if q.file != "" {
+		if f, err := os.Open(q.file); err == nil {
+			q.sourceReader = f
+		} else {
+			log.Fatalf("Error opening %s: %v\n", q.file, err)
+		}
+	}
+	if q.sourceReader == nil {
+		q.sourceReader = os.Stdin
+	}
 }
 
 func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
@@ -198,7 +211,8 @@ func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
 	}
 	q.movingAverageStat = NewTimedStatGroup(q.movingAverageInterval, q.trendSamples)
 	fmt.Println("Reading queries to buffer ")
-	queriesData, err := ioutil.ReadAll(os.Stdin)
+	input := bufio.NewReaderSize(q.sourceReader, 1<<20)
+	queriesData, err := ioutil.ReadAll(input)
 	if err != nil {
 		log.Fatalf("Error reading queries: %s", err)
 	}
@@ -507,13 +521,14 @@ func (q *QueryBenchmarker) processStats(telemetrySink chan *report.Point) {
 
 		now := time.Now()
 
-		q.movingAverageStat.Push(now, stat.Value)
-		q.statMapping[AllQueriesLabel].Push(stat.Value)
-		q.statMapping[string(stat.Label)].Push(stat.Value)
+		if stat.IsActual {
+			q.movingAverageStat.Push(now, stat.Value)
+			q.statMapping[AllQueriesLabel].Push(stat.Value)
+			q.statMapping[string(stat.Label)].Push(stat.Value)
+			i++
+		}
 
 		q.statPool.Put(stat)
-
-		i++
 
 		if lastRefresh.Nanosecond() == 0 || now.Sub(lastRefresh).Seconds() >= 1.0 {
 			q.movingAverageStat.UpdateAvg(now, q.workers)
