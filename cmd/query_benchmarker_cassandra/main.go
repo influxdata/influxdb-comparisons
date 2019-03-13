@@ -62,15 +62,15 @@ var querier = &CassandraQueryBenchmarker{}
 // Parse args:
 func init() {
 	bulk_query.Benchmarker.Init()
-	querier.init()
+	querier.Init()
 
 	flag.Parse()
 
 	bulk_query.Benchmarker.Validate()
-	querier.validate()
+	querier.Validate()
 }
 
-func (b *CassandraQueryBenchmarker) init() {
+func (b *CassandraQueryBenchmarker) Init() {
 	flag.StringVar(&b.daemonUrl, "url", "localhost:9042", "Cassandra URL.")
 	flag.StringVar(&b.aggrPlanLabel, "aggregation-plan", "", "Aggregation plan (choices: server, client)")
 	flag.IntVar(&b.subQueryParallelism, "subquery-workers", 1, "Number of concurrent subqueries to make (because the client does a scatter+gather operation).")
@@ -78,7 +78,7 @@ func (b *CassandraQueryBenchmarker) init() {
 	flag.DurationVar(&b.csiTimeout, "client-side-index-timeout", 10*time.Second, "Maximum client-side index timeout (only used at initialization).")
 }
 
-func (b *CassandraQueryBenchmarker) validate() {
+func (b *CassandraQueryBenchmarker) Validate() {
 	if _, ok := aggrPlanChoices[b.aggrPlanLabel]; !ok {
 		log.Fatal("invalid aggregation plan")
 	}

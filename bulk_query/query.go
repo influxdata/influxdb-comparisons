@@ -19,6 +19,8 @@ import (
 )
 
 type BulkQuery interface {
+	Init()
+	Validate()
 	Prepare()
 	GetProcessor() Processor
 	GetScanner() Scanner

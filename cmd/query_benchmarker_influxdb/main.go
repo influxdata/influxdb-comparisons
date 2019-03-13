@@ -43,16 +43,16 @@ var querier = &InfluxQueryBenchmarker{}
 func init() {
 
 	bulk_query.Benchmarker.Init()
-	querier.init()
+	querier.Init()
 
 	flag.Parse()
 
 	bulk_query.Benchmarker.Validate()
-	querier.validate()
+	querier.Validate()
 
 }
 
-func (b *InfluxQueryBenchmarker) init() {
+func (b *InfluxQueryBenchmarker) Init() {
 	flag.StringVar(&b.csvDaemonUrls, "urls", "http://localhost:8086", "Daemon URLs, comma-separated. Will be used in a round-robin fashion.")
 	flag.DurationVar(&b.dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 	flag.DurationVar(&b.readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
@@ -62,7 +62,7 @@ func (b *InfluxQueryBenchmarker) init() {
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 }
 
-func (b *InfluxQueryBenchmarker) validate() {
+func (b *InfluxQueryBenchmarker) Validate() {
 	b.daemonUrls = strings.Split(b.csvDaemonUrls, ",")
 	if len(b.daemonUrls) == 0 {
 		log.Fatal("missing 'urls' flag")
