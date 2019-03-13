@@ -22,6 +22,9 @@ import (
 	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
+// TODO: distinguish per use case
+const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 11.2222
+
 type BulkLoad interface {
 	Init()
 	Validate()
@@ -31,7 +34,7 @@ type BulkLoad interface {
 	GetScanner() Scanner
 	SyncEnd()
 	CleanUp()
-	UpdateReport(params *report.LoadReportParams, reportTags [][2]string) ([][2]string, []report.ExtraVal)
+	UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal)
 }
 
 type LoadRunner struct {
@@ -60,7 +63,6 @@ type LoadRunner struct {
 	trendSamples           int
 	movingAverageInterval  time.Duration
 
-	inputDone             chan struct{}
 	backingOffChans       []chan bool
 	backingOffDones       []chan struct{}
 	telemetryChanPoints   chan *report.Point
@@ -90,8 +92,7 @@ func (r *LoadRunner) notifyHandler(arg int) (int, error) {
 	var e error
 	if arg == 0 {
 		fmt.Println("Received external finish request")
-		r.endedPrematurely = true
-		r.prematureEndReason = "External notification"
+		r.SetPrematureEnd("External notification")
 		r.syncChanDone <- 1
 	} else {
 		e = fmt.Errorf("unknown notification code: %d", arg)
@@ -326,10 +327,13 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 				Workers:            r.Workers,
 				ItemLimit:          int(r.ItemLimit),
 			},
+			IsGzip:    false,
 			BatchSize: r.BatchSize,
 		}
-		newReportTags, extraVals := load.UpdateReport(reportParams, r.reportTags)
-		reportParams.ReportTags = newReportTags
+		customTags, extraVals := load.UpdateReport(reportParams)
+		if customTags != nil {
+			reportParams.ReportTags = append(r.reportTags, customTags...)
+		}
 		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took, extraVals...)
 
 		if err != nil {

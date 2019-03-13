@@ -28,9 +28,6 @@ import (
 	"strconv"
 )
 
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 11.2222
-
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
 const RateControlMinBatchSize = 100
@@ -120,7 +117,7 @@ func (l *InfluxBulkLoad) Validate() {
 	if l.ingestRateLimit > 0 {
 		l.ingestionRateGran = (float64(l.ingestRateLimit) / float64(bulk_load.Runner.Workers)) / (float64(1000) / float64(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", l.ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((l.ingestionRateGran / ValuesPerMeasurement) * 0.20)
+		recommendedBatchSize := int((l.ingestionRateGran / bulk_load.ValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, bulk_load.Runner.BatchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
@@ -129,7 +126,7 @@ func (l *InfluxBulkLoad) Validate() {
 		}
 		l.maxBatchSize = bulk_load.Runner.BatchSize
 		if recommendedBatchSize != bulk_load.Runner.BatchSize {
-			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", bulk_load.Runner.BatchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", bulk_load.Runner.BatchSize, recommendedBatchSize, float32(recommendedBatchSize)*bulk_load.ValuesPerMeasurement)
 			bulk_load.Runner.BatchSize = recommendedBatchSize
 		}
 	} else {
@@ -228,12 +225,13 @@ func (l *InfluxBulkLoad) AfterRunProcess(i int) {
 	l.configs[i].backingOffSecs = processBackoffMessages(i, l.configs[i].backingOffChan, l.configs[i].backingOffDone)
 }
 
-func (l *InfluxBulkLoad) UpdateReport(params *report.LoadReportParams, reportTags [][2]string) ([][2]string, []report.ExtraVal) {
+func (l *InfluxBulkLoad) UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal) {
 
-	reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(l.backoff.Seconds()))})
+	reportTags = [][2]string{{"back_off", strconv.Itoa(int(l.backoff.Seconds()))}}
 	reportTags = append(reportTags, [2]string{"consistency", l.consistency})
 
-	extraVals := make([]report.ExtraVal, 0, 1)
+	extraVals = make([]report.ExtraVal, 0)
+
 	if l.ingestRateLimit > 0 {
 		extraVals = append(extraVals, report.ExtraVal{Name: "ingest_rate_limit_values", Value: l.ingestRateLimit})
 	}
@@ -245,7 +243,7 @@ func (l *InfluxBulkLoad) UpdateReport(params *report.LoadReportParams, reportTag
 	params.DestinationUrl = l.csvDaemonUrls
 	params.IsGzip = l.useGzip
 
-	return reportTags, extraVals
+	return
 }
 
 func (l *InfluxBulkLoad) IsScanFinished() bool {
@@ -353,7 +351,7 @@ outer:
 		if !bulk_load.Runner.HasEndedPrematurely() {
 			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
 		} else {
-			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
+			totalValues = int64(float64(itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
 	l.scanFinished = true
@@ -438,7 +436,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
+		valuesWritten := float64(batch.Items) * bulk_load.ValuesPerMeasurement
 
 		// Apply ingest rate control if set
 		if l.ingestRateLimit > 0 {
