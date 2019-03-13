@@ -23,6 +23,8 @@ import (
 )
 
 type BulkLoad interface {
+	Init()
+	Validate()
 	CreateDb()
 	PrepareWorkers()
 	GetBatchProcessor() BatchProcessor
