@@ -35,6 +35,25 @@ type CassandraBulkLoad struct {
 	scanFinished bool
 }
 
+var load = &CassandraBulkLoad{}
+
+// Parse args:
+func init() {
+	bulk_load.Runner.Init(100)
+	load.Init()
+
+	flag.Parse()
+
+	bulk_load.Runner.Validate()
+	load.Validate()
+
+}
+
+func main() {
+	bulk_load.Runner.Run(load)
+
+}
+
 func (l *CassandraBulkLoad) Init() {
 	flag.StringVar(&l.daemonUrl, "url", "localhost:9042", "Cassandra URL.")
 
@@ -129,25 +148,6 @@ func (l *CassandraBulkLoad) UpdateReport(params *report.LoadReportParams) (repor
 	return
 }
 
-var load = &CassandraBulkLoad{}
-
-// Parse args:
-func init() {
-	bulk_load.Runner.Init(100)
-	load.Init()
-
-	flag.Parse()
-
-	bulk_load.Runner.Validate()
-	load.Validate()
-
-}
-
-func main() {
-	bulk_load.Runner.Run(load)
-
-}
-
 // scan reads lines from stdin. It expects input in the Cassandra CQL format.
 func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
 	l.scanFinished = false
@@ -239,6 +239,7 @@ func (l *CassandraBulkLoad) processBatches(session *gocql.Session, waitGroup *sy
 		err := session.ExecuteBatch(batch)
 		if err != nil {
 			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
+			break
 		}
 	}
 	waitGroup.Done()
