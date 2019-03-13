@@ -35,8 +35,8 @@ const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 
 const RateControlGranularity = 1000 // 1000 ms = 1s
 const RateControlMinBatchSize = 100
 
-// Program option vars:
-var (
+type InfluxBulkLoad struct {
+	// Program option vars:
 	csvDaemonUrls     string
 	daemonUrls        []string
 	replicationFactor int
@@ -45,10 +45,7 @@ var (
 	useGzip           bool
 	consistency       string
 	clientIndex       int
-)
-
-// Global vars
-var (
+	//runtime vars
 	bufPool               sync.Pool
 	batchChan             chan batch
 	inputDone             chan struct{}
@@ -58,7 +55,8 @@ var (
 	speedUpRequest        int32
 	scanFinished          bool
 	totalBackOffSecs      float64
-)
+	configs               []*workerConfig
+}
 
 var consistencyChoices = map[string]struct{}{
 	"any":    {},
@@ -72,43 +70,64 @@ type batch struct {
 	Items  int
 }
 
+var load = &InfluxBulkLoad{}
+
 // Parse args:
 func init() {
 	bulk_load.Runner.Init(5000)
-
-	flag.StringVar(&csvDaemonUrls, "urls", "http://localhost:8086", "InfluxDB URLs, comma-separated. Will be used in a round-robin fashion.")
-	flag.IntVar(&replicationFactor, "replication-factor", 1, "Cluster replication factor (only applies to clustered databases).")
-	flag.StringVar(&consistency, "consistency", "one", "Write consistency. Must be one of: any, one, quorum, all.")
-	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
-	flag.BoolVar(&useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
-	flag.IntVar(&clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
-	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
+	load.Init()
 
 	flag.Parse()
 
 	bulk_load.Runner.Validate()
+	load.Validate()
 
-	if _, ok := consistencyChoices[consistency]; !ok {
+}
+
+func main() {
+	bulk_load.Runner.Run(load)
+}
+
+type workerConfig struct {
+	url            string
+	backingOffChan chan bool
+	backingOffDone chan struct{}
+	writer         *HTTPWriter
+	backingOffSecs float64
+}
+
+func (l *InfluxBulkLoad) Init() {
+	flag.StringVar(&l.csvDaemonUrls, "urls", "http://localhost:8086", "InfluxDB URLs, comma-separated. Will be used in a round-robin fashion.")
+	flag.IntVar(&l.replicationFactor, "replication-factor", 1, "Cluster replication factor (only applies to clustered databases).")
+	flag.StringVar(&l.consistency, "consistency", "one", "Write consistency. Must be one of: any, one, quorum, all.")
+	flag.DurationVar(&l.backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
+	flag.BoolVar(&l.useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
+	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
+	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
+}
+
+func (l *InfluxBulkLoad) Validate() {
+	if _, ok := consistencyChoices[l.consistency]; !ok {
 		log.Fatalf("invalid consistency settings")
 	}
 
-	daemonUrls = strings.Split(csvDaemonUrls, ",")
-	if len(daemonUrls) == 0 {
+	l.daemonUrls = strings.Split(l.csvDaemonUrls, ",")
+	if len(l.daemonUrls) == 0 {
 		log.Fatal("missing 'urls' flag")
 	}
-	fmt.Printf("daemon URLs: %v\n", daemonUrls)
+	fmt.Printf("daemon URLs: %v\n", l.daemonUrls)
 
-	if ingestRateLimit > 0 {
-		ingestionRateGran = (float64(ingestRateLimit) / float64(bulk_load.Runner.Workers)) / (float64(1000) / float64(RateControlGranularity))
-		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
+	if l.ingestRateLimit > 0 {
+		l.ingestionRateGran = (float64(l.ingestRateLimit) / float64(bulk_load.Runner.Workers)) / (float64(1000) / float64(RateControlGranularity))
+		log.Printf("Using worker ingestion rate %v values/%v ms", l.ingestionRateGran, RateControlGranularity)
+		recommendedBatchSize := int((l.ingestionRateGran / ValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, bulk_load.Runner.BatchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
 		} else if recommendedBatchSize > bulk_load.Runner.BatchSize {
 			recommendedBatchSize = bulk_load.Runner.BatchSize
 		}
-		maxBatchSize = bulk_load.Runner.BatchSize
+		l.maxBatchSize = bulk_load.Runner.BatchSize
 		if recommendedBatchSize != bulk_load.Runner.BatchSize {
 			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", bulk_load.Runner.BatchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
 			bulk_load.Runner.BatchSize = recommendedBatchSize
@@ -118,21 +137,9 @@ func init() {
 	}
 }
 
-type WorkerConfig struct {
-	url            string
-	backingOffChan chan bool
-	backingOffDone chan struct{}
-	writer         *HTTPWriter
-	backingOffSecs float64
-}
-
-type InfluxDBLoad struct {
-	configs []*WorkerConfig
-}
-
-func (l *InfluxDBLoad) CreateDb() {
+func (l *InfluxBulkLoad) CreateDb() {
 	// this also test db connection
-	existingDatabases, err := listDatabases(daemonUrls[0])
+	existingDatabases, err := listDatabases(l.daemonUrls[0])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -146,7 +153,7 @@ func (l *InfluxDBLoad) CreateDb() {
 	}
 
 	if len(existingDatabases) == 0 {
-		err = createDb(daemonUrls[0], bulk_load.Runner.DbName, replicationFactor)
+		err = createDb(l.daemonUrls[0], bulk_load.Runner.DbName, l.replicationFactor, l.consistency)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -155,57 +162,53 @@ func (l *InfluxDBLoad) CreateDb() {
 
 }
 
-func (l *InfluxDBLoad) GetBatchProcessor() bulk_load.BatchProcessor {
+func (l *InfluxBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
 	return l
 }
 
-func (l *InfluxDBLoad) GetScanner() bulk_load.Scanner {
+func (l *InfluxBulkLoad) GetScanner() bulk_load.Scanner {
 	return l
 }
 
-func (l *InfluxDBLoad) PrepareWorkers() {
+func (l *InfluxBulkLoad) PrepareWorkers() {
 
-	bufPool = sync.Pool{
+	l.bufPool = sync.Pool{
 		New: func() interface{} {
 			return bytes.NewBuffer(make([]byte, 0, 4*1024*1024))
 		},
 	}
 
-	batchChan = make(chan batch, bulk_load.Runner.Workers)
-	inputDone = make(chan struct{})
+	l.batchChan = make(chan batch, bulk_load.Runner.Workers)
+	l.inputDone = make(chan struct{})
 
-	l.configs = make([]*WorkerConfig, bulk_load.Runner.Workers)
+	l.configs = make([]*workerConfig, bulk_load.Runner.Workers)
 }
 
-func (l *InfluxDBLoad) EmptyBatchChanel() {
-	for range batchChan {
+func (l *InfluxBulkLoad) EmptyBatchChanel() {
+	for range l.batchChan {
 		//read out remaining batches
 	}
 }
 
-func (l *InfluxDBLoad) SyncEnd() {
-	<-inputDone
-	close(batchChan)
+func (l *InfluxBulkLoad) SyncEnd() {
+	<-l.inputDone
+	close(l.batchChan)
 }
 
-func (l *InfluxDBLoad) CleanUp() {
+func (l *InfluxBulkLoad) CleanUp() {
 	for _, c := range l.configs {
 		close(c.backingOffChan)
 		<-c.backingOffDone
 	}
-	totalBackOffSecs = float64(0)
+	l.totalBackOffSecs = float64(0)
 	for i := 0; i < bulk_load.Runner.Workers; i++ {
-		totalBackOffSecs += l.configs[i].backingOffSecs
+		l.totalBackOffSecs += l.configs[i].backingOffSecs
 	}
 }
 
-func (l *InfluxDBLoad) Summary() {
-
-}
-
-func (l *InfluxDBLoad) PrepareProcess(i int) {
-	l.configs[i] = &WorkerConfig{
-		url:            daemonUrls[(i+clientIndex)%len(daemonUrls)],
+func (l *InfluxBulkLoad) PrepareProcess(i int) {
+	l.configs[i] = &workerConfig{
+		url:            l.daemonUrls[(i+l.clientIndex)%len(l.daemonUrls)],
 		backingOffChan: make(chan bool, 100),
 		backingOffDone: make(chan struct{}),
 	}
@@ -215,55 +218,45 @@ func (l *InfluxDBLoad) PrepareProcess(i int) {
 		Database:       bulk_load.Runner.DbName,
 		BackingOffChan: l.configs[i].backingOffChan,
 		BackingOffDone: l.configs[i].backingOffDone,
-	}, consistency)
-
+	}, l.consistency)
 }
 
-func (l *InfluxDBLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
-	return processBatches(l.configs[i].writer, l.configs[i].backingOffChan, telemetryPoints, fmt.Sprintf("%d", i), waitGroup, reportTags)
+func (l *InfluxBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
+	return l.processBatches(l.configs[i].writer, l.configs[i].backingOffChan, telemetryPoints, fmt.Sprintf("%d", i), waitGroup, reportTags)
 }
-func (l *InfluxDBLoad) AfterRunProcess(i int) {
+func (l *InfluxBulkLoad) AfterRunProcess(i int) {
 	l.configs[i].backingOffSecs = processBackoffMessages(i, l.configs[i].backingOffChan, l.configs[i].backingOffDone)
 }
 
-func (l *InfluxDBLoad) UpdateReport(params *report.LoadReportParams, reportTags [][2]string) ([][2]string, []report.ExtraVal) {
+func (l *InfluxBulkLoad) UpdateReport(params *report.LoadReportParams, reportTags [][2]string) ([][2]string, []report.ExtraVal) {
 
-	reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(backoff.Seconds()))})
-	reportTags = append(reportTags, [2]string{"consistency", consistency})
+	reportTags = append(reportTags, [2]string{"back_off", strconv.Itoa(int(l.backoff.Seconds()))})
+	reportTags = append(reportTags, [2]string{"consistency", l.consistency})
 
 	extraVals := make([]report.ExtraVal, 0, 1)
-	if ingestRateLimit > 0 {
-		extraVals = append(extraVals, report.ExtraVal{Name: "ingest_rate_limit_values", Value: ingestRateLimit})
+	if l.ingestRateLimit > 0 {
+		extraVals = append(extraVals, report.ExtraVal{Name: "ingest_rate_limit_values", Value: l.ingestRateLimit})
 	}
-	if totalBackOffSecs > 0 {
-		extraVals = append(extraVals, report.ExtraVal{Name: "total_backoff_secs", Value: totalBackOffSecs})
+	if l.totalBackOffSecs > 0 {
+		extraVals = append(extraVals, report.ExtraVal{Name: "total_backoff_secs", Value: l.totalBackOffSecs})
 	}
 
 	params.DBType = "InfluxDB"
-	params.DestinationUrl = csvDaemonUrls
-	params.IsGzip = useGzip
+	params.DestinationUrl = l.csvDaemonUrls
+	params.IsGzip = l.useGzip
 
 	return reportTags, extraVals
 }
 
-func (l *InfluxDBLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
-	return scan(bulk_load.Runner.BatchSize, syncChanDone)
-}
-
-func (l *InfluxDBLoad) IsScanFinished() bool {
-	return scanFinished
-}
-
-func main() {
-	load := &InfluxDBLoad{}
-	bulk_load.Runner.Run(load)
+func (l *InfluxBulkLoad) IsScanFinished() bool {
+	return l.scanFinished
 }
 
 // scan reads one item at a time from stdin. 1 item = 1 line.
 // When the requested number of items per batch is met, send a batch over batchChan for the workers to write.
-func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
-	scanFinished = false
-	buf := bufPool.Get().(*bytes.Buffer)
+func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
+	l.scanFinished = false
+	buf := l.bufPool.Get().(*bytes.Buffer)
 
 	var n int
 	var itemsRead, bytesRead int64
@@ -309,13 +302,13 @@ outer:
 		buf.Write(newline)
 
 		n++
-		if n >= itemsPerBatch {
-			atomic.AddUint64(&progressIntervalItems, batchItemCount)
+		if n >= bulk_load.Runner.BatchSize {
+			atomic.AddUint64(&l.progressIntervalItems, batchItemCount)
 			batchItemCount = 0
 
 			bytesRead += int64(buf.Len())
-			batchChan <- batch{buf, n}
-			buf = bufPool.Get().(*bytes.Buffer)
+			l.batchChan <- batch{buf, n}
+			buf = l.bufPool.Get().(*bytes.Buffer)
 			n = 0
 
 			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
@@ -323,22 +316,22 @@ outer:
 				break outer
 			}
 
-			if ingestRateLimit > 0 {
-				if itemsPerBatch < maxBatchSize {
-					hint := atomic.LoadInt32(&speedUpRequest)
+			if l.ingestRateLimit > 0 {
+				if bulk_load.Runner.BatchSize < l.maxBatchSize {
+					hint := atomic.LoadInt32(&l.speedUpRequest)
 					if hint > int32(bulk_load.Runner.Workers*2) { // we should wait for more requests (and this is just a magic number)
-						atomic.StoreInt32(&speedUpRequest, 0)
-						itemsPerBatch += int(float32(maxBatchSize) * 0.10)
-						if itemsPerBatch > maxBatchSize {
-							itemsPerBatch = maxBatchSize
+						atomic.StoreInt32(&l.speedUpRequest, 0)
+						bulk_load.Runner.BatchSize += int(float32(l.maxBatchSize) * 0.10)
+						if bulk_load.Runner.BatchSize > l.maxBatchSize {
+							bulk_load.Runner.BatchSize = l.maxBatchSize
 						}
-						log.Printf("Increased batch size to %d\n", itemsPerBatch)
+						log.Printf("Increased batch size to %d\n", bulk_load.Runner.BatchSize)
 					}
 				}
 			}
 		}
 		select {
-		case <-doneCh:
+		case <-syncChanDone:
 			break outer
 		default:
 		}
@@ -350,11 +343,11 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- batch{buf, n}
+		l.batchChan <- batch{buf, n}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
+	close(l.inputDone)
 
 	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !bulk_load.Runner.HasEndedPrematurely() {
@@ -363,12 +356,12 @@ outer:
 			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
-	scanFinished = true
+	l.scanFinished = true
 	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *report.Point, telemetryWorkerLabel string, workersGroup *sync.WaitGroup, reportTags [][2]string) error {
+func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *report.Point, telemetryWorkerLabel string, workersGroup *sync.WaitGroup, reportTags [][2]string) error {
 	var batchesSeen int64
 
 	// Ingestion rate control vars
@@ -377,29 +370,29 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 
 	defer workersGroup.Done()
 
-	for batch := range batchChan {
+	for batch := range l.batchChan {
 		batchesSeen++
 
 		//var bodySize int
 		ts := time.Now().UnixNano()
 
-		if ingestRateLimit > 0 && gvStart.Nanosecond() == 0 {
+		if l.ingestRateLimit > 0 && gvStart.Nanosecond() == 0 {
 			gvStart = time.Now()
 		}
 
 		// Write the batch: try until backoff is not needed.
 		if bulk_load.Runner.DoLoad {
 			var err error
-			sleepTime := backoff
+			sleepTime := l.backoff
 			for {
-				if useGzip {
-					compressedBatch := bufPool.Get().(*bytes.Buffer)
+				if l.useGzip {
+					compressedBatch := l.bufPool.Get().(*bytes.Buffer)
 					fasthttp.WriteGzip(compressedBatch, batch.Buffer.Bytes())
 					//bodySize = len(compressedBatch.Bytes())
 					_, err = w.WriteLineProtocol(compressedBatch.Bytes(), true)
 					// Return the compressed batch buffer to the pool.
 					compressedBatch.Reset()
-					bufPool.Put(compressedBatch)
+					l.bufPool.Put(compressedBatch)
 				} else {
 					//bodySize = len(batch.Bytes())
 					_, err = w.WriteLineProtocol(batch.Buffer.Bytes(), false)
@@ -420,10 +413,10 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 						telemetrySink <- p
 					}
 					time.Sleep(sleepTime)
-					sleepTime += backoff        // sleep longer if backpressure comes again
-					if sleepTime > 10*backoff { // but not longer than 10x default backoff time
-						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, backoff)
-						sleepTime = 10 * backoff
+					sleepTime += l.backoff        // sleep longer if backpressure comes again
+					if sleepTime > 10*l.backoff { // but not longer than 10x default backoff time
+						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, l.backoff)
+						sleepTime = 10 * l.backoff
 					}
 				} else {
 					backoffSrc <- false
@@ -441,19 +434,19 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 
 		// Return the batch buffer to the pool.
 		batch.Buffer.Reset()
-		bufPool.Put(batch.Buffer)
+		l.bufPool.Put(batch.Buffer)
 
 		// Normally report after each batch
 		reportStat := true
 		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
 
 		// Apply ingest rate control if set
-		if ingestRateLimit > 0 {
+		if l.ingestRateLimit > 0 {
 			gvCount += valuesWritten
-			if gvCount >= ingestionRateGran {
+			if gvCount >= l.ingestionRateGran {
 				now := time.Now()
 				elapsed := now.Sub(gvStart)
-				overdelay := (gvCount - ingestionRateGran) / (ingestionRateGran / float64(RateControlGranularity))
+				overdelay := (gvCount - l.ingestionRateGran) / (l.ingestionRateGran / float64(RateControlGranularity))
 				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + int64(overdelay)
 				valuesWritten = gvCount
 				lagMillis = float64(elapsed.Nanoseconds() / 1e6)
@@ -464,7 +457,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 					lagMillis += float64(realDelay)
 				} else {
 					gvStart = now
-					atomic.AddInt32(&speedUpRequest, 1)
+					atomic.AddInt32(&l.speedUpRequest, 1)
 				}
 				gvCount = 0
 			} else {
@@ -505,7 +498,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 	return totalBackoffSecs
 }
 
-func createDb(daemonUrl, dbname string, replicationFactor int) error {
+func createDb(daemonUrl, dbname string, replicationFactor int, consistency string) error {
 	u, err := url.Parse(daemonUrl)
 	if err != nil {
 		return err
