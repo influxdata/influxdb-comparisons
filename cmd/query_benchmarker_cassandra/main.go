@@ -10,19 +10,15 @@
 package main
 
 import (
-	"bufio"
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/gocql/gocql"
 	"github.com/influxdata/influxdb-comparisons/bulk_query"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
-	"os"
-	"runtime/pprof"
-	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -31,38 +27,13 @@ const (
 	BlessedKeyspace string = "measurements"
 )
 
-// Program option vars:
-var (
-	daemonUrl            string
-	workers              int
-	aggrPlanLabel        string
-	subQueryParallelism  int
-	requestTimeout       time.Duration
-	csiTimeout           time.Duration
-	debug                int
-	prettyPrintResponses bool
-	limit                int64
-	burnIn               uint64
-	printInterval        uint64
-	memProfile           string
-	reportDatabase       string
-	reportHost           string
-	reportUser           string
-	reportPassword       string
-	reportTagsCSV        string
-	file                 string
-)
-
-// Helpers for choice-like flags:
-var (
-	aggrPlanChoices = map[string]int{
-		"server": AggrPlanTypeWithServerAggregation,
-		"client": AggrPlanTypeWithoutServerAggregation,
-	}
-)
-
-// Global vars:
-var (
+type CassandraQueryBenchmarker struct {
+	daemonUrl           string
+	aggrPlanLabel       string
+	subQueryParallelism int
+	requestTimeout      time.Duration
+	csiTimeout          time.Duration
+	//util vars
 	queryPool       sync.Pool
 	hlQueryChan     chan *HLQuery
 	statPool        sync.Pool
@@ -73,74 +44,50 @@ var (
 	reportTags      [][2]string
 	reportHostname  string
 	reportQueryStat bulk_query.StatGroup
-	sourceReader    *os.File
+	session         *gocql.Session
+	queryExecutor   *HLQueryExecutor
+	scanFinished    bool
+}
+
+// Helpers for choice-like flags:
+var (
+	aggrPlanChoices = map[string]int{
+		"server": AggrPlanTypeWithServerAggregation,
+		"client": AggrPlanTypeWithoutServerAggregation,
+	}
 )
+
+var querier = &CassandraQueryBenchmarker{}
 
 // Parse args:
 func init() {
-	flag.StringVar(&file, "file", "", "Input file")
-	flag.StringVar(&daemonUrl, "url", "localhost:9042", "Cassandra URL.")
-	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
-	flag.StringVar(&aggrPlanLabel, "aggregation-plan", "", "Aggregation plan (choices: server, client)")
-	flag.IntVar(&subQueryParallelism, "subquery-workers", 1, "Number of concurrent subqueries to make (because the client does a scatter+gather operation).")
-	flag.DurationVar(&requestTimeout, "request-timeout", 60*time.Second, "Maximum request timeout.")
-	flag.DurationVar(&csiTimeout, "client-side-index-timeout", 10*time.Second, "Maximum client-side index timeout (only used at initialization).")
-	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
-	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
-	flag.Uint64Var(&burnIn, "burn-in", 0, "Number of queries to ignore before collecting statistics.")
-	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
-	flag.BoolVar(&prettyPrintResponses, "print-responses", false, "Pretty print response bodies (for correctness checking) (default false).")
-	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
-	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
+	bulk_query.Benchmarker.Init()
+	querier.init()
 
 	flag.Parse()
 
-	if _, ok := aggrPlanChoices[aggrPlanLabel]; !ok {
-		log.Fatal("invalid aggregation plan")
-	}
-	aggrPlan = aggrPlanChoices[aggrPlanLabel]
-
-	if reportHost != "" {
-		fmt.Printf("results report destination: %v\n", reportHost)
-		fmt.Printf("results report database: %v\n", reportDatabase)
-
-		var err error
-		reportHostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("hostname for results report: %v\n", reportHostname)
-
-		if reportTagsCSV != "" {
-			pairs := strings.Split(reportTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				reportTags = append(reportTags, tagpair)
-			}
-		}
-		fmt.Printf("results report tags: %v\n", reportTags)
-	}
-
-	if file != "" {
-		if f, err := os.Open(file); err == nil {
-			sourceReader = f
-		} else {
-			log.Fatalf("Error opening %s: %v\n", file, err)
-		}
-	}
-	if sourceReader == nil {
-		sourceReader = os.Stdin
-	}
+	bulk_query.Benchmarker.Validate()
+	querier.validate()
 }
 
-func main() {
+func (b *CassandraQueryBenchmarker) init() {
+	flag.StringVar(&b.daemonUrl, "url", "localhost:9042", "Cassandra URL.")
+	flag.StringVar(&b.aggrPlanLabel, "aggregation-plan", "", "Aggregation plan (choices: server, client)")
+	flag.IntVar(&b.subQueryParallelism, "subquery-workers", 1, "Number of concurrent subqueries to make (because the client does a scatter+gather operation).")
+	flag.DurationVar(&b.requestTimeout, "request-timeout", 60*time.Second, "Maximum request timeout.")
+	flag.DurationVar(&b.csiTimeout, "client-side-index-timeout", 10*time.Second, "Maximum client-side index timeout (only used at initialization).")
+}
+
+func (b *CassandraQueryBenchmarker) validate() {
+	if _, ok := aggrPlanChoices[b.aggrPlanLabel]; !ok {
+		log.Fatal("invalid aggregation plan")
+	}
+	b.aggrPlan = aggrPlanChoices[b.aggrPlanLabel]
+}
+
+func (b *CassandraQueryBenchmarker) Prepare() {
 	// Make pools to minimize heap usage:
-	queryPool = sync.Pool{
+	b.queryPool = sync.Pool{
 		New: func() interface{} {
 			return &HLQuery{
 				HumanLabel:       make([]byte, 0, 1024),
@@ -153,105 +100,62 @@ func main() {
 		},
 	}
 
-	statPool = sync.Pool{
-		New: func() interface{} {
-			return &bulk_query.Stat{
-				Label: make([]byte, 0, 1024),
-			}
-		},
-	}
+	b.session = NewCassandraSession(b.daemonUrl, b.requestTimeout)
+	b.hlQueryChan = make(chan *HLQuery)
+	b.queryExecutor = NewHLQueryExecutor(b.session, bulk_query.Benchmarker.Debug())
+}
 
-	// Make database connection pool:
-	session := NewCassandraSession(daemonUrl, requestTimeout)
-	defer session.Close()
+func (b *CassandraQueryBenchmarker) GetProcessor() bulk_query.Processor {
+	return b
+}
 
-	// Make data and stat channels:
-	hlQueryChan = make(chan *HLQuery, workers)
-	statChan = make(chan *bulk_query.Stat, workers)
+func (b *CassandraQueryBenchmarker) GetScanner() bulk_query.Scanner {
+	return b
+}
 
-	// Launch the stats processor:
-	statGroup.Add(1)
-	go processStats()
+func (b *CassandraQueryBenchmarker) CleanUp() {
+	close(b.hlQueryChan)
+	b.session.Close()
 
-	// Launch the query processors:
-	qe := NewHLQueryExecutor(session, debug)
-	for i := 0; i < workers; i++ {
-		workersGroup.Add(1)
-		go processQueries(qe)
-	}
+}
 
-	// Read in jobs, closing the job channel when done:
-	input := bufio.NewReaderSize(sourceReader, 1<<20)
-	wallStart := time.Now()
-	scan(input)
-	close(hlQueryChan)
+func (b *CassandraQueryBenchmarker) PrepareProcess(i int) {
 
-	// Block for workers to finish sending requests, closing the stats
-	// channel when done:
-	workersGroup.Wait()
-	close(statChan)
+}
 
-	// Wait on the stat collector to finish (and print its results):
-	statGroup.Wait()
+func (b *CassandraQueryBenchmarker) IsScanFinished() bool {
+	return b.scanFinished
+}
 
-	wallEnd := time.Now()
-	wallTook := wallEnd.Sub(wallStart)
-	_, err := fmt.Printf("wall clock time: %fsec\n", float64(wallTook.Nanoseconds())/1e9)
-	if err != nil {
-		log.Fatal(err)
-	}
+func (b *CassandraQueryBenchmarker) UpdateReport(params *report.QueryReportParams, reportTags [][2]string, extraVals []report.ExtraVal) (updatedTags [][2]string, updatedExtraVals []report.ExtraVal) {
+	updatedTags = append(reportTags, [2]string{"aggregation_plan", b.aggrPlanLabel})
+	updatedTags = append(updatedTags, [2]string{"subquery_workers", strconv.Itoa(b.subQueryParallelism)})
+	updatedTags = append(updatedTags, [2]string{"request_timeout", strconv.Itoa(int(b.requestTimeout.Seconds()))})
+	updatedTags = append(updatedTags, [2]string{"client_side_index_timeout", strconv.Itoa(int(b.csiTimeout.Seconds()))})
 
-	// (Optional) create a memory profile:
-	if memProfile != "" {
-		f, err := os.Create(memProfile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.WriteHeapProfile(f)
-		f.Close()
-	}
+	params.DBType = "Cassandra"
+	params.DestinationUrl = b.daemonUrl
+	updatedExtraVals = extraVals
+	return
+}
 
-	if reportHost != "" {
-		//append db specific tags to custom tags
-		reportTags = append(reportTags, [2]string{"aggregation_plan", aggrPlanLabel})
-		reportTags = append(reportTags, [2]string{"subquery_workers", strconv.Itoa(subQueryParallelism)})
-		reportTags = append(reportTags, [2]string{"request_timeout", strconv.Itoa(int(requestTimeout.Seconds()))})
-		reportTags = append(reportTags, [2]string{"client_side_index_timeout", strconv.Itoa(int(csiTimeout.Seconds()))})
-
-		reportParams := &report.QueryReportParams{
-			ReportParams: report.ReportParams{
-				DBType:             "Cassandra",
-				ReportDatabaseName: reportDatabase,
-				ReportHost:         reportHost,
-				ReportUser:         reportUser,
-				ReportPassword:     reportPassword,
-				ReportTags:         reportTags,
-				Hostname:           reportHostname,
-				DestinationUrl:     daemonUrl,
-				Workers:            workers,
-				ItemLimit:          int(limit),
-			},
-			BurnIn: int64(burnIn),
-		}
-		err = report.ReportQueryResult(reportParams, "all queries", reportQueryStat.Min, reportQueryStat.Mean, reportQueryStat.Max, reportQueryStat.Count, wallTook)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+func main() {
+	bulk_query.Benchmarker.RunBenchmark(querier)
 }
 
 // scan reads encoded Queries and places them onto the workqueue.
-func scan(r io.Reader) {
+func (b *CassandraQueryBenchmarker) RunScan(r io.Reader, closeChan chan int) {
 	dec := gob.NewDecoder(r)
 
 	n := int64(0)
+
+loop:
 	for {
-		if limit >= 0 && n >= limit {
+		if bulk_query.Benchmarker.Limit() >= 0 && n >= bulk_query.Benchmarker.Limit() {
 			break
 		}
 
-		q := queryPool.Get().(*HLQuery)
+		q := b.queryPool.Get().(*HLQuery)
 		err := dec.Decode(q)
 		if err == io.EOF {
 			break
@@ -263,23 +167,30 @@ func scan(r io.Reader) {
 		q.ID = n
 		q.ForceUTC()
 
-		hlQueryChan <- q
+		b.hlQueryChan <- q
 
 		n++
+		select {
+		case <-closeChan:
+			fmt.Printf("Received finish request\n")
+			break loop
+		default:
+		}
 	}
+	b.scanFinished = true
 }
 
 // processQueries reads byte buffers from hlQueryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(qc *HLQueryExecutor) {
+func (b *CassandraQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) {
 	opts := HLQueryExecutorDoOptions{
-		AggregationPlan:      aggrPlan,
-		Debug:                debug,
-		PrettyPrintResponses: prettyPrintResponses,
+		AggregationPlan:      b.aggrPlan,
+		Debug:                bulk_query.Benchmarker.Debug(),
+		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
 	labels := map[string][][]byte{}
-	for q := range hlQueryChan {
-		qpLagMs, reqLagMs, err := qc.Do(q, opts)
+	for q := range b.hlQueryChan {
+		qpLagMs, reqLagMs, err := b.queryExecutor.Do(q, opts)
 
 		// if needed, prepare stat labels:
 		if _, ok := labels[string(q.HumanLabel)]; !ok {
@@ -306,91 +217,10 @@ func processQueries(qc *HLQueryExecutor) {
 		stat.InitWithActual(ls[2], reqLagMs, false)
 		statChan <- stat
 
-		queryPool.Put(q)
+		b.queryPool.Put(q)
 		if err != nil {
 			log.Fatalf("Error during request: %s\n", err.Error())
 		}
 	}
 	workersGroup.Done()
-}
-
-// processStats collects latency results, aggregating them into summary
-// statistics. Optionally, they are printed to stderr at regular intervals.
-func processStats() {
-	statMapping := bulk_query.StatsMap{}
-
-	i := uint64(0)
-	for stat := range statChan {
-		if i < burnIn {
-			i++
-			statPool.Put(stat)
-			continue
-		} else if i == burnIn && burnIn > 0 {
-			_, err := fmt.Fprintf(os.Stderr, "burn-in complete after %d queries with %d workers\n", burnIn, workers)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		if _, ok := statMapping[string(stat.Label)]; !ok {
-			statMapping[string(stat.Label)] = &bulk_query.StatGroup{}
-		}
-
-		statMapping[string(stat.Label)].Push(stat.Value)
-
-		if stat.IsActual {
-			i++
-			reportQueryStat.Push(stat.Value)
-		}
-
-		statPool.Put(stat)
-
-		// print stats to stderr (if printInterval is greater than zero):
-		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
-			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i-burnIn, workers)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fprintStats(os.Stderr, statMapping)
-			_, err = fmt.Fprintf(os.Stderr, "\n")
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
-	// the final stats output goes to stdout:
-	_, err := fmt.Printf("run complete after %d queries with %d workers:\n", i-burnIn, workers)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fprintStats(os.Stdout, statMapping)
-	statGroup.Done()
-}
-
-// fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups bulk_query.StatsMap) {
-	maxKeyLength := 0
-	keys := make([]string, 0, len(statGroups))
-	for k := range statGroups {
-		if len(k) > maxKeyLength {
-			maxKeyLength = len(k)
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		v := statGroups[k]
-		minRate := 1e3 / v.Min
-		meanRate := 1e3 / v.Mean
-		maxRate := 1e3 / v.Max
-		paddedKey := fmt.Sprintf("%s", k)
-		for len(paddedKey) < maxKeyLength {
-			paddedKey += " "
-		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
 }
