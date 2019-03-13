@@ -8,7 +8,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -16,97 +15,48 @@ import (
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
-	"os"
-	"runtime/pprof"
-	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
-// Program option vars:
-var (
-	csvDaemonUrls        string
-	daemonUrls           []string
-	workers              int
-	debug                int
-	prettyPrintResponses bool
-	limit                int64
-	burnIn               uint64
-	printInterval        uint64
-	memProfile           string
-	reportDatabase       string
-	reportHost           string
-	reportUser           string
-	reportPassword       string
-	reportTagsCSV        string
-)
+type OpenTsdbQueryBenchmarker struct {
+	// Program option vars:
+	csvDaemonUrls string
+	daemonUrls    []string
+	// Global vars:
+	queryPool    sync.Pool
+	queryChan    chan *Query
+	scanFinished bool
+}
 
-// Global vars:
-var (
-	queryPool      sync.Pool
-	queryChan      chan *Query
-	statPool       sync.Pool
-	statChan       chan *bulk_query.Stat
-	workersGroup   sync.WaitGroup
-	statGroup      sync.WaitGroup
-	statMapping    bulk_query.StatsMap
-	reportTags     [][2]string
-	reportHostname string
-)
-
-const allQueriesLabel = "all queries"
+var querier = &OpenTsdbQueryBenchmarker{}
 
 // Parse args:
 func init() {
-	flag.StringVar(&csvDaemonUrls, "urls", "http://localhost:4242", "OpenTSDB URLs, comma-separated. Will be used in a round-robin fashion.")
-	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
-	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
-	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
-	flag.Uint64Var(&burnIn, "burn-in", 0, "Number of queries to ignore before collecting statistics.")
-	flag.Uint64Var(&printInterval, "print-interval", 100, "Print timing stats to stderr after this many queries (0 to disable)")
-	flag.BoolVar(&prettyPrintResponses, "print-filtered-responses", false, "Pretty print filtered JSON response bodies (for correctness checking) (default false).")
-	flag.StringVar(&memProfile, "memprofile", "", "Write a memory profile to this file.")
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics.")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics.")
-	flag.StringVar(&reportUser, "report-user", "", "User for Host to send result metrics.")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics.")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics.")
+	bulk_query.Benchmarker.Init()
+	querier.Init()
 
 	flag.Parse()
 
-	daemonUrls = strings.Split(csvDaemonUrls, ",")
-	if len(daemonUrls) == 0 {
-		log.Fatal("missing 'urls' flag")
-	}
-	fmt.Printf("daemon URLs: %v\n", daemonUrls)
-
-	if reportHost != "" {
-		fmt.Printf("results report destination: %v\n", reportHost)
-		fmt.Printf("results report database: %v\n", reportDatabase)
-
-		var err error
-		reportHostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("hostname for results report: %v\n", reportHostname)
-
-		if reportTagsCSV != "" {
-			pairs := strings.Split(reportTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				reportTags = append(reportTags, tagpair)
-			}
-		}
-		fmt.Printf("results report tags: %v\n", reportTags)
-	}
+	bulk_query.Benchmarker.Validate()
+	querier.Validate()
 }
 
-func main() {
+func (b *OpenTsdbQueryBenchmarker) Init() {
+	flag.StringVar(&b.csvDaemonUrls, "urls", "http://localhost:4242", "OpenTSDB URLs, comma-separated. Will be used in a round-robin fashion.")
+}
+
+func (b *OpenTsdbQueryBenchmarker) Validate() {
+	b.daemonUrls = strings.Split(b.csvDaemonUrls, ",")
+	if len(b.daemonUrls) == 0 {
+		log.Fatal("missing 'urls' flag")
+	}
+	fmt.Printf("daemon URLs: %v\n", b.daemonUrls)
+}
+
+func (b *OpenTsdbQueryBenchmarker) Prepare() {
 	// Make pools to minimize heap usage:
-	queryPool = sync.Pool{
+	b.queryPool = sync.Pool{
 		New: func() interface{} {
 			return &Query{
 				HumanLabel:       make([]byte, 0, 1024),
@@ -117,101 +67,58 @@ func main() {
 			}
 		},
 	}
+}
 
-	statPool = sync.Pool{
-		New: func() interface{} {
-			return &bulk_query.Stat{
-				Label: make([]byte, 0, 1024),
-				Value: 0.0,
-			}
-		},
-	}
+func (b *OpenTsdbQueryBenchmarker) GetProcessor() bulk_query.Processor {
+	return b
+}
 
-	// Make data and control channels:
-	queryChan = make(chan *Query, workers)
-	statChan = make(chan *bulk_query.Stat, workers)
+func (b *OpenTsdbQueryBenchmarker) GetScanner() bulk_query.Scanner {
+	return b
+}
 
-	// Launch the stats processor:
-	statGroup.Add(1)
-	go processStats()
+func (b *OpenTsdbQueryBenchmarker) PrepareProcess(i int) {
 
-	// Launch the query processors:
-	for i := 0; i < workers; i++ {
-		daemonUrl := daemonUrls[i%len(daemonUrls)]
-		workersGroup.Add(1)
-		w := NewHTTPClient(daemonUrl, debug)
-		go processQueries(w)
-	}
+}
 
-	// Read in jobs, closing the job channel when done:
-	input := bufio.NewReaderSize(os.Stdin, 1<<20)
-	wallStart := time.Now()
-	scan(input)
-	close(queryChan)
+func (b *OpenTsdbQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) {
+	daemonUrl := b.daemonUrls[i%len(b.daemonUrls)]
+	w := NewHTTPClient(daemonUrl, bulk_query.Benchmarker.Debug())
+	b.processQueries(w, workersGroup, statPool, statChan)
+}
 
-	// Block for workers to finish sending requests, closing the stats
-	// channel when done:
-	workersGroup.Wait()
-	close(statChan)
+func (b *OpenTsdbQueryBenchmarker) IsScanFinished() bool {
+	return b.scanFinished
+}
 
-	// Wait on the stat collector to finish (and print its results):
-	statGroup.Wait()
+func (b *OpenTsdbQueryBenchmarker) CleanUp() {
+	close(b.queryChan)
+}
 
-	wallEnd := time.Now()
-	wallTook := wallEnd.Sub(wallStart)
-	_, err := fmt.Printf("wall clock time: %fsec\n", float64(wallTook.Nanoseconds())/1e9)
-	if err != nil {
-		log.Fatal(err)
-	}
+func (b *OpenTsdbQueryBenchmarker) UpdateReport(params *report.QueryReportParams, reportTags [][2]string, extraVals []report.ExtraVal) (updatedTags [][2]string, updatedExtraVals []report.ExtraVal) {
+	params.DBType = "OpenTSDB"
+	params.DestinationUrl = b.csvDaemonUrls
+	updatedTags = reportTags
+	updatedExtraVals = extraVals
+	return
+}
 
-	// (Optional) create a memory profile:
-	if memProfile != "" {
-		f, err := os.Create(memProfile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.WriteHeapProfile(f)
-		f.Close()
-	}
-
-	if reportHost != "" {
-
-		reportParams := &report.QueryReportParams{
-			ReportParams: report.ReportParams{
-				DBType:             "Cassandra",
-				ReportDatabaseName: reportDatabase,
-				ReportHost:         reportHost,
-				ReportUser:         reportUser,
-				ReportPassword:     reportPassword,
-				ReportTags:         reportTags,
-				Hostname:           reportHostname,
-				DestinationUrl:     csvDaemonUrls,
-				Workers:            workers,
-				ItemLimit:          int(limit),
-			},
-			BurnIn: int64(burnIn),
-		}
-
-		stat := statMapping[allQueriesLabel]
-		err = report.ReportQueryResult(reportParams, allQueriesLabel, stat.Min, stat.Mean, stat.Max, stat.Count, wallTook)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+func main() {
+	bulk_query.Benchmarker.RunBenchmark(querier)
 }
 
 // scan reads encoded Queries and places them onto the workqueue.
-func scan(r io.Reader) {
+func (b *OpenTsdbQueryBenchmarker) RunScan(r io.Reader, closeChan chan int) {
 	dec := gob.NewDecoder(r)
 
 	n := int64(0)
+loop:
 	for {
-		if limit >= 0 && n >= limit {
+		if bulk_query.Benchmarker.Limit() >= 0 && n >= bulk_query.Benchmarker.Limit() {
 			break
 		}
 
-		q := queryPool.Get().(*Query)
+		q := b.queryPool.Get().(*Query)
 		err := dec.Decode(q)
 		if err == io.EOF {
 			break
@@ -222,112 +129,37 @@ func scan(r io.Reader) {
 
 		q.ID = n
 
-		queryChan <- q
+		b.queryChan <- q
 
 		n++
-
+		select {
+		case <-closeChan:
+			fmt.Printf("Received finish request\n")
+			break loop
+		default:
+		}
 	}
+	b.scanFinished = true
 }
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func processQueries(w *HTTPClient) {
+func (b *OpenTsdbQueryBenchmarker) processQueries(w *HTTPClient, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) {
 	opts := &HTTPClientDoOptions{
-		Debug:                debug,
-		PrettyPrintResponses: prettyPrintResponses,
+		Debug:                bulk_query.Benchmarker.Debug(),
+		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
-	for q := range queryChan {
+	for q := range b.queryChan {
 		lag, err := w.Do(q, opts)
 
 		stat := statPool.Get().(*bulk_query.Stat)
 		stat.Init(q.HumanLabel, lag)
 		statChan <- stat
 
-		queryPool.Put(q)
+		b.queryPool.Put(q)
 		if err != nil {
 			log.Fatalf("Error during request: %s\n", err.Error())
 		}
 	}
 	workersGroup.Done()
-}
-
-// processStats collects latency results, aggregating them into summary
-// statistics. Optionally, they are printed to stderr at regular intervals.
-func processStats() {
-	statMapping = bulk_query.StatsMap{
-		allQueriesLabel: &bulk_query.StatGroup{},
-	}
-
-	i := uint64(0)
-	for stat := range statChan {
-		if i < burnIn {
-			i++
-			statPool.Put(stat)
-			continue
-		} else if i == burnIn && burnIn > 0 {
-			_, err := fmt.Fprintf(os.Stderr, "burn-in complete after %d queries with %d workers\n", burnIn, workers)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		if _, ok := statMapping[string(stat.Label)]; !ok {
-			statMapping[string(stat.Label)] = &bulk_query.StatGroup{}
-		}
-
-		statMapping[allQueriesLabel].Push(stat.Value)
-		statMapping[string(stat.Label)].Push(stat.Value)
-
-		statPool.Put(stat)
-
-		i++
-
-		// print stats to stderr (if printInterval is greater than zero):
-		if printInterval > 0 && i > 0 && i%printInterval == 0 && (int64(i) < limit || limit < 0) {
-			_, err := fmt.Fprintf(os.Stderr, "after %d queries with %d workers:\n", i, workers)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fprintStats(os.Stderr, statMapping)
-			_, err = fmt.Fprintf(os.Stderr, "\n")
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
-	// the final stats output goes to stdout:
-	_, err := fmt.Printf("run complete after %d queries with %d workers:\n", i, workers)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fprintStats(os.Stdout, statMapping)
-	statGroup.Done()
-}
-
-// fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups bulk_query.StatsMap) {
-	maxKeyLength := 0
-	keys := make([]string, 0, len(statGroups))
-	for k := range statGroups {
-		if len(k) > maxKeyLength {
-			maxKeyLength = len(k)
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		v := statGroups[k]
-		minRate := 1e3 / v.Min
-		meanRate := 1e3 / v.Mean
-		maxRate := 1e3 / v.Max
-		paddedKey := fmt.Sprintf("%s", k)
-		for len(paddedKey) < maxKeyLength {
-			paddedKey += " "
-		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 }
