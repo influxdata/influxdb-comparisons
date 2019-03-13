@@ -267,7 +267,7 @@ func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64)
 	}
 
 	var batchItemCount uint64
-
+	var err error
 	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
 outer:
 	for scanner.Scan() {
@@ -275,23 +275,12 @@ outer:
 			break
 		}
 
-		line := scanner.Text()
-		if strings.HasPrefix(line, common.DatasetSizeMarker) {
-			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
-			if parts == nil || len(parts[0]) != 3 {
-				log.Fatalf("Incorrent number of matched groups: %#v", parts)
-			}
-			if i, err := strconv.Atoi(parts[0][1]); err == nil {
-				totalPoints = int64(i)
-			} else {
-				log.Fatal(err)
-			}
-			if i, err := strconv.Atoi(parts[0][2]); err == nil {
-				totalValues = int64(i)
-			} else {
-				log.Fatal(err)
-			}
+		totalPoints, totalValues, err = common.CheckTotalValues(scanner.Text())
+		if totalPoints > 0 || totalValues > 0 {
 			continue
+		}
+		if err != nil {
+			log.Fatal(err)
 		}
 		itemsRead++
 		batchItemCount++
