@@ -205,6 +205,24 @@ type ElasticBulkLoad struct {
 	scanFinished bool
 }
 
+var load = &ElasticBulkLoad{}
+
+// Parse args:
+func init() {
+	bulk_load.Runner.Init(5000)
+	load.Init()
+
+	flag.Parse()
+
+	bulk_load.Runner.Validate()
+	load.Validate()
+
+}
+
+func main() {
+	bulk_load.Runner.Run(load)
+}
+
 func (l *ElasticBulkLoad) Init() {
 	flag.StringVar(&l.csvDaemonUrls, "urls", "http://localhost:9200", "ElasticSearch URLs, comma-separated. Will be used in a round-robin fashion.")
 	flag.BoolVar(&l.refreshEachBatch, "refresh", true, "Whether each batch is immediately indexed.")
@@ -331,24 +349,6 @@ func (l *ElasticBulkLoad) EmptyBatchChanel() {
 
 func (l *ElasticBulkLoad) IsScanFinished() bool {
 	return l.scanFinished
-}
-
-var load = &ElasticBulkLoad{}
-
-// Parse args:
-func init() {
-	bulk_load.Runner.Init(5000)
-	load.Init()
-
-	flag.Parse()
-
-	bulk_load.Runner.Validate()
-	load.Validate()
-
-}
-
-func main() {
-	bulk_load.Runner.Run(load)
 }
 
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
