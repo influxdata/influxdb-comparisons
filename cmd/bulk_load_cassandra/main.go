@@ -9,8 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -159,7 +159,7 @@ func (l *CassandraBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRea
 }
 
 // scan reads lines from stdin. It expects input in the Cassandra CQL format.
-func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) {
+func (l *CassandraBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
@@ -179,7 +179,7 @@ func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) {
 		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(r)
 outer:
 	for scanner.Scan() {
 		line := scanner.Text()

@@ -12,7 +12,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"log"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -178,13 +177,13 @@ func (l *MongoBulkLoad) IsScanFinished() bool {
 }
 
 // scan reads length-delimited flatbuffers items from stdin.
-func (l *MongoBulkLoad) RunScanner(syncChanDone chan int) {
+func (l *MongoBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
 	l.valuesRead = 0
 	var n int
-	r := bufio.NewReaderSize(os.Stdin, 32<<20)
+	br := bufio.NewReaderSize(r, 32<<20)
 
 	start := time.Now()
 	batch := l.batchPool.Get().(*Batch)
@@ -199,7 +198,7 @@ outer:
 			break
 		}
 		// get the serialized item length (this is the framing format)
-		_, err := r.Read(lenBuf)
+		_, err := br.Read(lenBuf)
 		if err == io.EOF {
 			break
 		}
@@ -218,7 +217,7 @@ outer:
 		// read the bytes and init the flatbuffer object
 		totRead := 0
 		for totRead < d {
-			m, err := r.Read(itemBuf[totRead:])
+			m, err := br.Read(itemBuf[totRead:])
 			// (EOF is also fatal)
 			if err != nil {
 				log.Fatal(err.Error())

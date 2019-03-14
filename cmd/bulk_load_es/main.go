@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"text/template"
@@ -364,7 +364,7 @@ func (l *ElasticBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead 
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
 // format: two line pairs, the first line being an 'action' and the second line
 // being the payload. (2 lines = 1 item)
-func (l *ElasticBulkLoad) RunScanner(syncChanDone chan int) {
+func (l *ElasticBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
@@ -377,7 +377,7 @@ func (l *ElasticBulkLoad) RunScanner(syncChanDone chan int) {
 	var totalPoints, totalValues int64
 
 	var itemsThisBatch int
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(r)
 
 	var deadline time.Time
 	if bulk_load.Runner.TimeLimit > 0 {

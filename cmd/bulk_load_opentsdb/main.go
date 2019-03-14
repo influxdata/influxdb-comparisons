@@ -10,8 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -157,7 +157,7 @@ func (l *OpenTsdbBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead
 
 // scan reads one line at a time from stdin.
 // When the requested number of lines per batch is met, send a batch over batchChan for the workers to write.
-func (l *OpenTsdbBulkLoad) RunScanner(syncChanDone chan int) {
+func (l *OpenTsdbBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
@@ -175,7 +175,7 @@ func (l *OpenTsdbBulkLoad) RunScanner(syncChanDone chan int) {
 	zw.Write(openbracket)
 	zw.Write(newline)
 
-	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
+	scanner := bufio.NewScanner(bufio.NewReaderSize(r, 4*1024*1024))
 
 	var deadline time.Time
 	if bulk_load.Runner.TimeLimit > 0 {

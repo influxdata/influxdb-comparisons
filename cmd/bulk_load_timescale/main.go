@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,8 +200,8 @@ func (l *TimescaleBulkLoad) EmptyBatchChanel() {
 	}
 }
 
-func (l *TimescaleBulkLoad) RunScanner(syncChanDone chan int) {
-	l.formatProcessors.scan(l, os.Stdin, syncChanDone)
+func (l *TimescaleBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
+	l.formatProcessors.scan(l, r, syncChanDone)
 }
 
 func (l *TimescaleBulkLoad) IsScanFinished() bool {

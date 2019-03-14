@@ -12,11 +12,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -262,7 +262,7 @@ func (l *InfluxBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead i
 
 // scan reads one item at a time from stdin. 1 item = 1 line.
 // When the requested number of items per batch is met, send a batch over batchChan for the workers to write.
-func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) {
+func (l *InfluxBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
@@ -280,7 +280,7 @@ func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) {
 
 	var batchItemCount uint64
 	var err error
-	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
+	scanner := bufio.NewScanner(bufio.NewReaderSize(r, 4*1024*1024))
 outer:
 	for scanner.Scan() {
 		if l.itemsRead == bulk_load.Runner.ItemLimit {

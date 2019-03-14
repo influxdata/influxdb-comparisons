@@ -62,6 +62,7 @@ type LoadRunner struct {
 	printInterval          uint64
 	trendSamples           int
 	movingAverageInterval  time.Duration
+	file                   string
 
 	backingOffChans       []chan bool
 	backingOffDones       []chan struct{}
@@ -82,6 +83,7 @@ type LoadRunner struct {
 	statGroup             sync.WaitGroup
 	movingAverageStat     *TimedStatGroup
 	scanFinished          bool
+	sourceReader          *os.File
 }
 
 var Runner = &LoadRunner{}
@@ -123,6 +125,7 @@ func (r *LoadRunner) Init(defaultBatchSize int) {
 	flag.StringVar(&r.reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
 	flag.BoolVar(&r.reportTelemetry, "report-telemetry", false, "Turn on/off reporting telemetry")
 	flag.IntVar(&r.notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
+	flag.StringVar(&r.file, "file", "", "Input file")
 }
 
 func (r *LoadRunner) SetPrematureEnd(reason string) {
@@ -142,6 +145,17 @@ func (r *LoadRunner) Validate() {
 
 	if r.Workers < 1 {
 		log.Fatalf("invalid number of Workers: %d\n", r.Workers)
+	}
+
+	if r.file != "" {
+		if f, err := os.Open(r.file); err == nil {
+			r.sourceReader = f
+		} else {
+			log.Fatalf("Error opening %s: %v\n", r.file, err)
+		}
+	}
+	if r.sourceReader == nil {
+		r.sourceReader = os.Stdin
 	}
 
 	if r.reportHost != "" {
@@ -279,7 +293,7 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 	}
 
 	start := time.Now()
-	scanner.RunScanner(r.syncChanDone)
+	scanner.RunScanner(r.sourceReader, r.syncChanDone)
 
 	load.SyncEnd()
 	close(r.syncChanDone)
@@ -294,6 +308,9 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 	end := time.Now()
 	took := end.Sub(start)
 
+	if r.file != "" {
+		r.sourceReader.Close()
+	}
 	itemsRead, bytesRead, valuesRead := scanner.GetReadStatistics()
 
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
