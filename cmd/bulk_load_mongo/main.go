@@ -56,6 +56,24 @@ type MongoBulkLoad struct {
 	scanFinished bool
 }
 
+var load = &MongoBulkLoad{}
+
+// Parse args:
+func init() {
+	bulk_load.Runner.Init(100)
+	load.Init()
+
+	flag.Parse()
+
+	bulk_load.Runner.Validate()
+	load.Validate()
+
+}
+
+func main() {
+	bulk_load.Runner.Run(load)
+}
+
 func (l *MongoBulkLoad) Init() {
 	flag.StringVar(&l.daemonUrl, "url", "localhost:27017", "Mongo URL.")
 	flag.DurationVar(&l.writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
@@ -159,29 +177,12 @@ func (l *MongoBulkLoad) IsScanFinished() bool {
 	return l.scanFinished
 }
 
-var load = &MongoBulkLoad{}
-
-// Parse args:
-func init() {
-	bulk_load.Runner.Init(100)
-	load.Init()
-
-	flag.Parse()
-
-	bulk_load.Runner.Validate()
-	load.Validate()
-
-}
-
-func main() {
-	bulk_load.Runner.Run(load)
-}
-
 // scan reads length-delimited flatbuffers items from stdin.
 func (l *MongoBulkLoad) RunScanner(syncChanDone chan int) {
 	l.scanFinished = false
 	l.itemsRead = 0
 	l.bytesRead = 0
+	l.valuesRead = 0
 	var n int
 	r := bufio.NewReaderSize(os.Stdin, 32<<20)
 
