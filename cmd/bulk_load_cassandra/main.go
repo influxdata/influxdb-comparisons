@@ -33,6 +33,9 @@ type CassandraBulkLoad struct {
 	inputDone    chan struct{}
 	session      *gocql.Session
 	scanFinished bool
+	valuesRead   int64
+	itemsRead    int64
+	bytesRead    int64
 }
 
 var load = &CassandraBulkLoad{}
@@ -148,9 +151,20 @@ func (l *CassandraBulkLoad) UpdateReport(params *report.LoadReportParams) (repor
 	return
 }
 
+func (l *CassandraBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
+}
+
 // scan reads lines from stdin. It expects input in the Cassandra CQL format.
-func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
+func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) {
 	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
+
 	var batch *gocql.Batch
 	if bulk_load.Runner.DoLoad {
 		batch = l.session.NewBatch(gocql.LoggedBatch)
@@ -158,7 +172,6 @@ func (l *CassandraBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int
 
 	var n int
 	var err error
-	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
 	var deadline time.Time
@@ -177,8 +190,8 @@ outer:
 		if err != nil {
 			log.Fatal(err)
 		}
-		itemsRead++
-		bytesRead += int64(len(scanner.Bytes()))
+		l.itemsRead++
+		l.bytesRead += int64(len(scanner.Bytes()))
 
 		if !bulk_load.Runner.DoLoad {
 			continue
@@ -215,16 +228,17 @@ outer:
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(l.inputDone)
 
+	l.valuesRead = totalValues
 	//cassandra's schema stores each value separately, point is represented in series_id
-	if itemsRead != totalPoints {
+	if l.itemsRead != totalPoints {
 		if !bulk_load.Runner.HasEndedPrematurely() {
-			log.Fatalf("Incorrent number of read items: %d, expected: %d:", itemsRead, totalPoints)
+			log.Fatalf("Incorrent number of read items: %d, expected: %d:", l.itemsRead, totalPoints)
 		} else {
-			totalValues = int64(float64(itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
 	l.scanFinished = true
-	return itemsRead, bytesRead, totalValues
+
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.

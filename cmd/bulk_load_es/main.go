@@ -203,6 +203,9 @@ type ElasticBulkLoad struct {
 	batchChan    chan *bytes.Buffer
 	inputDone    chan struct{}
 	scanFinished bool
+	valuesRead   int64
+	itemsRead    int64
+	bytesRead    int64
 }
 
 var load = &ElasticBulkLoad{}
@@ -351,16 +354,26 @@ func (l *ElasticBulkLoad) IsScanFinished() bool {
 	return l.scanFinished
 }
 
+func (l *ElasticBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
+}
+
 // scan reads items from stdin. It expects input in the ElasticSearch bulk
 // format: two line pairs, the first line being an 'action' and the second line
 // being the payload. (2 lines = 1 item)
-func (l *ElasticBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
+func (l *ElasticBulkLoad) RunScanner(syncChanDone chan int) {
 	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
+
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
 	var linesRead int64
 	var err error
-	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
 	var itemsThisBatch int
@@ -388,14 +401,14 @@ outer:
 
 		//n++
 		if linesRead%2 == 0 {
-			itemsRead++
+			l.itemsRead++
 			itemsThisBatch++
 		}
 
-		hitLimit := bulk_load.Runner.ItemLimit >= 0 && itemsRead >= bulk_load.Runner.ItemLimit
+		hitLimit := bulk_load.Runner.ItemLimit >= 0 && l.itemsRead >= bulk_load.Runner.ItemLimit
 
 		if itemsThisBatch == bulk_load.Runner.BatchSize || hitLimit {
-			bytesRead += int64(buf.Len())
+			l.bytesRead += int64(buf.Len())
 			l.batchChan <- buf
 			buf = l.bufPool.Get().(*bytes.Buffer)
 			itemsThisBatch = 0
@@ -431,16 +444,17 @@ outer:
 	if linesRead%2 != 0 {
 		log.Fatalf("the number of lines read was not a multiple of 2, which indicates a bad bulk format for Elastic")
 	}
-	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+	l.valuesRead = totalValues
+
+	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !bulk_load.Runner.HasEndedPrematurely() {
-			log.Fatalf("Incorrent number of read items: %d, expected: %d:", itemsRead, totalPoints)
+			log.Fatalf("Incorrent number of read items: %d, expected: %d:", l.itemsRead, totalPoints)
 		} else {
-			totalValues = int64(float64(itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
 
 	l.scanFinished = true
-	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.

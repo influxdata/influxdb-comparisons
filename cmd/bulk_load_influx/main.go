@@ -53,6 +53,9 @@ type InfluxBulkLoad struct {
 	scanFinished          bool
 	totalBackOffSecs      float64
 	configs               []*workerConfig
+	valuesRead            int64
+	itemsRead             int64
+	bytesRead             int64
 }
 
 var consistencyChoices = map[string]struct{}{
@@ -250,14 +253,23 @@ func (l *InfluxBulkLoad) IsScanFinished() bool {
 	return l.scanFinished
 }
 
+func (l *InfluxBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
+}
+
 // scan reads one item at a time from stdin. 1 item = 1 line.
 // When the requested number of items per batch is met, send a batch over batchChan for the workers to write.
-func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64) {
+func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) {
 	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
 	var n int
-	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
 	newline := []byte("\n")
@@ -271,7 +283,7 @@ func (l *InfluxBulkLoad) RunScanner(syncChanDone chan int) (int64, int64, int64)
 	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
 outer:
 	for scanner.Scan() {
-		if itemsRead == bulk_load.Runner.ItemLimit {
+		if l.itemsRead == bulk_load.Runner.ItemLimit {
 			break
 		}
 
@@ -282,7 +294,7 @@ outer:
 		if err != nil {
 			log.Fatal(err)
 		}
-		itemsRead++
+		l.itemsRead++
 		batchItemCount++
 
 		buf.Write(scanner.Bytes())
@@ -293,7 +305,7 @@ outer:
 			atomic.AddUint64(&l.progressIntervalItems, batchItemCount)
 			batchItemCount = 0
 
-			bytesRead += int64(buf.Len())
+			l.bytesRead += int64(buf.Len())
 			l.batchChan <- batch{buf, n}
 			buf = l.bufPool.Get().(*bytes.Buffer)
 			n = 0
@@ -336,15 +348,15 @@ outer:
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(l.inputDone)
 
-	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+	l.valuesRead = totalValues
+	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !bulk_load.Runner.HasEndedPrematurely() {
-			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
+			log.Fatalf("Incorrent number of read points: %d, expected: %d:", l.itemsRead, totalPoints)
 		} else {
-			totalValues = int64(float64(itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
 	l.scanFinished = true
-	return itemsRead, bytesRead, totalValues
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.

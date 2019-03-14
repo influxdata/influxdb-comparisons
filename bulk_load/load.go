@@ -279,7 +279,7 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 	}
 
 	start := time.Now()
-	itemsRead, bytesRead, valuesRead := scanner.RunScanner(r.syncChanDone)
+	scanner.RunScanner(r.syncChanDone)
 
 	load.SyncEnd()
 	close(r.syncChanDone)
@@ -293,6 +293,8 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 
 	end := time.Now()
 	took := end.Sub(start)
+
+	itemsRead, bytesRead, valuesRead := scanner.GetReadStatistics()
 
 	itemsRate := float64(itemsRead) / float64(took.Seconds())
 	bytesRate := float64(bytesRead) / float64(took.Seconds())
