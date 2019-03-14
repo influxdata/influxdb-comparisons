@@ -105,7 +105,7 @@ func (r *LoadRunner) notifyHandler(arg int) (int, error) {
 func (r *LoadRunner) Init(defaultBatchSize int) {
 	flag.StringVar(&r.DbName, "db", "benchmark_db", "Database name.")
 	flag.IntVar(&r.BatchSize, "batch-size", defaultBatchSize, "Batch size (1 line of input = 1 item).")
-	flag.IntVar(&r.Workers, "Workers", 1, "Number of parallel requests to make.")
+	flag.IntVar(&r.Workers, "workers", 1, "Number of parallel requests to make.")
 	flag.Int64Var(&r.ItemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.Uint64Var(&r.printInterval, "print-interval", 0, "Print timing stats to stderr after this many batches (0 to disable)")
 	flag.DurationVar(&r.movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean write rate on which moving average is calculated.")
