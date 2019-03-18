@@ -92,6 +92,19 @@ func NewHost(i int, offset int, start time.Time) Host {
 
 		SimulatedMeasurements: sm,
 	}
+
+	// partial override from external config
+	if Config != nil {
+		h.Region = Config.GetTagBytesValue(nil, devops.MachineTagKeys[1], true)
+		h.Datacenter = Config.GetTagBytesValue(nil, devops.MachineTagKeys[2], true)
+		h.Rack = Config.GetTagBytesValue(nil, devops.MachineTagKeys[3], true)
+		h.OS = Config.GetTagBytesValue(nil, devops.MachineTagKeys[4], true)
+		h.Arch = Config.GetTagBytesValue(nil, devops.MachineTagKeys[5], true)
+		h.Service = Config.GetTagBytesValue(nil, devops.MachineTagKeys[7], true)
+		h.ServiceVersion = Config.GetTagBytesValue(nil, devops.MachineTagKeys[8], true)
+		h.ServiceEnvironment = Config.GetTagBytesValue(nil, devops.MachineTagKeys[9], true)
+	}
+
 	currentHostIndex++
 	return h
 }
