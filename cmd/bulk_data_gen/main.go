@@ -143,6 +143,7 @@ func main() {
 			log.Fatalf("external config error: %v", err)
 		}
 		common.Config = c
+		log.Printf("Using config file %s\n", configFile)
 	}
 
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
