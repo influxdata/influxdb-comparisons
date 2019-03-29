@@ -54,6 +54,7 @@ var (
 	batchSize              int
 	ingestRateLimit        int
 	backoff                time.Duration
+	backoffTimeOut         time.Duration
 	timeLimit              time.Duration
 	progressInterval       time.Duration
 	doLoad                 bool
@@ -130,6 +131,7 @@ func init() {
 	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.Int64Var(&itemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
+	flag.DurationVar(&backoffTimeOut, "backoff-timeout", time.Minute*30, "Maximum time to spent when dealing with backoff messages in one shot")
 	flag.DurationVar(&timeLimit, "time-limit", -1, "Maximum duration to run (-1 is the default: no limit).")
 	flag.DurationVar(&progressInterval, "progress-interval", -1, "Duration between printing progress messages.")
 	flag.BoolVar(&useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
@@ -210,6 +212,10 @@ func init() {
 
 	if trendSamples <= 0 {
 		trendSamples = int(movingAverageInterval.Seconds())
+	}
+
+	if timeLimit > 0 && backoffTimeOut > timeLimit {
+		backoffTimeOut = timeLimit
 	}
 }
 
@@ -382,11 +388,12 @@ func main() {
 	close(batchChan)
 	close(syncChanDone)
 
+	log.Println("Waiting for workers")
 	workersGroup.Wait()
 
 	close(statChan)
 	statGroup.Wait()
-
+	log.Println("Closing backoff handlers")
 	for i := range backingOffChans {
 		close(backingOffChans[i])
 		<-backingOffDones[i]
@@ -594,6 +601,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 		if doLoad {
 			var err error
 			sleepTime := backoff
+			timeStart := time.Now()
 			for {
 				if useGzip {
 					compressedBatch := bufPool.Get().(*bytes.Buffer)
@@ -627,6 +635,11 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 					if sleepTime > 10*backoff { // but not longer than 10x default backoff time
 						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, backoff)
 						sleepTime = 10 * backoff
+					}
+					checkTime := time.Now()
+					if timeStart.Add(backoffTimeOut).Before(checkTime) {
+						log.Printf("[worker %s] Spent too much time in backoff: %ds\n", telemetryWorkerLabel, int64(checkTime.Sub(timeStart).Seconds()))
+						break
 					}
 				} else {
 					backoffSrc <- false
