@@ -337,8 +337,9 @@ func main() {
 		go func(w int) {
 			err := processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[w], telemetryChanPoints, fmt.Sprintf("%d", w))
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("Worker %d: error: %s\n", w, err.Error())
 				once.Do(func() {
+					log.Printf("Worker %d:  preparing exit\n", w)
 					endedPrematurely = true
 					prematureEndReason = "Worker error"
 					if !scanFinished {
@@ -347,6 +348,7 @@ func main() {
 								//read out remaining batches
 							}
 						}()
+						log.Printf("Worker %d:  Finishing scan\n", w)
 						syncChanDone <- 1
 					}
 					exitCode = 1
@@ -564,6 +566,7 @@ outer:
 		}
 	}
 	scanFinished = true
+	log.Println("Scan finished")
 	return itemsRead, bytesRead, totalValues
 }
 
