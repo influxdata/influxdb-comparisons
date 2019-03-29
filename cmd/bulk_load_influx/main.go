@@ -136,11 +136,22 @@ func (l *InfluxBulkLoad) Validate() {
 			bulk_load.Runner.BatchSize = recommendedBatchSize
 		}
 	} else {
-		log.Printf("Ingestion rate control is off")
+		log.Print("Ingestion rate control is off")
 	}
 
 	if bulk_load.Runner.TimeLimit > 0 && l.backoffTimeOut > bulk_load.Runner.TimeLimit {
 		l.backoffTimeOut = bulk_load.Runner.TimeLimit
+	}
+
+	if dbOrganization != "" || dbCredentialFile != "" {
+		if dbOrganization == "" {
+			log.Fatalf("organization must be set for InfluxDB v2")
+		}
+		if dbCredentialFile == "" {
+			log.Fatalf("credentials-file must be set for InfluxDB v2")
+		}
+		useApiV2 = true
+		log.Print("Running against InfluxDB v2")
 	}
 }
 
@@ -520,7 +531,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 func createDb(daemonUrl, dbname string, replicationFactor int, consistency string) error {
 	u, err := url.Parse(daemonUrl)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// serialize params the right way:
@@ -532,29 +543,78 @@ func createDb(daemonUrl, dbname string, replicationFactor int, consistency strin
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return err
+		return "" ,err
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
+
 	defer resp.Body.Close()
 	// does the body need to be read into the void?
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
 	}
-	return nil
+	return "", nil
+}
+
+func createDb2(daemonUrl, dbname string, replicationFactor int) (string, error) {
+	type bucketType struct {
+		ID string `json:"id,omitempty"`
+		Name string `json:"name"`
+		Organization string `json:"organization"`
+		OrganizationID string `json:"organizationID"`
+	}
+	bucket := bucketType{
+		Name: dbName,
+		Organization: dbOrganization,
+		OrganizationID: dbOrgId,
+	}
+	bucketBytes, err := json.Marshal(bucket)
+	if err != nil {
+		return "", fmt.Errorf("createDb marshal error: %s", err.Error())
+	}
+
+	u := fmt.Sprintf("%s/api/v2/buckets", daemonUrl)
+	req, err := http.NewRequest("POST", u, bytes.NewReader(bucketBytes))
+	if err != nil {
+		return "", fmt.Errorf("createDb newRequest error: %s", err.Error())
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("createDb POST error: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		return "", fmt.Errorf("createDb POST status code: %v", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("createDb readAll error: %s", err.Error())
+	}
+
+	err = json.Unmarshal(body, &bucket)
+	if err != nil {
+		return "", fmt.Errorf("createDb unmarshal error: %s", err.Error())
+	}
+
+	return bucket.ID, nil
 }
 
 // listDatabases lists the existing databases in InfluxDB.
-func listDatabases(daemonUrl string) ([]string, error) {
+func listDatabases(daemonUrl string) (map[string]string, error) {
 	u := fmt.Sprintf("%s/query?q=show%%20databases", daemonUrl)
 	resp, err := http.Get(u)
 	if err != nil {
-		return nil, fmt.Errorf("listDatabases error: %s", err.Error())
+		return nil, fmt.Errorf("listDatabases get error: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
@@ -565,7 +625,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listDatabases readAll error: %s", err.Error())
 	}
 
 	// Do ad-hoc parsing to find existing database names:
@@ -580,15 +640,93 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	var listing listingType
 	err = json.Unmarshal(body, &listing)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listDatabases unmarshal error: %s", err.Error())
 	}
 
 	var ret []string
 	for _, nestedName := range listing.Results[0].Series[0].Values {
-		name := nestedName[0]
-		// the _internal database is skipped:
-		if name == "_internal" {
-			continue
+		ret[nestedName[0]] = ""
+	}
+	return ret, nil
+}
+
+// listDatabases2 lists the existing databases in InfluxDB v2.
+func listDatabases2(daemonUrl string) (map[string]string, error) {
+	u := fmt.Sprintf("%s/api/v2/buckets", daemonUrl)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listDatabases newRequest error: %s", err.Error())
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("listDatabases GET error: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listDatabases GET status code: %v", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("listDatabases readAll error: %s", err.Error())
+	}
+
+	// Do ad-hoc parsing to find existing database names:
+	// {"buckets":[{"name:test_db","id":"1","organization":"test_org","organizationID":"2"},...]}%
+	type listingType struct {
+		Buckets []struct {
+			Id string
+			Organization string
+			OrganizationID string
+			Name string
+		}
+	}
+	var listing listingType
+	err = json.Unmarshal(body, &listing)
+	if err != nil {
+		return nil, fmt.Errorf("listDatabases unmarshal error: %s", err.Error())
+	}
+
+	ret := make(map[string]string)
+	for _, bucket := range listing.Buckets {
+		ret[bucket.Name] = bucket.Id
+	}
+	return ret, nil
+}
+
+// listOrgs2 lists the organizations in InfluxDB v2.
+func listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
+	u := fmt.Sprintf("%s/api/v2/orgs", daemonUrl)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs newRequest error: %s", err.Error())
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs GET error: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listOrgs GET status code: %v", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs readAll error: %s", err.Error())
+	}
+
+	type listingType struct {
+		Orgs []struct {
+			Id string
+			Name string
 		}
 		if name == "telegraf" {
 			continue
