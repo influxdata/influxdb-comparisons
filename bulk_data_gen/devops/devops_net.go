@@ -41,7 +41,7 @@ func NewNetMeasurement(start time.Time) *NetMeasurement {
 
 	interfaceName := []byte(fmt.Sprintf("eth%d", rand.Intn(4)))
 	if Config != nil { // partial override from external config
-		interfaceName = Config.GetTagBytesValue(NetByteString, NetTags[0], true)
+		interfaceName = Config.GetTagBytesValue(NetByteString, NetTags[0], true, interfaceName)
 	}
 	return &NetMeasurement{
 		interfaceName: interfaceName,

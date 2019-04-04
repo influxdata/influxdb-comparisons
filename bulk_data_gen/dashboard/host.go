@@ -95,14 +95,14 @@ func NewHost(i int, offset int, start time.Time) Host {
 
 	// partial override from external config
 	if Config != nil {
-		h.Region = Config.GetTagBytesValue(nil, devops.MachineTagKeys[1], true)
-		h.Datacenter = Config.GetTagBytesValue(nil, devops.MachineTagKeys[2], true)
-		h.Rack = Config.GetTagBytesValue(nil, devops.MachineTagKeys[3], true)
-		h.OS = Config.GetTagBytesValue(nil, devops.MachineTagKeys[4], true)
-		h.Arch = Config.GetTagBytesValue(nil, devops.MachineTagKeys[5], true)
-		h.Service = Config.GetTagBytesValue(nil, devops.MachineTagKeys[7], true)
-		h.ServiceVersion = Config.GetTagBytesValue(nil, devops.MachineTagKeys[8], true)
-		h.ServiceEnvironment = Config.GetTagBytesValue(nil, devops.MachineTagKeys[9], true)
+		h.Region = Config.GetTagBytesValue(nil, devops.MachineTagKeys[1], true, []byte(h.Region))
+		h.Datacenter = Config.GetTagBytesValue(nil, devops.MachineTagKeys[2], true, []byte(h.Datacenter))
+		h.Rack = Config.GetTagBytesValue(nil, devops.MachineTagKeys[3], true, []byte(h.Rack))
+		h.OS = Config.GetTagBytesValue(nil, devops.MachineTagKeys[4], true, []byte(h.OS))
+		h.Arch = Config.GetTagBytesValue(nil, devops.MachineTagKeys[5], true, []byte(h.Arch))
+		h.Service = Config.GetTagBytesValue(nil, devops.MachineTagKeys[7], true, []byte(h.Service))
+		h.ServiceVersion = Config.GetTagBytesValue(nil, devops.MachineTagKeys[8], true, []byte(h.ServiceVersion))
+		h.ServiceEnvironment = Config.GetTagBytesValue(nil, devops.MachineTagKeys[9], true, []byte(h.ServiceEnvironment))
 	}
 
 	currentHostIndex++

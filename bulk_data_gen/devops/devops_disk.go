@@ -45,8 +45,8 @@ func NewDiskMeasurement(start time.Time, sda int) *DiskMeasurement {
 	path := []byte(fmt.Sprintf("/dev/sda%d", sda))
 	fsType := DiskFSTypeChoices[rand.Intn(len(DiskFSTypeChoices))]
 	if Config != nil { // partial override from external config
-		path = Config.GetTagBytesValue(DiskByteString, DiskTags[0], true)
-		fsType = Config.GetTagBytesValue(DiskByteString, DiskTags[1], true)
+		path = Config.GetTagBytesValue(DiskByteString, DiskTags[0], true, path)
+		fsType = Config.GetTagBytesValue(DiskByteString, DiskTags[1], true, fsType)
 	}
 	return &DiskMeasurement{
 		path:   path,

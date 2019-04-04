@@ -12,14 +12,22 @@ import (
 
 type Source interface{}
 
-func GetSourceValue(s *Source, measurementName, itemKey string) interface{} {
-	switch reflect.ValueOf(s).Kind() {
+var DefaultValueGenerator = map[string]interface{}{
+	"type": "default",
+}
+
+func getSourceValue(s *Source, measurementName, itemKey string, itemDefaultValue interface{}) interface{} {
+	switch reflect.Indirect(reflect.ValueOf(s)).Elem().Kind() {
 	case reflect.Array:
 		array := (*s).([]interface{})
 		return array[rand.Int63n(int64(len(array)))]
 	case reflect.Map:
+		m := (*s).(map[string]interface{})
+		if reflect.DeepEqual(m, DefaultValueGenerator) {
+			return itemDefaultValue
+		}
 		log.Fatalf("generators are not supported (yet) ['%s/%s']", measurementName, itemKey)
-	default:
+	default: // primitive types
 		return *s
 	}
 	panic("unreachable")
@@ -67,16 +75,16 @@ func (c *ExternalConfig) String() string {
 	return buf.String()
 }
 
-func (c *ExternalConfig) GetTagBytesValue(measurementName, tagKey []byte, failIfNotFound bool) []byte {
-	return []byte(c.GetTagValue(string(measurementName), string(tagKey), failIfNotFound))
+func (c *ExternalConfig) GetTagBytesValue(measurementName, tagKey []byte, failIfNotFound bool, defaultValue []byte) []byte {
+	return []byte(c.GetTagValue(string(measurementName), string(tagKey), failIfNotFound, string(defaultValue)))
 }
 
-func (c *ExternalConfig) GetTagValue(measurementName, tagKey string, failIfNotFound bool) string {
+func (c *ExternalConfig) GetTagValue(measurementName, tagKey string, failIfNotFound bool, defaultValue string) string {
 	for _,m := range c.measurements {
 		if "" == measurementName || m.Name == measurementName {
 			for _,tag := range m.Tags {
 				if tag.Name == tagKey {
-					return fmt.Sprintf("%v", GetSourceValue(&tag.Source, m.Name, tag.Name))
+					return fmt.Sprintf("%v", getSourceValue(&tag.Source, m.Name, tag.Name, defaultValue))
 				}
 			}
 		}
@@ -84,19 +92,19 @@ func (c *ExternalConfig) GetTagValue(measurementName, tagKey string, failIfNotFo
 	if failIfNotFound {
 		log.Fatalf("value for tag '%s/%s' not found", measurementName, tagKey)
 	}
-	return ""
+	return "" // defaultValue ?
 }
 
-func (c *ExternalConfig) GetFieldBytesValue(measurementName, tagKey []byte, failIfNotFound bool) interface{} {
-	return c.GetFieldValue(string(measurementName), string(tagKey), failIfNotFound)
+func (c *ExternalConfig) GetFieldBytesValue(measurementName, tagKey []byte, failIfNotFound bool, defaultValue interface{}) interface{} {
+	return c.GetFieldValue(string(measurementName), string(tagKey), failIfNotFound, defaultValue)
 }
 
-func (c *ExternalConfig) GetFieldValue(measurementName, fieldKey string, failIfNotFound bool) interface{} {
+func (c *ExternalConfig) GetFieldValue(measurementName, fieldKey string, failIfNotFound bool, defaultValue interface{}) interface{} {
 	for _,m := range c.measurements {
 		if "" == measurementName || m.Name == measurementName {
 			for _,field := range m.Fields {
 				if field.Name == fieldKey {
-					return GetSourceValue(&field.Source, m.Name, field.Name)
+					return getSourceValue(&field.Source, m.Name, field.Name, defaultValue)
 				}
 			}
 		}
@@ -104,7 +112,7 @@ func (c *ExternalConfig) GetFieldValue(measurementName, fieldKey string, failIfN
 	if failIfNotFound {
 		log.Fatalf("value for field '%s/%s' not found", measurementName, fieldKey)
 	}
-	return nil
+	return nil // defaultValue ?
 }
 
 func NewConfig(path string) (*ExternalConfig, error) {
