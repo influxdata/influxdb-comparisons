@@ -62,7 +62,7 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHo
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT mean(temperature) from air_condition_room where (%s) and time >= '%s' and time < '%s' group by time(1h)", combinedHomesClause, interval.StartString(), interval.EndString())
 	} else {
-		query = fmt.Sprintf(`from(db:"%s") `+
+		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature" and (%s)) `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
