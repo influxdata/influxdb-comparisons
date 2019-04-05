@@ -183,7 +183,7 @@ func init() {
 	}
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleArrays'; leave empty for previous behaviour)")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for MongoDB format 'simpleArrays'; leave empty for previous behaviour)")
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
