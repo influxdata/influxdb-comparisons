@@ -7,6 +7,7 @@ package main
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_query"
@@ -72,6 +73,17 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		http.UseFastHttp = b.httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
+	}
+
+	if dbOrganization != "" || dbCredentialFile != "" {
+		if dbOrganization == "" {
+			log.Fatalf("organization must be set for InfluxDB v2")
+		}
+		if dbCredentialFile == "" {
+			log.Fatalf("credentials-file must be set for InfluxDB v2")
+		}
+		useApiV2 = true
+		log.Print("Running against InfluxDB v2")
 	}
 }
 
@@ -182,6 +194,11 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	opts := &http.HTTPClientDoOptions{
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
+	}
+	if useApiV2 {
+		opts.ApiPath = "/api/v2"
+		opts.OrgId = dbOrgId
+		opts.AuthToken = authToken
 	}
 	var queriesSeen int64
 	for queries := range b.queryChan {
