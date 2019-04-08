@@ -196,7 +196,8 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
 	if useApiV2 {
-		opts.OrgId = dbOrgId
+		opts.ContentType = "application/vnd.flux"
+		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", dbOrgId))
 		opts.AuthToken = authToken
 	}
 	var queriesSeen int64
@@ -252,6 +253,9 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 			doneCh <- 1
 		}
 	}()
+	if opts.Path != nil { // override
+		q.Path = opts.Path
+	}
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*bulk_query.Stat)
 	stat.Init(q.HumanLabel, lagMillis)
