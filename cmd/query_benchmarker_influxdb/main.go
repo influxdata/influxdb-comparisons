@@ -256,6 +256,15 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 	if opts.Path != nil { // override
 		q.Path = opts.Path
 	}
+	if useApiV2 {
+		body, err := url.QueryUnescape(string(q.Body))
+		if err != nil {
+			log.Fatalf("queryUnescape error: %v", err)
+		}
+		if strings.HasPrefix(body, "query=") {
+			q.Body = []byte(body[len("query="):])
+		}
+	}
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*bulk_query.Stat)
 	stat.Init(q.HumanLabel, lagMillis)
