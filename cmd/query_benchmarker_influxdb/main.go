@@ -196,7 +196,6 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
 	if useApiV2 {
-		opts.ApiPath = "/api/v2"
 		opts.OrgId = dbOrgId
 		opts.AuthToken = authToken
 	}
