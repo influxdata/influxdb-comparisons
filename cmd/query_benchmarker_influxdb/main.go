@@ -74,17 +74,6 @@ func (b *InfluxQueryBenchmarker) Validate() {
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
 	}
-
-	if dbOrganization != "" || dbCredentialFile != "" {
-		if dbOrganization == "" {
-			log.Fatalf("organization must be set for InfluxDB v2")
-		}
-		if dbCredentialFile == "" {
-			log.Fatalf("credentials-file must be set for InfluxDB v2")
-		}
-		useApiV2 = true
-		log.Print("Running against InfluxDB v2")
-	}
 }
 
 func (b *InfluxQueryBenchmarker) Prepare() {
@@ -97,6 +86,7 @@ func (b *InfluxQueryBenchmarker) Prepare() {
 				Method:           make([]byte, 0, 1024),
 				Path:             make([]byte, 0, 1024),
 				Body:             make([]byte, 0, 1024),
+				Language:         "",
 			}
 		},
 	}
@@ -195,9 +185,10 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
-	if useApiV2 {
-		opts.ContentType = "application/vnd.flux"
+	if dbOrgId != "" {
 		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", dbOrgId))
+	}
+	if authToken != "" {
 		opts.AuthToken = authToken
 	}
 	var queriesSeen int64
@@ -253,17 +244,8 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 			doneCh <- 1
 		}
 	}()
-	if opts.Path != nil { // override
+	if opts.Path != nil { // override Path when set (case: orgId is not null)
 		q.Path = opts.Path
-	}
-	if useApiV2 {
-		body, err := url.QueryUnescape(string(q.Body))
-		if err != nil {
-			log.Fatalf("queryUnescape error: %v", err)
-		}
-		if strings.HasPrefix(body, "query=") {
-			q.Body = []byte(body[len("query="):])
-		}
 	}
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*bulk_query.Stat)
