@@ -151,7 +151,7 @@ func (l *InfluxBulkLoad) Validate() {
 			log.Fatalf("credentials-file must be set for InfluxDB v2")
 		}
 		useApiV2 = true
-		log.Print("Running against InfluxDB v2")
+		log.Print("Using InfluxDB API version 2")
 	}
 }
 
