@@ -35,7 +35,7 @@ func (d *InfluxDashboardAvailability) Dispatch(i int) bulkQuerygen.Query {
 	} else { // TODO fill(linear) how??
 		query = fmt.Sprintf(`data = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "status" and r._field == "service_up" and r_cluster_id == "%s") `+
+			`|> filter(fn:(r) => r._measurement == "status" and r._field == "service_up" and r._cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"])\n`+
 			`sum = data |> sum()\n`+
 			`count = data |> count()\n`+

@@ -35,7 +35,7 @@ func (d *InfluxDashboardCpuUtilization) Dispatch(i int) bulkQuerygen.Query {
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and r_cluster_id == "%s") `+
+			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and r._cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
 			`|> group(columns:["hostname"]) `+
 			`|> aggregateWindow(every: 1m, fn: mean, createEmpty: false) `+

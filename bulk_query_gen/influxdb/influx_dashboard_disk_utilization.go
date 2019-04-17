@@ -35,7 +35,7 @@ func (d *InfluxDashboardDiskUtilization) Dispatch(i int) bulkQuerygen.Query {
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "used_percent" and r_cluster_id == "%s" and r.path == "/dev/sda1" and hostname =~ /data/) `+
+			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "used_percent" and r._cluster_id == "%s" and r.path == "/dev/sda1" and hostname =~ /data/) `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
 			`|> group(columns: ["hostname"]) `+
 			`|> window(every: 1m) `+ // TODO replace window-max-window with aggregateWindow(every: 1m, fn: max) when it works

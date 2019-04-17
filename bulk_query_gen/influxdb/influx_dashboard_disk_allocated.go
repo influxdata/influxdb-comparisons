@@ -35,7 +35,7 @@ func (d *InfluxDashboardDiskAllocated) Dispatch(i int) bulkQuerygen.Query {
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "total" and r_cluster_id == "%s" and hostname =~ /data/) `+
+			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "total" and r._cluster_id == "%s" and hostname =~ /data/) `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
 			`|> window(every: 120s) `+ // TODO replace with aggregateWindow when it is fixed
 			`|> max() `+
