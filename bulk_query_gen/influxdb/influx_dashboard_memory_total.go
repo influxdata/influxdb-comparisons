@@ -35,7 +35,7 @@ func (d *InfluxDashboardMemoryTotal) Dispatch(i int) bulkQuerygen.Query {
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "mem" and r._field == "total" and r._cluster_id == "%s" and hostname =~ /data/) `+
+			`|> filter(fn:(r) => r._measurement == "mem" and r._field == "total" and r._cluster_id == "%s" and r.hostname =~ /data/) `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
 			`|> group(columns: ["hostname"]) `+
 			`|> window(every: 1m) `+ // TODO replace window-max-window with aggregateWindow(every: 1m, fn: max) when it works
