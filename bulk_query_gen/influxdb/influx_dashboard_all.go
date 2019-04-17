@@ -42,6 +42,26 @@ func NewFluxDashboardAll(dbConfig bulkQuerygen.DatabaseConfig, interval bulkQuer
 	underlying := newInfluxDashboard(Flux, dbConfig, interval, duration, scaleVar).(*InfluxDashboard)
 	return &InfluxDashboardAll{
 		InfluxDashboard: *underlying,
+		Gens: []bulkQuerygen.QueryGenerator{
+			NewFluxDashboardAvailability(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardCpuNum(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardCpuUtilization(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardDiskAllocated(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardDiskUsage(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardDiskUtilization(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardHttpRequestDuration(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardHttpRequests(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardKapaCpu(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardKapaLoad(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardKapaRam(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardMemoryTotal(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardMemoryUtilization(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardNginxRequests(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardQueueBytes(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardRedisMemoryUtilization(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardSystemLoad(dbConfig, interval, duration, scaleVar),
+			NewFluxDashboardThroughput(dbConfig, interval, duration, scaleVar),
+		},
 	}
 }
 

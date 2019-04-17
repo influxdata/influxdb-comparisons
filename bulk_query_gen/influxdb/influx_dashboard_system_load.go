@@ -30,7 +30,41 @@ func (d *InfluxDashboardSystemLoad) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT max("load5"), max("n_cpus") FROM "telegraf"."default"."system" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: GROUP BY time(1m), "host"
-	query = fmt.Sprintf("SELECT max(\"load5\"), max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and %s group by time(1m), hostname", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT max(\"load5\"), max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and %s group by time(1m), hostname", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else {
+		query = fmt.Sprintf(`max_load5 = from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "system" and r._field == "load5" and r.cluster_id == "%s") `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
+			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
+			`|> max() `+
+			`|> drop(columns: ["_time"]) `+
+			`|> duplicate(column: "_stop", as: "_time") `+
+			`|> window(every: inf) `+
+			`|> group(columns: ["hostname"])  `+
+			`|> keep(columns:["_time", "_value", "hostname"])\n`+
+			`max_ncpus = from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "system" and r._field == "n_cpus" and r.cluster_id == "%s") `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
+			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
+			`|> max() `+
+			`|> drop(columns: ["_time"]) `+
+			`|> duplicate(column: "_stop", as: "_time") `+
+			`|> window(every: inf) `+
+			`|> group(columns: ["hostname"])  `+
+			`|> keep(columns:["_time", "_value", "hostname"])\n`+
+			`join(tables: {max_load_5:max_load5,max_ncpus:max_ncpus},on: ["_time", "hostname"]) `+
+			`|> keep(columns: ["_time", "_value_max_load5", "_value_max_ncpus", "hostname"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId(),
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) System Load (Load5), rand cluster, %s by 1m", d.language.String(), interval.Duration())
 

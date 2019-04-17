@@ -30,7 +30,21 @@ func (d *InfluxDashboardRedisMemoryUtilization) Dispatch(i int) bulkQuerygen.Que
 
 	var query string
 	//SELECT mean("usage_percent") FROM "telegraf"."default"."docker_container_mem" WHERE "cluster_id" = :Cluster_Id: AND ("container_name" =~ /influxd.*/ OR "container_name" =~ /kap.*/) AND time > :dashboardTime: GROUP BY time(1m), "host", "container_name" fill(previous)
-	query = fmt.Sprintf("SELECT mean(\"used_memory\") FROM redis WHERE cluster_id = '%s' and %s group by time(1m),hostname, server fill(previous)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT mean(\"used_memory\") FROM redis WHERE cluster_id = '%s' and %s group by time(1m),hostname, server fill(previous)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else { // TODO fill(previous)???
+		query = fmt.Sprintf(`from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "redis" and r._field == "used_memory" and r.cluster_id == "%s") `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname", "server"]) `+
+			`|> group(columns: ["hostname", "server"]) `+
+			`|> aggregateWindow(every: 1m, fn: mean, createEmpty: false) `+
+			`|> keep(columns: ["_time", "_value", "hostname", "server"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Memory Utilization, rand cluster, %s by 1m", d.language.String(), interval.Duration())
 
