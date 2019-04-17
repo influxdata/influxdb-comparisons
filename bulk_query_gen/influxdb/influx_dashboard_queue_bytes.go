@@ -38,7 +38,8 @@ func (d *InfluxDashboardQueueBytes) Dispatch(i int) bulkQuerygen.Query {
 			`|> filter(fn:(r) => r._measurement == "postgresl" and r._field == "temp_files" and r.cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
 			`|> group(columns: ["hostname"]) `+
-			`|> aggregateWindow(every: 1m, fn: mean, createEmpty: true) `+ // createEmpty: true == fill(0)???
+			`|> aggregateWindow(every: 1m, fn: mean, createEmpty: true) `+
+			`|> fill(value: 0.0) `+
 			`|> keep(columns: ["_time", "_value", "hostname"]) `+
 			`|> yield()`,
 			d.DatabaseName,
