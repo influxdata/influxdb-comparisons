@@ -46,9 +46,9 @@ func (d *InfluxDashboardHttpRequestDuration) Dispatch(i int) bulkQuerygen.Query 
 			`|> duplicate(column: "_stop", as: "_time") `+
 			`|> window(every: inf) `+
 			`|> derivative(nonNegative: true)\n`+
-			`ndp_uptime = from(bucket:"%s") `+
+			`ndp_conn = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
-			`|> filter(fn:(r) => r._measurement == "redis" and r._field == "uptime_in_seconds" and r._cluster_id == "%s") `+
+			`|> filter(fn:(r) => r._measurement == "redis" and r._field == "total_connections_received" and r._cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
 			`|> map(fn: (r) => ({_time:r._time,_start:r._start,_stop:r._stop,_time:r._time,_value:float(v:r._value),hostname:r.hostname})) `+
 			`|> group(columns: ["hostname"]) `+
