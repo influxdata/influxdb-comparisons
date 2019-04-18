@@ -36,17 +36,16 @@ func (d *InfluxDashboardAvailability) Dispatch(i int) bulkQuerygen.Query {
 		query = fmt.Sprintf(`data = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "status" and r._field == "service_up" and r._cluster_id == "%s") `+
-			`|> keep(columns:["_start", "_stop", "_time", "_value"])\n`+
-			`sum = data |> sum()\n`+
-			`count = data |> count()\n`+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"])`+"\n"+
+			`sum = data |> sum()`+"\n"+
+			`count = data |> count()`+"\n"+
 			`join(tables:{sum:sum,count:count},on:["_time"]) `+
-			`|> map(fn: (r) => ({_time:%s,_value:(float(v:r._value_sum) / float(v:r._value_count) * 100.0))) `+
+			`|> map(fn: (r) => ({_time:r._start_sum,_value:(float(v:r._value_sum) / float(v:r._value_count) * 100.0))) `+
 			`|> keep(columns:["_time", "_value"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
-			d.GetRandomClusterId(),
-			interval.StartString())
+			d.GetRandomClusterId())
 	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Availability (Percent), rand cluster in %s", d.language.String(), interval.Duration())

@@ -43,7 +43,7 @@ func (d *InfluxDashboardSystemLoad) Dispatch(i int) bulkQuerygen.Query {
 			`|> duplicate(column: "_stop", as: "_time") `+
 			`|> window(every: inf) `+
 			`|> group(columns: ["hostname"])  `+
-			`|> keep(columns:["_time", "_value", "hostname"])\n`+
+			`|> keep(columns:["_time", "_value", "hostname"])`+"\n"+
 			`max_ncpus = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "n_cpus" and r.cluster_id == "%s") `+
@@ -54,7 +54,7 @@ func (d *InfluxDashboardSystemLoad) Dispatch(i int) bulkQuerygen.Query {
 			`|> duplicate(column: "_stop", as: "_time") `+
 			`|> window(every: inf) `+
 			`|> group(columns: ["hostname"])  `+
-			`|> keep(columns:["_time", "_value", "hostname"])\n`+
+			`|> keep(columns:["_time", "_value", "hostname"])`+"\n"+
 			`join(tables: {max_load_5:max_load5,max_ncpus:max_ncpus},on: ["_time", "hostname"]) `+
 			`|> keep(columns: ["_time", "_value_max_load5", "_value_max_ncpus", "hostname"]) `+
 			`|> yield()`,

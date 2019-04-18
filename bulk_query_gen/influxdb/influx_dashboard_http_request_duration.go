@@ -45,8 +45,8 @@ func (d *InfluxDashboardHttpRequestDuration) Dispatch(i int) bulkQuerygen.Query 
 			`|> quantile(q: 0.99, method: "estimate_tdigest") `+
 			`|> duplicate(column: "_stop", as: "_time") `+
 			`|> window(every: inf) `+
-			`|> derivative(nonNegative: true)\n`+
-			`ndp_conn = from(bucket:"%s") `+
+			`|> derivative(nonNegative: true)`+"\n"+
+			`ndm_conn = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "redis" and r._field == "total_connections_received" and r._cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
@@ -57,7 +57,7 @@ func (d *InfluxDashboardHttpRequestDuration) Dispatch(i int) bulkQuerygen.Query 
 			`|> drop(columns: ["_time"]) `+
 			`|> duplicate(column: "_stop", as: "_time") `+
 			`|> window(every: inf) `+
-			`|> derivative(nonNegative: true)\n`+
+			`|> derivative(nonNegative: true)`+"\n"+
 			`join(tables:{ndp_uptime:ndp_uptime,ndm_conn:ndm_conn},on: ["_time","hostname"]) `+
 			`|> map(fn: (r) => ({_time:r._time,_value:(r._value_ndp_uptime / r._value_ndm_conn)})) `+
 			`|> keep(columns:["_time", "_value"]) `+
