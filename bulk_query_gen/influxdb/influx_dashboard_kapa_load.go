@@ -33,21 +33,21 @@ func (d *InfluxDashboardKapaLoad) Dispatch(i int) bulkQuerygen.Query {
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT \"load5\", \"load15\", \"load1\" FROM system WHERE hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
 	} else {
-		query = fmt.Sprintf(`from(bucket:"%s") `+ // TODO join 3 tables when it is supported?
+		query = fmt.Sprintf(`load5 = from(bucket:"%s") `+ // TODO join 3 tables when it is supported?
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "load5" and r.hostname == "kapacitor_1") `+
-			`|> keep(columns:["_time", "_value"]) `+
-			`|> yield(name: "load5")\n` +
-			`from(bucket:"%s") `+
+			`|> keep(columns:["_time", "_value"])\n`+
+			`load15 = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "load15" and r.hostname == "kapacitor_1") `+
-			`|> keep(columns:["_time", "_value"]) `+
-			`|> yield(name: "load15")\n` +
-			`from(bucket:"%s") `+
+			`|> keep(columns:["_time", "_value"])\n`+
+			`load1 = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "load1" and r.hostname == "kapacitor_1") `+
-			`|> keep(columns:["_time", "_value"]) `+
-			`|> yield(name: "load1")\n`,
+			`|> keep(columns:["_time", "_value"])\n`+
+			`load5 |> yield(name: "load5")\n` +
+			`load15 |> yield(name: "load15")\n` +
+			`load1 |> yield(name: "load1")`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
 			d.DatabaseName,
