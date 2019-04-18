@@ -89,11 +89,11 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
-			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
 			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
 			`|> max() `+
 			`|> window(every: inf) `+
-			`|> keep(columns:["_time", "_value", "hostname"]) `+
+			`|> keep(columns:["_time", "_value"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
