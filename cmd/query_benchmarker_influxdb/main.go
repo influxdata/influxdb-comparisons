@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/rpc"
 	"os"
 	"runtime/pprof"
@@ -198,6 +199,12 @@ func init() {
 }
 
 func main() {
+	if increaseInterval > 0 {
+		rst := time.Duration(rand.Int63n(int64(increaseInterval.Seconds()))) * time.Second
+		log.Printf("Random sleep for %v", rst)
+		time.Sleep(rst)
+	}
+
 	// Make pools to minimize heap usage:
 	queryPool = sync.Pool{
 		New: func() interface{} {
