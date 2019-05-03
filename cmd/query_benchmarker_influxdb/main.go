@@ -199,7 +199,8 @@ func init() {
 }
 
 func main() {
-	if increaseInterval > 0 {
+	if gradualWorkersIncrease {
+		rand.Seed(int64(time.Now().Nanosecond()) << uint(clientIndex))
 		rst := time.Duration(rand.Int63n(int64(increaseInterval.Seconds()))) * time.Second
 		log.Printf("Random sleep for %v", rst)
 		time.Sleep(rst)
