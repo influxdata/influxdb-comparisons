@@ -820,7 +820,8 @@ func processStats(telemetrySink chan *report.Point) {
 
 		i++
 
-		if now.Sub(lastRefresh).Seconds() >= 1 {
+		dt := now.Sub(lastRefresh).Seconds()
+		if dt >= 1 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
 			// Report telemetry, if applicable:
@@ -836,6 +837,7 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
+			log.Printf("mean updated after %f", dt)
 		}
 
 		// print stats to stderr (if printInterval is greater than zero):
