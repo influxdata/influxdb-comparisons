@@ -837,7 +837,6 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddIntField("load_workers", workers)
 				telemetrySink <- p
 			}
-			log.Printf("mean updated after %f", dt)
 		}
 
 		// print stats to stderr (if printInterval is greater than zero):
