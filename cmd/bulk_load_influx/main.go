@@ -566,12 +566,12 @@ func createDb2(daemonUrl, dbname string, replicationFactor int) (string, error) 
 		ID string `json:"id,omitempty"`
 		Name string `json:"name"`
 		Organization string `json:"organization"`
-		OrganizationID string `json:"organizationID"`
+		OrgID string `json:"orgID"`
 	}
 	bucket := bucketType{
 		Name: dbName,
 		Organization: dbOrganization,
-		OrganizationID: dbOrgId,
+		OrgID: dbOrgId,
 	}
 	bucketBytes, err := json.Marshal(bucket)
 	if err != nil {
@@ -681,7 +681,7 @@ func listDatabases2(daemonUrl string) (map[string]string, error) {
 		Buckets []struct {
 			Id string
 			Organization string
-			OrganizationID string
+			OrgID string
 			Name string
 		}
 	}
