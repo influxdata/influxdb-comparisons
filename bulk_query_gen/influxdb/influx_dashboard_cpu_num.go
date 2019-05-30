@@ -37,10 +37,7 @@ func (d *InfluxDashboardCpuNum) Dispatch(i int) bulkQuerygen.Query {
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "n_cpus" and r._cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
-			`|> window(every:1m) `+ // TODO replace with aggregateWindow when it is fixed
-			`|> max() `+
-			`|> duplicate(column: "_stop", as: "_time") `+
-			`|> window(every: inf) `+ //
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
 			`|> last() `+
 			`|> keep(columns:["_time", "_value"]) `+
 			`|> yield()`,

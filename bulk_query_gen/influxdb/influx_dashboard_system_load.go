@@ -37,22 +37,14 @@ func (d *InfluxDashboardSystemLoad) Dispatch(i int) bulkQuerygen.Query {
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "load5" and r.cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
-			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
-			`|> max() `+
-			`|> drop(columns: ["_time"]) `+
-			`|> duplicate(column: "_stop", as: "_time") `+
-			`|> window(every: inf) `+
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
 			`|> group(columns: ["hostname"])  `+
 			`|> keep(columns:["_time", "_value", "hostname"])`+"\n"+
 			`max_ncpus = from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "system" and r._field == "n_cpus" and r.cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
-			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
-			`|> max() `+
-			`|> drop(columns: ["_time"]) `+
-			`|> duplicate(column: "_stop", as: "_time") `+
-			`|> window(every: inf) `+
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
 			`|> group(columns: ["hostname"])  `+
 			`|> keep(columns:["_time", "_value", "hostname"])`+"\n"+
 			`join(tables: {max_load_5:max_load5,max_ncpus:max_ncpus},on: ["_time", "hostname"]) `+

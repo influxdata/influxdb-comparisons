@@ -38,9 +38,7 @@ func (d *InfluxDashboardThroughput) Dispatch(i int) bulkQuerygen.Query {
 			`|> filter(fn:(r) => r._measurement == "redis" and r._field == "keyspace_hits" and r.cluster_id == "%s") `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value", "hostname"]) `+
 			`|> group(columns: ["hostname"]) `+
-			`|> window(every: 1m) `+ // TODO replace with aggregateWindow when it is fixed
-			`|> max() `+
-			`|> window(every: inf) `+
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
 			`|> derivative(unit: 10s, nonNegative: true) `+
 			`|> keep(columns: ["_time", "_value", "hostname"]) `+
 			`|> yield()`,

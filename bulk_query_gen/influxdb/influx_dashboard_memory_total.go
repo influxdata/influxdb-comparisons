@@ -38,9 +38,7 @@ func (d *InfluxDashboardMemoryTotal) Dispatch(i int) bulkQuerygen.Query {
 			`|> filter(fn:(r) => r._measurement == "mem" and r._field == "total" and r._cluster_id == "%s" and r.hostname =~ /data/) `+
 			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
 			`|> group(columns: ["hostname"]) `+
-			`|> window(every: 1m) `+ // TODO replace window-max-window with aggregateWindow(every: 1m, fn: max) when it works
-			`|> max() `+
-			`|> window(every: inf) `+
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
 			`|> map(fn: (r) => ({_time:r._time, _value:r._value / 1073741824})) `+
 			`|> group() `+ // or add 'group by hostname' to InfluxQL to return last max for each host
 			`|> last() `+
