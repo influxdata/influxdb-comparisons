@@ -747,7 +747,7 @@ func createDb(daemonUrl, dbname string, replicationFactor int) error {
 	defer resp.Body.Close()
 	// does the body need to be read into the void?
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bad db create")
 	}
 	return nil
@@ -762,6 +762,10 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listDatabases returned status code: %v", resp.StatusCode)
+	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -783,7 +787,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		return nil, err
 	}
 
-	ret := []string{}
+	var ret []string
 	for _, nestedName := range listing.Results[0].Series[0].Values {
 		name := nestedName[0]
 		// the _internal database is skipped:
