@@ -748,7 +748,7 @@ func createDb(daemonUrl, dbname string, replicationFactor int) error {
 	// does the body need to be read into the void?
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad db create")
+		return fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
 	}
 	return nil
 }
