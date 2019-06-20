@@ -824,10 +824,23 @@ func processStats(telemetrySink chan *report.Point) {
 
 		i++
 
+		// Report telemetry, if applicable:
+		if telemetrySink != nil {
+			p := report.GetPointFromGlobalPool()
+			p.Init("benchmarks_telemetry", now.UnixNano())
+			for _, tagpair := range reportTags {
+				p.AddTag(tagpair[0], tagpair[1])
+			}
+			p.AddTag("client_type", "load")
+			p.AddFloat64Field("values_written", stat.Value)
+			telemetrySink <- p
+		}
+
 		dt := now.Sub(lastRefresh).Seconds()
 		if dt >= 1 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
+
 			// Report telemetry, if applicable:
 			if telemetrySink != nil {
 				p := report.GetPointFromGlobalPool()
