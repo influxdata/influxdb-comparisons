@@ -6,6 +6,8 @@
 // Cassandra query format
 // Mongo custom format
 // OpenTSDB bulk HTTP format
+// TimescaleDB SQL INSERT and binary COPY FROM
+// Graphite plaintext format
 //
 // Supported use cases:
 // Devops: scale_var is the number of hosts to simulate, with log messages
@@ -22,12 +24,13 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"time"
 )
 
 // Output data format choices:
-var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom"}
+var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom", "graphite-line", "graphite-pickle"}
 
 // Program option vars:
 var (
@@ -52,6 +55,8 @@ var (
 
 	seed  int64
 	debug int
+
+	cpuProfile string
 )
 
 // Parse args:
@@ -71,6 +76,8 @@ func init() {
 
 	flag.UintVar(&interleavedGenerationGroupID, "interleaved-generation-group-id", 0, "Group (0-indexed) to perform round-robin serialization within. Use this to scale up data generation to multiple processes.")
 	flag.UintVar(&interleavedGenerationGroups, "interleaved-generation-groups", 1, "The number of round-robin serialization groups. Use this to scale up data generation to multiple processes.")
+
+	flag.StringVar(&cpuProfile, "cpu-profile", "", "Write CPU profile to `file`")
 
 	flag.Parse()
 
@@ -116,6 +123,17 @@ func init() {
 }
 
 func main() {
+	if cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	common.Seed(seed)
 
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
@@ -173,6 +191,8 @@ func main() {
 		serializer = common.NewSerializerTimescaleSql()
 	case "timescaledb-copyFrom":
 		serializer = common.NewSerializerTimescaleBin()
+	case "graphite-line":
+		serializer = common.NewSerializerGraphiteLine()
 	default:
 		panic("unreachable")
 	}
