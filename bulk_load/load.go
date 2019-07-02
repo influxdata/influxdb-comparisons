@@ -53,11 +53,14 @@ type LoadRunner struct {
 	telemetryStderr        bool
 	telemetryBatchSize     uint64
 	reportDatabase         string
+	reportBucketId         string
 	reportHost             string
 	reportUser             string
 	reportPassword         string
 	reportTagsCSV          string
 	reportTelemetry        bool
+	reportOrgId            string
+	reportAuthToken        string
 	notificationListenPort int
 	printInterval          uint64
 	trendSamples           int
@@ -123,6 +126,9 @@ func (r *LoadRunner) Init(defaultBatchSize int) {
 	flag.StringVar(&r.reportUser, "report-user", "", "User for host to send result metrics")
 	flag.StringVar(&r.reportPassword, "report-password", "", "User password for Host to send result metrics")
 	flag.StringVar(&r.reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+	flag.StringVar(&r.reportOrgId, "report-org-id", "", "Organization Id of the bucket where to store result metrics (InfluxDb 2)")
+	flag.StringVar(&r.reportAuthToken, "report-auth-token", "", "Authentication token for InfluxDb 2 where to store metrics")
+	flag.StringVar(&r.reportBucketId, "report-bucket-id", "", "BucketId where to store result metrics (InfluxDb 2). Bucket must exist!")
 	flag.BoolVar(&r.reportTelemetry, "report-telemetry", false, "Turn on/off reporting telemetry")
 	flag.IntVar(&r.notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.StringVar(&r.file, "file", "", "Input file")
@@ -178,6 +184,14 @@ func (r *LoadRunner) Validate() {
 			}
 		}
 		fmt.Printf("results report tags: %v\n", r.reportTags)
+	}
+	if (r.reportBucketId != "" && (r.reportOrgId == "" || r.reportAuthToken == "")) ||
+		(r.reportOrgId != "" && (r.reportBucketId == "" || r.reportAuthToken == "")) ||
+		(r.reportAuthToken != "" && (r.reportBucketId == "" || r.reportOrgId == "")) {
+		log.Fatalf("Missing mandatory InfluxDb 2 reporting parameter")
+	}
+	if r.reportBucketId != "" {
+		r.reportDatabase = r.reportBucketId
 	}
 
 }
@@ -335,7 +349,6 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 		if r.TimeLimit.Seconds() > 0 {
 			r.reportTags = append(r.reportTags, [2]string{"time_limit", r.TimeLimit.String()})
 		}
-
 		reportParams := &report.LoadReportParams{
 			ReportParams: report.ReportParams{
 				ReportDatabaseName: r.reportDatabase,
@@ -348,6 +361,10 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 			},
 			IsGzip:    false,
 			BatchSize: r.BatchSize,
+		}
+		if r.reportOrgId != "" {
+			reportParams.ReportOrgId = r.reportOrgId
+			reportParams.ReportAuthToken = r.reportAuthToken
 		}
 		customTags, extraVals := load.UpdateReport(reportParams)
 		if customTags != nil {
