@@ -9,7 +9,7 @@ import (
 
 // A QueryPlan is a strategy used to fulfill an HLQuery.
 type QueryPlan interface {
-	Execute(*gocql.Session) ([]CQLResult, error)
+	Execute(*gocql.Session, int) ([]CQLResult, error)
 	DebugQueries(int)
 }
 
@@ -38,7 +38,7 @@ func NewQueryPlanWithServerAggregation(aggrLabel string, bucketedCQLQueries map[
 // Execute runs all CQLQueries in the QueryPlan and collects the results.
 //
 // TODO(rw): support parallel execution.
-func (qp *QueryPlanWithServerAggregation) Execute(session *gocql.Session) ([]CQLResult, error) {
+func (qp *QueryPlanWithServerAggregation) Execute(session *gocql.Session, debug int) ([]CQLResult, error) {
 	// sort the time interval buckets we'll use:
 
 	agg, err := GetAggregator(qp.AggregatorLabel)
@@ -120,7 +120,7 @@ func NewQueryPlanWithoutServerAggregation(aggrLabel string, groupByDuration time
 // Execute runs all CQLQueries in the QueryPlan and collects the results.
 //
 // TODO(rw): support parallel execution.
-func (qp *QueryPlanWithoutServerAggregation) Execute(session *gocql.Session) ([]CQLResult, error) {
+func (qp *QueryPlanWithoutServerAggregation) Execute(session *gocql.Session, debug int) ([]CQLResult, error) {
 	// for each query, execute it, then put each result row into the
 	// client-side aggregator that matches its time bucket:
 	for _, q := range qp.CQLQueries {

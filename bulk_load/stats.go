@@ -1,4 +1,4 @@
-package main
+package bulk_load
 
 import (
 	"fmt"
