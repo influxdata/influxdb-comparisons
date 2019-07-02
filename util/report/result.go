@@ -17,6 +17,8 @@ type ReportParams struct {
 	ReportTags         [][2]string
 	Hostname           string
 	DestinationUrl     string
+	ReportOrgId        string
+	ReportAuthToken    string
 	Workers            int
 	ItemLimit          int
 }
@@ -79,8 +81,12 @@ func ReportLoadResult(params *LoadReportParams, totalItems int64, valueRate floa
 
 // initReport prepares a Point and a Collector instance for sending a result report
 func initReport(params *ReportParams, measurement string) (*Collector, *Point, error) {
-	c := NewCollector(params.ReportHost, params.ReportDatabaseName, params.ReportUser, params.ReportPassword)
-
+	var c *Collector
+	if params.ReportOrgId == "" {
+		c = NewCollector(params.ReportHost, params.ReportDatabaseName, params.ReportUser, params.ReportPassword)
+	} else {
+		c = NewCollectorV2(params.ReportHost, params.ReportOrgId, params.ReportDatabaseName, params.ReportAuthToken)
+	}
 	err := c.CreateDatabase()
 	if err != nil {
 		return nil, nil, err
