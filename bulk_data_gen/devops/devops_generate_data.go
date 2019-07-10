@@ -75,15 +75,14 @@ func (d *DevopsSimulatorConfig) ToSimulator() *DevopsSimulator {
 
 // Next advances a Point to the next state in the generator.
 func (d *DevopsSimulator) Next(p *Point) {
-	// switch to the next metric if needed
-	if d.hostIndex == len(d.hosts) {
-		d.hostIndex = 0
-		d.simulatedMeasurementIndex++
-	}
-
+	// switch to the next host if needed
 	if d.simulatedMeasurementIndex == NHostSims {
 		d.simulatedMeasurementIndex = 0
+		d.hostIndex++
+	}
 
+	if d.hostIndex == len(d.hosts) {
+		d.hostIndex = 0
 		for i := 0; i < len(d.hosts); i++ {
 			d.hosts[i].TickAll(EpochDuration)
 		}
@@ -107,7 +106,7 @@ func (d *DevopsSimulator) Next(p *Point) {
 	host.SimulatedMeasurements[d.simulatedMeasurementIndex].ToPoint(p)
 
 	d.madePoints++
-	d.hostIndex++
+	d.simulatedMeasurementIndex++
 	d.madeValues += int64(len(p.FieldValues))
 
 	return
