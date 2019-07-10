@@ -486,7 +486,7 @@ func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 
 	var batchItemCount uint64
 
-	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 4*1024*1024))
+	scanner := bufio.NewScanner(bufio.NewReaderSize(os.Stdin, 16*1024*1024))
 outer:
 	for scanner.Scan() {
 		if itemsRead == itemLimit {
