@@ -511,12 +511,11 @@ outer:
 			}
 			continue
 		} else {
-			lineParts := strings.Split(line," ")
+			lineParts := strings.Split(line," ") // "measurement,tags fields timestamp"
 			if len(lineParts) != 3 {
 				log.Fatalf("invalid protocol line: '%s'", line)
 			}
-			fieldsParts := strings.Split(lineParts[1], ",")
-			fieldCnt := len(fieldsParts)
+			fieldCnt := strings.Count(lineParts[1], "=")
 			if fieldCnt == 0 {
 				log.Fatalf("invalid fields parts: '%s'", lineParts[1])
 			}
