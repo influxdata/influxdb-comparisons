@@ -36,8 +36,8 @@ import (
 	"strconv"
 )
 
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 11.2222
+// Approx number of values per measurement, used for initial batch size guess
+const ApproxValuesPerMeasurement = 9.63636 // dashboard use-case, original value (for devops) was: 11.2222
 
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
@@ -118,6 +118,7 @@ type statsMap map[string]*StatGroup
 type batch struct {
 	Buffer *bytes.Buffer
 	Items  int
+	Values int
 }
 
 // Parse args:
@@ -194,7 +195,7 @@ func init() {
 	if ingestRateLimit > 0 {
 		ingestionRateGran = (float64(ingestRateLimit) / float64(workers)) / (float64(1000) / float64(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
+		recommendedBatchSize := int((ingestionRateGran / ApproxValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
@@ -203,7 +204,7 @@ func init() {
 		}
 		maxBatchSize = batchSize
 		if recommendedBatchSize != batchSize {
-			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize) * ApproxValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
 	} else {
@@ -473,7 +474,7 @@ func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 	scanFinished = false
 	buf := bufPool.Get().(*bytes.Buffer)
 
-	var n int
+	var n, values  int
 	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
@@ -509,6 +510,18 @@ outer:
 				log.Fatal(err)
 			}
 			continue
+		} else {
+			lineParts := strings.Split(line," ")
+			if len(lineParts) != 3 {
+				log.Fatalf("invalid protocol line: '%s'", line)
+			}
+			fieldsParts := strings.Split(lineParts[1], ",")
+			fieldCnt := len(fieldsParts)
+			if fieldCnt == 0 {
+				log.Fatalf("invalid fields parts: '%s'", lineParts[1])
+			}
+			values += fieldCnt
+			totalValues += int64(fieldCnt)
 		}
 		itemsRead++
 		batchItemCount++
@@ -522,9 +535,10 @@ outer:
 			batchItemCount = 0
 
 			bytesRead += int64(buf.Len())
-			batchChan <- batch{buf, n}
+			batchChan <- batch{buf, n, values}
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
+			values = 0
 
 			if timeLimit > 0 && time.Now().After(deadline) {
 				endedPrematurely = true
@@ -559,7 +573,7 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- batch{buf, n}
+		batchChan <- batch{buf, n, values}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -568,9 +582,9 @@ outer:
 	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !endedPrematurely {
 			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
-		} else {
+		} /*else {
 			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
-		}
+		}*/
 	}
 	scanFinished = true
 	log.Println("Scan finished")
@@ -631,7 +645,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 						telemetrySink <- p
 					}
 					time.Sleep(sleepTime)
-					sleepTime += backoff        // sleep longer if backpressure comes again
+					sleepTime += backoff        // sleep longer if back pressure comes again
 					if sleepTime > 10*backoff { // but not longer than 10x default backoff time
 						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, backoff)
 						sleepTime = 10 * backoff
@@ -661,7 +675,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
+		valuesWritten := float64(batch.Values) //float64(batch.Items) * ValuesPerMeasurement
 
 		// Apply ingest rate control if set
 		if ingestRateLimit > 0 {
