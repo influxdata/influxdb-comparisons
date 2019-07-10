@@ -146,7 +146,7 @@ func main() {
 		log.Printf("Using config file %s\n", configFile)
 	}
 
-	out := bufio.NewWriterSize(os.Stdout, 4<<20)
+	out := bufio.NewWriterSize(os.Stdout, 16<<20)
 	defer out.Flush()
 
 	var sim common.Simulator
