@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/valyala/fasthttp"
@@ -56,7 +55,9 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
-	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte("admin:changeit"))))
+	if opts.Authorization != "" {
+		req.Header.Add("Authorization", opts.Authorization)
+	}
 	req.SetBody(q.Body)
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()

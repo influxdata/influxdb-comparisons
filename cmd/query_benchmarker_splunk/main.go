@@ -8,6 +8,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -31,6 +32,8 @@ const Dashboard = "dashboard"
 // Program option vars:
 var (
 	restUrl                string
+	restUsername           string
+	restPassword           string
 	workers                int
 	debug                  int
 	prettyPrintResponses   bool
@@ -83,6 +86,7 @@ var (
 	batchSize           int
 	movingAverageStat   *TimedStatGroup
 	isBurnIn            bool
+	restAuthorization   string
 )
 
 type statsMap map[string]*StatGroup
@@ -92,6 +96,8 @@ const allQueriesLabel = "all queries"
 // Parse args:
 func init() {
 	flag.StringVar(&restUrl, "url", "http://localhost:8089", "Splunk REST URL.")
+	flag.StringVar(&restUsername, "username", "benchmarker", "Username for Splunk REST authentication.")
+	flag.StringVar(&restPassword, "password", "changeit", "Password for Splunk REST authentication.")
 	flag.IntVar(&workers, "workers", 1, "Number of concurrent requests to make.")
 	flag.IntVar(&debug, "debug", 0, "Whether to print debug messages.")
 	flag.Int64Var(&limit, "limit", -1, "Limit the number of queries to send.")
@@ -186,6 +192,8 @@ func init() {
 	if trendSamples <= 0 {
 		trendSamples = int(increaseInterval.Seconds())
 	}
+
+	restAuthorization = fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(restUsername + ":" + restPassword)))
 }
 
 func main() {
@@ -539,6 +547,7 @@ loop:
 // target server, while tracking latency.
 func processQueries(w HTTPClient) error {
 	opts := &HTTPClientDoOptions{
+		Authorization:        restAuthorization,
 		Debug:                debug,
 		PrettyPrintResponses: prettyPrintResponses,
 	}
