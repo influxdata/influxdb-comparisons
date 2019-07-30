@@ -25,6 +25,7 @@ import (
 // Program option vars:
 var (
 	inputUrl               string
+	splunkUrl              string
 	authToken              string
 	workers                int
 	batchSize              int
@@ -61,7 +62,8 @@ type batch struct {
 
 // Parse args:
 func init() {
-	flag.StringVar(&inputUrl, "url", "http://localhost:8100", "Splunk input URL.")
+	flag.StringVar(&inputUrl, "input-url", "http://localhost:8100", "Data input URL.")
+	flag.StringVar(&splunkUrl, "url", "http://localhost:8089", "Splunk URL.")
 	flag.StringVar(&authToken, "auth-token", "", "Data input authorization token.")
 	flag.IntVar(&batchSize, "batch-size", 5000, "Batch size.")
 	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
