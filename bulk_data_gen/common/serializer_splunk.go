@@ -31,12 +31,15 @@ func (s *SerializerSplunkJson) SerializePoint(w io.Writer, p *Point) (err error)
 			break
 		}
 	}
+	timestampPart := fmt.Sprintf("\"time\":%d,", timestamp)
+	sourcePart := fmt.Sprintf("\"source\":\"%s\",", p.MeasurementName)
+	hostPart := fmt.Sprintf("\"host\":\"%s\",", string(host))
 	for i := 0; i < len(p.FieldKeys); i++ {
 		buf = append(buf, "{"...)
-		buf = append(buf, []byte(fmt.Sprintf("\"time\":%d,", timestamp))...)
+		buf = append(buf, []byte(timestampPart)...)
 		buf = append(buf, []byte("\"event\":\"metric\",")...)
-		buf = append(buf, []byte(fmt.Sprintf("\"source\":\"%s\",", p.MeasurementName))...)
-		buf = append(buf, []byte(fmt.Sprintf("\"host\":\"%s\",", string(host)))...)
+		buf = append(buf, []byte(sourcePart)...)
+		buf = append(buf, []byte(hostPart)...)
 		buf = append(buf, []byte("\"fields\":{",)...)
 		for i := 0; i < len(p.TagKeys); i++ {
 			buf = append(buf, "\""...)
@@ -49,6 +52,8 @@ func (s *SerializerSplunkJson) SerializePoint(w io.Writer, p *Point) (err error)
 		v := p.FieldValues[i]
 		buf = fastFormatAppend(v, buf, false)
 		buf = append(buf, ",\"metric_name\":\""...)
+		buf = append(buf, p.MeasurementName...)
+		buf = append(buf, "."...)
 		buf = append(buf, p.FieldKeys[i]...)
 		buf = append(buf, "\""...)
 		buf = append(buf, "}}\n"...)

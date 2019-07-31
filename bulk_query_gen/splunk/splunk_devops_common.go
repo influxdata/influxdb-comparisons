@@ -73,8 +73,8 @@ func (d *SplunkDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 	}
 	combinedHostnameClause := strings.Join(hostnameClauses, " OR ")
 
-	// bellow is 7.1+ search, with 7.0 it would have to be "| mstats max(_value) WHERE index=%s AND source=cpu AND metric_name=usage_user AND (%s) earliest=%s latest=%s span=1m"
-	query := fmt.Sprintf("| mstats max(usage_user) WHERE index=%s AND source=cpu AND (%s) earliest=%s latest=%s span=1m",
+	// bellow is 7.1+ search, with 7.0 it would have to be "| mstats max(_value) WHERE index=%s AND metric_name=cpu.usage_user AND (%s) earliest=%s latest=%s span=1m"
+	query := fmt.Sprintf("| mstats max(cpu.usage_user) WHERE index=%s AND (%s) earliest=%s latest=%s span=1m",
 		d.DatabaseName, combinedHostnameClause, splunkTimestamp(interval.Start.UTC()), splunkTimestamp(interval.End.UTC()))
 	humanLabel := fmt.Sprintf("Splunk max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange)
 
@@ -90,8 +90,8 @@ func (d *SplunkDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 func (d *SplunkDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(24 * time.Hour)
 
-	// bellow is 7.1+ search, with 7.0 it would have to be "| mstats avg(_value) WHERE index=%s AND source=cpu AND metric_name=usage_user earliest=%s latest=%s span=1h BY host"
-	query := fmt.Sprintf("| mstats avg(usage_user) WHERE index=%s AND source=cpu earliest=%s latest=%s span=1h BY host",
+	// bellow is 7.1+ search, with 7.0 it would have to be "| mstats avg(_value) WHERE index=%s AND metric_name=cpu.usage_user earliest=%s latest=%s span=1h BY host"
+	query := fmt.Sprintf("| mstats avg(cpu.usage_user) WHERE index=%s earliest=%s latest=%s span=1h BY host",
 		d.DatabaseName, splunkTimestamp(interval.Start.UTC()), splunkTimestamp(interval.End.UTC()))
 	humanLabel := fmt.Sprintf("Splunk mean cpu, all hosts, rand 1day by 1hour")
 
