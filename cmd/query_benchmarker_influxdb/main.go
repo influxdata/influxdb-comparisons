@@ -221,6 +221,14 @@ func init() {
 }
 
 func main() {
+	if gradualWorkersIncrease {
+		rand.Seed(int64(time.Now().Nanosecond()) << uint(clientIndex))
+		// random sleep is done in Ansible task // TODO remove
+/*		rst := time.Duration(rand.Int63n(int64(increaseInterval.Seconds()))) * time.Second
+		log.Printf("Random sleep for %v", rst)
+		time.Sleep(rst)
+*/	}
+
 	// Make pools to minimize heap usage:
 	queryPool = sync.Pool{
 		New: func() interface{} {
@@ -602,6 +610,9 @@ func processQueries(w HTTPClient) error {
 			for _, q := range queries {
 				go processSingleQuery(w, q, opts, errCh, doneCh)
 				queriesSeen++
+				if gradualWorkersIncrease {
+					time.Sleep(time.Duration(rand.Int63n(150)) * time.Millisecond) // random sleep 0-150ms
+				}
 			}
 
 		loop:

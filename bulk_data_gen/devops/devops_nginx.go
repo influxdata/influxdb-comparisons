@@ -41,6 +41,10 @@ func NewNginxMeasurement(start time.Time) *NginxMeasurement {
 
 	serverName := []byte(fmt.Sprintf("nginx_%d", rand.Intn(100000)))
 	port := []byte(fmt.Sprintf("%d", rand.Intn(20000)+1024))
+	if Config != nil { // partial override from external config
+		serverName = Config.GetTagBytesValue(NginxByteString, NginxTags[1], true, serverName)
+		port = Config.GetTagBytesValue(NginxByteString, NginxTags[0], true, port)
+	}
 	return &NginxMeasurement{
 		port:       port,
 		serverName: serverName,

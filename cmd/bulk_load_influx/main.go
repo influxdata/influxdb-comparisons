@@ -36,8 +36,8 @@ import (
 	"strconv"
 )
 
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 9.63636 // dashboard use-case, original value was: 11.2222
+// Approx number of values per measurement, used for initial batch size guess
+const ApproxValuesPerMeasurement = 9.63636 // dashboard use-case, original value (for devops) was: 11.2222
 
 // TODO AP: Maybe useless
 const RateControlGranularity = 1000 // 1000 ms = 1s
@@ -54,6 +54,7 @@ var (
 	batchSize              int
 	ingestRateLimit        int
 	backoff                time.Duration
+	backoffTimeOut         time.Duration
 	timeLimit              time.Duration
 	progressInterval       time.Duration
 	doLoad                 bool
@@ -117,6 +118,7 @@ type statsMap map[string]*StatGroup
 type batch struct {
 	Buffer *bytes.Buffer
 	Items  int
+	Values int
 }
 
 // Parse args:
@@ -130,6 +132,7 @@ func init() {
 	flag.IntVar(&ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.Int64Var(&itemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")
 	flag.DurationVar(&backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
+	flag.DurationVar(&backoffTimeOut, "backoff-timeout", time.Minute*30, "Maximum time to spent when dealing with backoff messages in one shot")
 	flag.DurationVar(&timeLimit, "time-limit", -1, "Maximum duration to run (-1 is the default: no limit).")
 	flag.DurationVar(&progressInterval, "progress-interval", -1, "Duration between printing progress messages.")
 	flag.BoolVar(&useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
@@ -192,7 +195,7 @@ func init() {
 	if ingestRateLimit > 0 {
 		ingestionRateGran = (float64(ingestRateLimit) / float64(workers)) / (float64(1000) / float64(RateControlGranularity))
 		log.Printf("Using worker ingestion rate %v values/%v ms", ingestionRateGran, RateControlGranularity)
-		recommendedBatchSize := int((ingestionRateGran / ValuesPerMeasurement) * 0.20)
+		recommendedBatchSize := int((ingestionRateGran / ApproxValuesPerMeasurement) * 0.20)
 		log.Printf("Calculated batch size hint: %v (allowed min: %v max: %v)", recommendedBatchSize, RateControlMinBatchSize, batchSize)
 		if recommendedBatchSize < RateControlMinBatchSize {
 			recommendedBatchSize = RateControlMinBatchSize
@@ -201,7 +204,7 @@ func init() {
 		}
 		maxBatchSize = batchSize
 		if recommendedBatchSize != batchSize {
-			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize)*ValuesPerMeasurement)
+			log.Printf("Adjusting batchSize from %v to %v (%v values in 1 batch)", batchSize, recommendedBatchSize, float32(recommendedBatchSize) * ApproxValuesPerMeasurement)
 			batchSize = recommendedBatchSize
 		}
 	} else {
@@ -210,6 +213,10 @@ func init() {
 
 	if trendSamples <= 0 {
 		trendSamples = int(movingAverageInterval.Seconds())
+	}
+
+	if timeLimit > 0 && backoffTimeOut > timeLimit {
+		backoffTimeOut = timeLimit
 	}
 }
 
@@ -337,8 +344,9 @@ func main() {
 		go func(w int) {
 			err := processBatches(NewHTTPWriter(cfg, consistency), backingOffChans[w], telemetryChanPoints, fmt.Sprintf("%d", w))
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("Worker %d: error: %s\n", w, err.Error())
 				once.Do(func() {
+					log.Printf("Worker %d:  preparing exit\n", w)
 					endedPrematurely = true
 					prematureEndReason = "Worker error"
 					if !scanFinished {
@@ -347,6 +355,7 @@ func main() {
 								//read out remaining batches
 							}
 						}()
+						log.Printf("Worker %d:  Finishing scan\n", w)
 						syncChanDone <- 1
 					}
 					exitCode = 1
@@ -380,11 +389,12 @@ func main() {
 	close(batchChan)
 	close(syncChanDone)
 
+	log.Println("Waiting for workers")
 	workersGroup.Wait()
 
 	close(statChan)
 	statGroup.Wait()
-
+	log.Println("Closing backoff handlers")
 	for i := range backingOffChans {
 		close(backingOffChans[i])
 		<-backingOffDones[i]
@@ -464,7 +474,7 @@ func scan(itemsPerBatch int, doneCh chan int) (int64, int64, int64) {
 	scanFinished = false
 	buf := bufPool.Get().(*bytes.Buffer)
 
-	var n int
+	var n, values  int
 	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
@@ -500,6 +510,17 @@ outer:
 				log.Fatal(err)
 			}
 			continue
+		} else {
+			lineParts := strings.Split(line," ") // "measurement,tags fields timestamp"
+			if len(lineParts) != 3 {
+				log.Fatalf("invalid protocol line: '%s'", line)
+			}
+			fieldCnt := strings.Count(lineParts[1], "=")
+			if fieldCnt == 0 {
+				log.Fatalf("invalid fields parts: '%s'", lineParts[1])
+			}
+			values += fieldCnt
+			totalValues += int64(fieldCnt)
 		}
 		itemsRead++
 		batchItemCount++
@@ -513,9 +534,10 @@ outer:
 			batchItemCount = 0
 
 			bytesRead += int64(buf.Len())
-			batchChan <- batch{buf, n}
+			batchChan <- batch{buf, n, values}
 			buf = bufPool.Get().(*bytes.Buffer)
 			n = 0
+			values = 0
 
 			if timeLimit > 0 && time.Now().After(deadline) {
 				endedPrematurely = true
@@ -550,7 +572,7 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- batch{buf, n}
+		batchChan <- batch{buf, n, values}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -559,11 +581,12 @@ outer:
 	if itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !endedPrematurely {
 			log.Fatalf("Incorrent number of read points: %d, expected: %d:", itemsRead, totalPoints)
-		} else {
+		} /*else {
 			totalValues = int64(float64(itemsRead) * ValuesPerMeasurement) // needed for statistics summary
-		}
+		}*/
 	}
 	scanFinished = true
+	log.Println("Scan finished")
 	return itemsRead, bytesRead, totalValues
 }
 
@@ -591,6 +614,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 		if doLoad {
 			var err error
 			sleepTime := backoff
+			timeStart := time.Now()
 			for {
 				if useGzip {
 					compressedBatch := bufPool.Get().(*bytes.Buffer)
@@ -620,10 +644,15 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 						telemetrySink <- p
 					}
 					time.Sleep(sleepTime)
-					sleepTime += backoff        // sleep longer if backpressure comes again
+					sleepTime += backoff        // sleep longer if back pressure comes again
 					if sleepTime > 10*backoff { // but not longer than 10x default backoff time
 						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, backoff)
 						sleepTime = 10 * backoff
+					}
+					checkTime := time.Now()
+					if timeStart.Add(backoffTimeOut).Before(checkTime) {
+						log.Printf("[worker %s] Spent too much time in backoff: %ds\n", telemetryWorkerLabel, int64(checkTime.Sub(timeStart).Seconds()))
+						break
 					}
 				} else {
 					backoffSrc <- false
@@ -645,7 +674,7 @@ func processBatches(w *HTTPWriter, backoffSrc chan bool, telemetrySink chan *rep
 
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(batch.Items) * ValuesPerMeasurement
+		valuesWritten := float64(batch.Values) //float64(batch.Items) * ValuesPerMeasurement
 
 		// Apply ingest rate control if set
 		if ingestRateLimit > 0 {
@@ -731,8 +760,8 @@ func createDb(daemonUrl, dbname string, replicationFactor int) error {
 	defer resp.Body.Close()
 	// does the body need to be read into the void?
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad db create")
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
 	}
 	return nil
 }
@@ -746,6 +775,10 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listDatabases returned status code: %v", resp.StatusCode)
+	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -767,7 +800,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		return nil, err
 	}
 
-	ret := []string{}
+	var ret []string
 	for _, nestedName := range listing.Results[0].Series[0].Values {
 		name := nestedName[0]
 		// the _internal database is skipped:
@@ -804,9 +837,23 @@ func processStats(telemetrySink chan *report.Point) {
 
 		i++
 
-		if now.Sub(lastRefresh).Seconds() >= 1 {
+		// Report telemetry, if applicable:
+		if telemetrySink != nil {
+			p := report.GetPointFromGlobalPool()
+			p.Init("benchmarks_telemetry", now.UnixNano())
+			for _, tagpair := range reportTags {
+				p.AddTag(tagpair[0], tagpair[1])
+			}
+			p.AddTag("client_type", "load")
+			p.AddFloat64Field("values_written", stat.Value)
+			telemetrySink <- p
+		}
+
+		dt := now.Sub(lastRefresh).Seconds()
+		if dt >= 1 {
 			movingAverageStat.UpdateAvg(now, workers)
 			lastRefresh = now
+
 			// Report telemetry, if applicable:
 			if telemetrySink != nil {
 				p := report.GetPointFromGlobalPool()

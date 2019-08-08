@@ -1,0 +1,352 @@
+title = "Bonitoo schema"
+
+[[measurements]]
+name = "cpu"
+# sample 40% of the tag set, default is to sample 50%
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" }
+    # specific tags
+]
+fields = [
+    { name = "usage_guest",         count = 8640, source = { type = "rand<float>", seed = 10 } },
+    { name = "usage_guest_nice",    count = 8640, source = { type = "rand<float>", seed = 11 } },
+    { name = "usage_idle",          count = 8640, source = { type = "rand<float>", seed = 12 } },
+    { name = "usage_iowait",        count = 8640, source = { type = "rand<float>", seed = 13 } },
+    { name = "usage_irq",           count = 8640, source = { type = "rand<float>", seed = 14 } },
+    { name = "usage_nice",          count = 8640, source = { type = "rand<float>", seed = 15 } },
+    { name = "usage_softirq",       count = 8640, source = { type = "rand<float>", seed = 16 } },
+    { name = "usage_steal",         count = 8640, source = { type = "rand<float>", seed = 17 } },
+    { name = "usage_system",        count = 8640, source = { type = "rand<float>", seed = 18 } },
+    { name = "usage_user",          count = 8640, source = { type = "rand<float>", seed = 19 } },
+]
+
+[[measurements]]
+name = "disk"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+    { name = "fstype",              source = "ext3" },
+    { name = "path",                source = "/dev/sda1" }
+]
+fields = [
+    { name = "free",            count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "inodes_free",     count = 8640, source = [3,5,5,6,7,9,1,2,9,6] },
+    { name = "inodes_total",    count = 8640, source = [1,8,5,3,9,1,2,2,3,6] },
+    { name = "inodes_used",     count = 8640, source = [7,4,5,9,1,2,3,6,2,1] },
+    { name = "total",           count = 8640, source = [2,3,6,5,3,5,6,7,9,1] },
+    { name = "used",            count = 8640, source = [1,5,6,7,9,2,3,6,3,5] },
+    { name = "used_percent",    count = 8640, source = [1,2,3,6,5,6,7,9,5,3] },
+]
+
+[[measurements]]
+name = "diskio"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+    { name = "serial",              source = "parallel" },
+
+]
+fields = [
+    { name = "io_time",     count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "read_bytes",  count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "read_time",   count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "reads",       count = 8640, source = 494785 },
+    { name = "write_bytes", count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "write_time",  count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "writes",      count = 8640, source = [10, 20, 15, 19] },
+]
+
+[[measurements]]
+name = "kernel"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+
+    # specific tags
+]
+fields = [
+    { name = "boot_time",           count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "context_switches",    count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "disk_pages_in",       count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "disk_pages_out",      count = 8640, source = 494785 },
+    { name = "interrupts",          count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "processes_forked",    count = 8640, source = [100, 1000, 1102, 3049] },
+]
+
+[[measurements]]
+name = "net"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+    { name = "interface",           source = "eth1" }
+]
+
+fields = [
+    { name = "evicted_keys",                count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "expired_keys",                count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "instantaneous_input_kbps",    count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "instantaneous_ops_per_sec",   count = 8640, source = 494785 },
+    { name = "instantaneous_output_kbps",   count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "keyspace_hits",               count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "keyspace_misses",             count = 8640, source = [100, 1000, 1102, 3049] },
+]
+
+# example splitting mem into different sets, for example differentiating by os and datacenter
+#
+# NOTE: fields types are verified to be the same type across all definitions of a single measurement
+[[measurements]]
+name = "mem"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+]
+fields = [
+    { name = "available",           count = 8640, source = 3325 },
+    { name = "available_percent",   count = 8640, source = 1985 },
+    { name = "buffered",            count = 8640, source = 9575621 },
+    { name = "buffered_percent",    count = 8640, source = 489934 },
+    { name = "cached",              count = 8640, source = 100000 },
+    { name = "free",                count = 8640, source = [123, 10, 102, 349] },
+    { name = "total",               count = 8640, source = [12, 22, 95, 229] },
+    { name = "used",                count = 8640, source = [15, 29, 55, 339] },
+    { name = "used_percent",        count = 8640, source = [1,  21, 35, 189] },
+]
+
+
+[[measurements]]
+name = "nginx"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+    { name = "port",                source = "8888" },
+    { name = "server",              source = "server-02" }
+]
+fields = [
+    { name = "accepts",     count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "active",      count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "handled",     count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "reading",     count = 8640, source = 494785 },
+    { name = "requests",    count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "waiting",     count = 8640, source = [100, 1000, 1102, 3049] },
+]
+
+[[measurements]]
+name = "postgresl"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" }
+
+    # specific tags
+]
+fields = [
+    { name = "blk_read_time",   count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "blk_write_time",  count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "blks_hit",        count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "blks_read",       count = 8640, source = 494785 },
+    { name = "conflicts",       count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "deadlocks",       count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "numbackends",     count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "temp_bytes",      count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "temp_files",      count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "tup_deleted",     count = 8640, source = 494785 },
+    { name = "tup_fetched",     count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "tup_inserted",    count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "tup_returned",    count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "tup_updated",     count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "xact_commit",     count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "xact_rollback",   count = 8640, source = 494785 },
+]
+
+[[measurements]]
+name = "redis"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+    # specific tags
+    { name = "port",                source = "6379" },
+    { name = "server",              source = "redis_02" },
+]
+fields = [
+    { name = "connected_clients",           count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "connected_slaves",            count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "evicted_keys",                count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "expired_keys",                count = 8640, source = 494785 },
+    { name = "instantaneous_input_kbps",    count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "instantaneous_ops_per_sec",   count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "instantaneous_output_kbps",   count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "keyspace_hits",               count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "keyspace_misses",             count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "latest_fork_usec",            count = 8640, source = 494785 },
+    { name = "master_repl_offset",          count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "mem_fragmentation_ratio",     count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "pubsub_channels",             count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "pubsub_patterns",             count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "rdb_changes_since_last_save", count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "repl_backlog_active",         count = 8640, source = 494785 },
+    { name = "repl_backlog_histlen",        count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "repl_backlog_size",           count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "sync_full",                   count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "sync_partial_err",            count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "sync_partial_ok",             count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "total_connections_received",  count = 8640, source = 494785 },
+    { name = "uptime_in_seconds",           count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "used_cpu_sys",                count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "used_cpu_sys_children",       count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+    { name = "used_cpu_user",               count = 8640, source = [49854,10,58873,598,111,333,5] },
+    { name = "used_cpu_user_children",      count = 8640, source = [4957,120,10475,847457,44646,2222] },
+    { name = "used_memory",                 count = 8640, source = 494785 },
+    { name = "used_memory_lua",             count = 8640, source = [14957,1120,110475,1847457,144646,222] },
+    { name = "used_memory_peak",            count = 8640, source = [100, 1000, 1102, 3049] },
+    { name = "used_memory_rss",             count = 8640, source = [5,6,7,9,1,2,3,6,5,3] },
+]
+
+[[measurements]]
+name = "status"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" },
+
+
+    # specific tags
+]
+fields = [
+    { name = "service_up",   count = 8640, source = [0,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1] },
+]
+
+[[measurements]]
+name = "system"
+sample = 1.0
+tags = [
+    # common tags
+    { name = "arch",                source = "x86" },
+    { name = "cluster_id",          source = { type = "sequence", format = "%s", start = 0, count = 10 } },
+    { name = "datacenter",          source = "virginia" },
+    { name = "hostname",            source = ["meta_1","meta_2","meta_3","data_1","data_2","data_3","data_4","data_5","data_6","data_7"] },
+    { name = "os",                  source = "Ubuntu15.10" },
+    { name = "rack",                source = "1" },
+    { name = "region",              source = "us-west-01" },
+    { name = "service",             source = "9" },
+    { name = "service_environment", source = "test" },
+    { name = "service_version",     source = "2" }
+
+    # specific tags
+]
+fields = [
+    { name = "load1",   count = 8640, source = { type = "zipf<integer>", s = 5, v = 4, imax = 4, seed = 22 } },
+    { name = "load15",  count = 8640, source = { type = "zipf<integer>", s = 3, v = 4, imax = 4, seed = 23 } },
+    { name = "load5",   count = 8640, source = { type = "zipf<integer>", s = 7, v = 4, imax = 4, seed = 24 } },
+    { name = "n_cpus",  count = 8640, source = 8 },
+]

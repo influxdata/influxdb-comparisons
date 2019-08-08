@@ -37,9 +37,9 @@ var (
 	daemonUrl string
 	dbName    string
 
-	format  string
-	useCase string
-
+	format           string
+	useCase          string
+	configFile       string
 	scaleVar         int64
 	scaleVarOffset   int64
 	samplingInterval time.Duration
@@ -67,6 +67,7 @@ func init() {
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
 	flag.Int64Var(&scaleVarOffset, "scale-var-offset", 0, "Scaling variable offset specific to the use case.")
 	flag.DurationVar(&samplingInterval, "sampling-interval", devops.EpochDuration, "Simulated sampling interval.")
+	flag.StringVar(&configFile, "config-file", "", "Simulator config file in TOML format")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
@@ -135,6 +136,15 @@ func main() {
 	}
 
 	common.Seed(seed)
+
+	if configFile != "" {
+		c, err := common.NewConfig(configFile)
+		if err != nil {
+			log.Fatalf("external config error: %v", err)
+		}
+		common.Config = c
+		log.Printf("Using config file %s\n", configFile)
+	}
 
 	out := bufio.NewWriterSize(os.Stdout, 4<<20)
 	defer out.Flush()
