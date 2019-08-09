@@ -260,6 +260,11 @@ func init() {
 		}
 	case "last":
 		timeWindowShift = 0
+	case "recent":
+		if queryInterval.Hours() <= 24 {
+			log.Fatalf("Query interval type '%s' can only be used with query interval longer than 24h\n", queryIntervalType)
+		}
+		timeWindowShift = 0
 	default:
 		log.Fatalf("Unsupported query interval type: %s\n", queryIntervalType)
 	}
