@@ -93,7 +93,7 @@ var (
 	isBurnIn            bool
 	scanClose           chan int
 	notificationServer  *http.Server
-	externalFinished    bool
+	sigtermReceived     bool
 )
 
 type statsMap map[string]*StatGroup
@@ -317,7 +317,7 @@ func main() {
 	go func() {
 		for {
 			scan(qr, scanClose)
-			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached
+			cont := !(responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached && !sigtermReceived
 			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
 			if cont {
 				qr = bytes.NewReader(queriesData)
@@ -365,6 +365,7 @@ loop:
 		case <-responseTicker.C:
 			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*2 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
+				log.Println("Response time limit reached")
 				scanClose <- 1
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
@@ -386,7 +387,7 @@ loop:
 			if timeLimit && tickerQuaters > 3 && !timeoutReached {
 				timeoutReached = true
 				log.Println("Time out reached")
-				terminate()
+				scanClose <- 1
 				if responseTimeLimit > 0 {
 					//still try to find response time limit
 					respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
@@ -459,7 +460,7 @@ waitLoop:
 		fmt.Println("done shutting down notification listener.")
 	}
 
-	if notificationHostPort != ""  && !externalFinished {
+	if notificationHostPort != "" && !sigtermReceived {
 		targets := strings.Split(notificationHostPort, ",")
 		for _, target := range targets {
 			client, err := rpc.DialHTTP("tcp", target)
@@ -548,6 +549,8 @@ var qind int64
 
 // scan reads encoded Queries and places them onto the workqueue.
 func scan(r io.Reader, closeChan chan int) {
+	scanFinished = false
+
 	dec := gob.NewDecoder(r)
 
 	batch := make([]*Query, 0, batchSize)
@@ -775,23 +778,15 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 	}
 }
 
-func terminate() {
-	if !scanFinished {
-		scanClose <- 1
-	} else {
-		log.Println("Scan already finished")
-	}
-}
-
 func notifyHandler(arg int) (int, error) {
 	var e error
 	if arg == 0 {
-		log.Println("Received external finish request")
-		if !externalFinished {
-			externalFinished = true
-			terminate()
+		log.Println("Received external terminate request")
+		if !sigtermReceived {
+			sigtermReceived = true
+			scanClose <- 1
 		} else {
-			log.Println("External finish request already received")
+			log.Println("External terminate request already received")
 		}
 	} else {
 		e = fmt.Errorf("unknown notification code: %d", arg)
