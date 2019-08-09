@@ -60,6 +60,7 @@ var (
 	gradualWorkersMax      int
 	increaseInterval       time.Duration
 	notificationHostPort   string
+	notificationGroup      string
 	notificationListenPort int
 	dialTimeout            time.Duration
 	readTimeout            time.Duration
@@ -126,7 +127,8 @@ func init() {
 	flag.DurationVar(&increaseInterval, "increase-interval", time.Second*30, "Interval when number of workers will increase")
 	flag.DurationVar(&testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
-	flag.StringVar(&notificationHostPort, "notification-target", "", "host:port of finish message notification receiver(s)")
+	flag.StringVar(&notificationHostPort, "notification-target", "", "finish message notification receiver (host:port)")
+	flag.StringVar(&notificationGroup, "notification-group", "", "finish message notification siblings (comma-separated host:port list)")
 	flag.IntVar(&notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.DurationVar(&dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 	flag.DurationVar(&readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
@@ -207,7 +209,10 @@ func init() {
 	}
 
 	if notificationHostPort != "" {
-		fmt.Printf("notification targets: %v\n", notificationHostPort)
+		fmt.Printf("notification target: %v\n", notificationHostPort)
+	}
+	if notificationGroup != "" {
+		fmt.Printf("notification group: %v\n", notificationGroup)
 	}
 	if notificationListenPort > 0 { // copied from bulk_load_influx/main.go
 		notif := new(bulk_load.NotifyReceiver)
@@ -461,21 +466,16 @@ waitLoop:
 		fmt.Println("done shutting down notification listener.")
 	}
 
-	if notificationHostPort != "" && !sigtermReceived {
-		targets := strings.Split(notificationHostPort, ",")
-		for _, target := range targets {
-			client, err := rpc.DialHTTP("tcp", target)
-			if err != nil {
-				log.Printf("error dialing %s: %v", target, err)
-			} else {
-				var res int
-				input := 0
-				call := client.Go("NotifyReceiver.Notify", input, &res, nil)
-				if call.Error != nil {
-					log.Printf("error calling %s: %v", target, call.Error)
-				}
-				client.Close()
-			}
+	if notificationHostPort != "" {
+		fmt.Printf("notify target %s...", notificationHostPort)
+		notify(notificationHostPort)
+	}
+
+	if notificationGroup != "" && !sigtermReceived {
+		siblings := strings.Split(notificationGroup, ",")
+		for _, sibling := range siblings {
+			fmt.Printf("notify sibling %s...", sibling)
+			notify(sibling)
 		}
 	}
 
@@ -782,6 +782,21 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 func stopScan() {
 	if scanClose != nil {
 		scanClose <- 1
+	}
+}
+
+func notify(target string) {
+	client, err := rpc.DialHTTP("tcp", target)
+	if err != nil {
+		log.Printf("error dialing %s: %v", target, err)
+	} else {
+		var res int
+		input := 0
+		call := client.Go("NotifyReceiver.Notify", input, &res, nil)
+		if call.Error != nil {
+			log.Printf("error calling %s: %v", target, call.Error)
+		}
+		client.Close()
 	}
 }
 
