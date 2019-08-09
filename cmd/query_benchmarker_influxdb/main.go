@@ -206,7 +206,9 @@ func init() {
 		trendSamples = int(increaseInterval.Seconds())
 	}
 
-	fmt.Printf("notification targets: %v\n", notificationHostPort)
+	if notificationHostPort != "" {
+		fmt.Printf("notification targets: %v\n", notificationHostPort)
+	}
 	if notificationListenPort > 0 { // copied from bulk_load_influx/main.go
 		notif := new(bulk_load.NotifyReceiver)
 		rpc.Register(notif)
