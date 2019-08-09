@@ -366,7 +366,7 @@ loop:
 			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*2 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				log.Println("Response time limit reached")
-				scanClose <- 1
+				stopScan()
 				respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
 				item := movingAverageStat.FindHistoryItemBelow(respLimitms)
 				if item == nil {
@@ -387,7 +387,7 @@ loop:
 			if timeLimit && tickerQuaters > 3 && !timeoutReached {
 				timeoutReached = true
 				log.Println("Time out reached")
-				scanClose <- 1
+				stopScan()
 				if responseTimeLimit > 0 {
 					//still try to find response time limit
 					respLimitms := float64(responseTimeLimit.Nanoseconds()) / 1e6
@@ -408,6 +408,7 @@ loop:
 	}
 
 	close(scanClose)
+	scanClose = nil
 	close(scanRes)
 	close(queryChan)
 
@@ -778,13 +779,19 @@ func fprintStats(w io.Writer, statGroups statsMap) {
 	}
 }
 
+func stopScan() {
+	if scanClose != nil {
+		scanClose <- 1
+	}
+}
+
 func notifyHandler(arg int) (int, error) {
 	var e error
 	if arg == 0 {
 		log.Println("Received external terminate request")
 		if !sigtermReceived {
 			sigtermReceived = true
-			scanClose <- 1
+			stopScan()
 		} else {
 			log.Println("External terminate request already received")
 		}
