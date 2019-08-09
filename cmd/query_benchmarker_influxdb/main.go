@@ -15,6 +15,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
