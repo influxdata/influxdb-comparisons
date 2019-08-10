@@ -314,8 +314,8 @@ func main() {
 
 	wallStart := time.Now()
 
-	scanRes := make(chan int)
-	scanClose = make(chan int)
+	scanRes := make(chan int, 1)
+	scanClose = make(chan int, 1)
 	responseTimeLimitReached := false
 	timeoutReached := false
 	timeLimit := testDuration.Nanoseconds() > 0
