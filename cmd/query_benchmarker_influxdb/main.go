@@ -467,14 +467,14 @@ waitLoop:
 	}
 
 	if notificationHostPort != "" {
-		fmt.Printf("notify target %s...", notificationHostPort)
+		fmt.Printf("notify target %s...\n", notificationHostPort)
 		notify(notificationHostPort)
 	}
 
 	if notificationGroup != "" && !sigtermReceived {
 		siblings := strings.Split(notificationGroup, ",")
 		for _, sibling := range siblings {
-			fmt.Printf("notify sibling %s...", sibling)
+			fmt.Printf("notify sibling %s...\n", sibling)
 			notify(sibling)
 		}
 	}
@@ -788,13 +788,13 @@ func stopScan() {
 func notify(target string) {
 	client, err := rpc.DialHTTP("tcp", target)
 	if err != nil {
-		log.Printf("error dialing %s: %v", target, err)
+		log.Printf("error dialing %s: %v\n", target, err)
 	} else {
 		var res int
 		input := 0
 		call := client.Go("NotifyReceiver.Notify", input, &res, nil)
 		if call.Error != nil {
-			log.Printf("error calling %s: %v", target, call.Error)
+			log.Printf("error calling %s: %v\n", target, call.Error)
 		}
 		client.Close()
 	}
