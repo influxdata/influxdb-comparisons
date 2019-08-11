@@ -723,6 +723,7 @@ func processStats(telemetrySink chan *report.Point) {
 				p.AddTag("client_type", "query")
 				p.AddFloat64Field("query_response_time_mean", statMapping[allQueriesLabel].Mean)
 				p.AddFloat64Field("query_response_time_moving_mean", movingAverageStat.Avg())
+				p.AddFloat64Field("query_response_time_moving_median", movingAverageStat.Median())
 				p.AddIntField("query_workers", workers)
 				p.AddInt64Field("queries", int64(i))
 				telemetrySink <- p
