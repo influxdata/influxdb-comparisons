@@ -368,7 +368,7 @@ loop:
 				}
 			}
 		case <-responseTicker.C:
-			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*2 < int64(movingAverageStat.Avg()*1e6) {
+			if !responseTimeLimitReached && responseTimeLimit > 0 && responseTimeLimit.Nanoseconds()*3 < int64(movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
 				log.Println("Response time limit reached")
 				stopScan()
