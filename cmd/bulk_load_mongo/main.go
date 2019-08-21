@@ -9,9 +9,9 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"log"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,47 +24,12 @@ import (
 	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"strconv"
-	"strings"
-)
-
-// Program option vars:
-var (
-	daemonUrl      string
-	workers        int
-	batchSize      int
-	limit          int64
-	doLoad         bool
-	dbName         string
-	documentFormat string
-	writeTimeout   time.Duration
-	reportDatabase string
-	reportHost     string
-	reportUser     string
-	reportPassword string
-	reportTagsCSV  string
-)
-
-// Global vars
-var (
-	batchChan      chan *Batch
-	inputDone      chan struct{}
-	workersGroup   sync.WaitGroup
-	reportTags     [][2]string
-	reportHostname string
-	valuesRead     int64
 )
 
 // Magic database constants
 const (
 	pointCollectionName = "point_data"
 )
-
-// bufPool holds []byte instances to reduce heap churn.
-var bufPool = &sync.Pool{
-	New: func() interface{} {
-		return make([]byte, 0, 1024)
-	},
-}
 
 // Batch holds byte slices that will become mongo_serialization.Item instances.
 type Batch [][]byte
@@ -73,153 +38,167 @@ func (b *Batch) ClearReferences() {
 	*b = (*b)[:0]
 }
 
-// batchPool holds *Batch instances to reduce heap churn.
-var batchPool = &sync.Pool{
-	New: func() interface{} {
-		return &Batch{}
-	},
+type MongoBulkLoad struct {
+	// Program option vars:
+	daemonUrl      string
+	documentFormat string
+	writeTimeout   time.Duration
+	// Global vars
+	batchChan    chan *Batch
+	inputDone    chan struct{}
+	valuesRead   int64
+	itemsRead    int64
+	bytesRead    int64
+	bufPool      *sync.Pool
+	batchPool    *sync.Pool
+	session      *mgo.Session
+	scanFinished bool
 }
+
+var load = &MongoBulkLoad{}
 
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:27017", "Mongo URL.")
-
-	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
-	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.Int64Var(&limit, "limit", -1, "Number of items to insert (default unlimited).")
-	flag.DurationVar(&writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
-
-	flag.StringVar(&dbName, "db", "benchmark_db", "Database for influx to use (ignored for ElasticSearch).")
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. ('simpleArrays' is supported; leave empty for previous behaviour)")
-
-	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
-
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
-	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+	bulk_load.Runner.Init(100)
+	load.Init()
 
 	flag.Parse()
 
-	if documentFormat == mongodb.SimpleArraysFormat {
-		log.Printf("Using '%s' document serialization", documentFormat)
-	}
+	bulk_load.Runner.Validate()
+	load.Validate()
 
-	for i := 0; i < workers*batchSize; i++ {
-		bufPool.Put(bufPool.New())
-	}
-
-	if reportHost != "" {
-		fmt.Printf("results report destination: %v\n", reportHost)
-		fmt.Printf("results report database: %v\n", reportDatabase)
-
-		var err error
-		reportHostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("hostname for results report: %v\n", reportHostname)
-
-		if reportTagsCSV != "" {
-			pairs := strings.Split(reportTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				reportTags = append(reportTags, tagpair)
-			}
-		}
-		fmt.Printf("results report tags: %v\n", reportTags)
-	}
 }
 
 func main() {
-	if doLoad {
-		mustCreateCollections(daemonUrl)
-	}
+	bulk_load.Runner.Run(load)
+}
 
-	var session *mgo.Session
+func (l *MongoBulkLoad) Init() {
+	flag.StringVar(&l.daemonUrl, "url", "localhost:27017", "Mongo URL.")
+	flag.DurationVar(&l.writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
+	flag.StringVar(&l.documentFormat, "document-format", "", "Document format specification. ('simpleArrays' is supported; leave empty for previous behaviour)")
+}
 
-	if doLoad {
-		var err error
-		session, err = mgo.Dial(daemonUrl)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		session.SetMode(mgo.Eventual, false)
-		session.SetSyncTimeout(180 * time.Second)
-		session.SetSocketTimeout(180 * time.Second)
-
-		defer session.Close()
-	}
-
-	batchChan = make(chan *Batch, workers*10)
-	inputDone = make(chan struct{})
-
-	for i := 0; i < workers; i++ {
-		workersGroup.Add(1)
-		go processBatches(session)
-	}
-
-	start := time.Now()
-	itemsRead, bytesRead := scan(session, batchSize)
-
-	<-inputDone
-	close(batchChan)
-	workersGroup.Wait()
-	end := time.Now()
-	took := end.Sub(start)
-	itemRate := float64(itemsRead) / float64(took.Seconds())
-	bytesRate := float64(bytesRead) / float64(took.Seconds())
-	valuesRate := float64(valuesRead) / float64(took.Seconds())
-
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemRate, valuesRate, bytesRate/(1<<20))
-
-	if reportHost != "" {
-		//append db specific tags to custom tags
-		reportTags = append(reportTags, [2]string{"write_timeout", strconv.Itoa(int(writeTimeout))})
-
-		reportParams := &report.LoadReportParams{
-			ReportParams: report.ReportParams{
-				DBType:             "MongoDB",
-				ReportDatabaseName: reportDatabase,
-				ReportHost:         reportHost,
-				ReportUser:         reportUser,
-				ReportPassword:     reportPassword,
-				ReportTags:         reportTags,
-				Hostname:           reportHostname,
-				DestinationUrl:     daemonUrl,
-				Workers:            workers,
-				ItemLimit:          int(limit),
-			},
-			IsGzip:    false,
-			BatchSize: batchSize,
-		}
-		err := report.ReportLoadResult(reportParams, itemsRead, itemRate, bytesRate, took)
-
-		if err != nil {
-			log.Fatal(err)
-		}
+func (l *MongoBulkLoad) Validate() {
+	if l.documentFormat == mongodb.SimpleArraysFormat {
+		log.Printf("Using '%s' document serialization", l.documentFormat)
 	}
 }
 
+func (l *MongoBulkLoad) CreateDb() {
+	mustCreateCollections(l.daemonUrl, bulk_load.Runner.DbName)
+}
+
+func (l *MongoBulkLoad) PrepareWorkers() {
+
+	// bufPool holds []byte instances to reduce heap churn.
+	l.bufPool = &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 0, 1024)
+		},
+	}
+
+	// batchPool holds *Batch instances to reduce heap churn.
+	l.batchPool = &sync.Pool{
+		New: func() interface{} {
+			return &Batch{}
+		},
+	}
+
+	for i := 0; i < bulk_load.Runner.Workers*bulk_load.Runner.BatchSize; i++ {
+		l.bufPool.Put(l.bufPool.New())
+	}
+
+	if bulk_load.Runner.DoLoad {
+		var err error
+		l.session, err = mgo.Dial(l.daemonUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		l.session.SetMode(mgo.Eventual, false)
+		l.session.SetSyncTimeout(180 * time.Second)
+		l.session.SetSocketTimeout(180 * time.Second)
+
+	}
+
+	l.batchChan = make(chan *Batch, bulk_load.Runner.Workers*10)
+	l.inputDone = make(chan struct{})
+}
+
+func (l *MongoBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
+	return l
+}
+
+func (l *MongoBulkLoad) GetScanner() bulk_load.Scanner {
+	return l
+}
+
+func (l *MongoBulkLoad) SyncEnd() {
+	<-l.inputDone
+	close(l.batchChan)
+}
+
+func (l *MongoBulkLoad) CleanUp() {
+	if l.session != nil {
+		l.session.Close()
+	}
+}
+
+func (l *MongoBulkLoad) UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal) {
+	reportTags = [][2]string{{"write_timeout", strconv.Itoa(int(l.writeTimeout))}}
+	params.DBType = "MongoDB"
+	params.DestinationUrl = l.daemonUrl
+	return
+}
+
+func (l *MongoBulkLoad) PrepareProcess(i int) {
+}
+
+func (l *MongoBulkLoad) AfterRunProcess(i int) {
+
+}
+
+func (l *MongoBulkLoad) EmptyBatchChanel() {
+	for range l.batchChan {
+		//read out remaining batches
+	}
+}
+
+func (l *MongoBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
+}
+
+func (l *MongoBulkLoad) IsScanFinished() bool {
+	return l.scanFinished
+}
+
 // scan reads length-delimited flatbuffers items from stdin.
-func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
+func (l *MongoBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
+	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
 	var n int
-	var itemsRead, bytesRead int64
-	r := bufio.NewReaderSize(os.Stdin, 32<<20)
+	br := bufio.NewReaderSize(r, 32<<20)
 
 	start := time.Now()
-	batch := batchPool.Get().(*Batch)
+	batch := l.batchPool.Get().(*Batch)
 	lenBuf := make([]byte, 8)
-
+	var deadline time.Time
+	if bulk_load.Runner.TimeLimit > 0 {
+		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
+	}
+outer:
 	for {
-		if itemsRead == limit {
+		if l.itemsRead == bulk_load.Runner.ItemLimit {
 			break
 		}
 		// get the serialized item length (this is the framing format)
-		_, err := r.Read(lenBuf)
+		_, err := br.Read(lenBuf)
 		if err == io.EOF {
 			break
 		}
@@ -228,17 +207,17 @@ func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
 		}
 
 		// ensure correct len of receiving buffer
-		l := int(binary.LittleEndian.Uint64(lenBuf))
-		itemBuf := bufPool.Get().([]byte)
-		if cap(itemBuf) < l {
-			itemBuf = make([]byte, l)
+		d := int(binary.LittleEndian.Uint64(lenBuf))
+		itemBuf := l.bufPool.Get().([]byte)
+		if cap(itemBuf) < d {
+			itemBuf = make([]byte, d)
 		}
-		itemBuf = itemBuf[:l]
+		itemBuf = itemBuf[:d]
 
 		// read the bytes and init the flatbuffer object
 		totRead := 0
-		for totRead < l {
-			m, err := r.Read(itemBuf[totRead:])
+		for totRead < d {
+			m, err := br.Read(itemBuf[totRead:])
 			// (EOF is also fatal)
 			if err != nil {
 				log.Fatal(err.Error())
@@ -251,42 +230,42 @@ func scan(session *mgo.Session, itemsPerBatch int) (int64, int64) {
 
 		*batch = append(*batch, itemBuf)
 
-		itemsRead++
+		l.itemsRead++
 		n++
 
-		if n >= batchSize {
-			bytesRead += int64(len(itemBuf))
-			batchChan <- batch
+		if n >= bulk_load.Runner.BatchSize {
+			l.bytesRead += int64(len(itemBuf))
+			l.batchChan <- batch
 			n = 0
-			batch = batchPool.Get().(*Batch)
+			batch = l.batchPool.Get().(*Batch)
+			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
+				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
+				break outer
+			}
+
 		}
 
 		_ = start
-		//if itemsRead > 0 && itemsRead%100000 == 0 {
-		//	_ = start
-		//	//took := (time.Now().UnixNano() - start.UnixNano())
-		//	//if took >= 1e9 {
-		//	//	tookUs := float64(took) / 1e3
-		//	//	tookSec := float64(took) / 1e9
-		//	//	fmt.Fprintf(os.Stderr, "itemsRead: %d, rate: %.0f/sec, lag: %.2fus/op\n",
-		//	//		itemsRead, float64(itemsRead)/tookSec, tookUs/float64(itemsRead))
-		//	//}
-		//}
+		select {
+		case <-syncChanDone:
+			break outer
+		default:
+		}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
-
-	return itemsRead, bytesRead
+	close(l.inputDone)
+	l.scanFinished = true
 }
 
 // processBatches reads byte buffers from batchChan, interprets them and writes
 // them to the target server. Note that mgo forcibly incurs serialization
 // overhead (it always encodes to BSON).
-func processBatches(session *mgo.Session) {
+func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
 	var workerValuesRead int64
+	var rerr error
 
-	db := session.DB(dbName)
+	db := l.session.DB(bulk_load.Runner.DbName)
 
 	type Tag struct {
 		Key string `bson:"key"`
@@ -294,17 +273,17 @@ func processBatches(session *mgo.Session) {
 	}
 
 	type Field struct {
-		Key string `bson:"key"`
+		Key string      `bson:"key"`
 		Val interface{} `bson:"val"`
 	}
 
 	type Point struct {
 		// Use `string` here even though they are really `[]byte`.
 		// This is so the mongo data is human-readable.
-		MeasurementName string      `bson:"measurement"`
-		Timestamp       int64       `bson:"timestamp_ns"`
-		Tags            []interface{}  `bson:"tags"`
-		Fields          []interface{}  `bson:"fields"`
+		MeasurementName string        `bson:"measurement"`
+		Timestamp       int64         `bson:"timestamp_ns"`
+		Tags            []interface{} `bson:"tags"`
+		Fields          []interface{} `bson:"fields"`
 	}
 	pPool := &sync.Pool{New: func() interface{} { return &Point{} }}
 	pvs := []interface{}{}
@@ -313,7 +292,7 @@ func processBatches(session *mgo.Session) {
 	destTag := &mongo_serialization.Tag{}
 	destField := &mongo_serialization.Field{}
 	collection := db.C(pointCollectionName)
-	for batch := range batchChan {
+	for batch := range l.batchChan {
 		bulk := collection.Bulk()
 
 		if cap(pvs) < len(*batch) {
@@ -341,10 +320,10 @@ func processBatches(session *mgo.Session) {
 				item.Tags(destTag, i)
 				tagKey := unsafeBytesToString(destTag.KeyBytes())
 				tagValue := unsafeBytesToString(destTag.ValBytes())
-				if documentFormat == mongodb.SimpleArraysFormat {
-					x.Tags[i] = bson.M{tagKey:tagValue}
+				if l.documentFormat == mongodb.SimpleArraysFormat {
+					x.Tags[i] = bson.M{tagKey: tagValue}
 				} else {
-					x.Tags[i] = &Tag{Key:tagKey,Val:tagValue}
+					x.Tags[i] = &Tag{Key: tagKey, Val: tagValue}
 				}
 			}
 
@@ -372,10 +351,10 @@ func processBatches(session *mgo.Session) {
 				default:
 					panic("logic error")
 				}
-				if documentFormat == mongodb.SimpleArraysFormat {
-					x.Fields[i] = bson.M{fieldKey:fieldValue}
+				if l.documentFormat == mongodb.SimpleArraysFormat {
+					x.Fields[i] = bson.M{fieldKey: fieldValue}
 				} else {
-					x.Fields[i] = &Field{Key:fieldKey,Val:fieldValue}
+					x.Fields[i] = &Field{Key: fieldKey, Val: fieldValue}
 				}
 			}
 			pvs[i] = x
@@ -383,10 +362,11 @@ func processBatches(session *mgo.Session) {
 		}
 		bulk.Insert(pvs...)
 
-		if doLoad {
+		if bulk_load.Runner.DoLoad {
 			_, err := bulk.Run()
 			if err != nil {
-				log.Fatalf("Bulk err: %s\n", err.Error())
+				rerr = fmt.Errorf("Bulk err: %s\n", err.Error())
+				break
 			}
 
 		}
@@ -402,16 +382,17 @@ func processBatches(session *mgo.Session) {
 
 		// cleanup item data
 		for _, itemBuf := range *batch {
-			bufPool.Put(itemBuf)
+			l.bufPool.Put(itemBuf)
 		}
 		batch.ClearReferences()
-		batchPool.Put(batch)
+		l.batchPool.Put(batch)
 	}
-	atomic.AddInt64(&valuesRead, workerValuesRead)
+	atomic.AddInt64(&l.valuesRead, workerValuesRead)
 	workersGroup.Done()
+	return rerr
 }
 
-func mustCreateCollections(daemonUrl string) {
+func mustCreateCollections(daemonUrl string, dbName string) {
 	session, err := mgo.Dial(daemonUrl)
 	if err != nil {
 		log.Fatal(err)

@@ -73,7 +73,7 @@ func (qe *HLQueryExecutor) Do(q *HLQuery, opts HLQueryExecutorDoOptions) (qpLagM
 	// execute the query plan:
 	var results []CQLResult
 	execStart := time.Now()
-	results, err = qp.Execute(qe.session)
+	results, err = qp.Execute(qe.session, opts.Debug)
 	requestLagMs = float64(time.Now().Sub(execStart).Nanoseconds()) / 1e6
 	if err != nil {
 		return
