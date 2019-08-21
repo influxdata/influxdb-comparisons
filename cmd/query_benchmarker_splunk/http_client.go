@@ -2,35 +2,37 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/valyala/fasthttp"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
 )
 
-var bytesSlash = []byte("/") // heap optimization
-var byteZero = []byte{0}     // heap optimization
-
 // HTTPClient is a reusable HTTP Client.
-type FastHTTPClient struct {
+type DefaultHTTPClient struct {
 	HTTPClientCommon
-	client fasthttp.Client
+	client *http.Client
 }
 
 // NewHTTPClient creates a new HTTPClient.
-func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *FastHTTPClient {
-	return &FastHTTPClient{
-		client: fasthttp.Client{
-			Name: "query_benchmarker",
-			Dial: func(addr string) (net.Conn, error) {
-				return fasthttp.DialTimeout(addr, dialTimeout)
+func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *DefaultHTTPClient {
+	return &DefaultHTTPClient{
+		client: &http.Client{
+			Timeout: readTimeout, // TODO sets all timeouts
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout: dialTimeout,
+				}).Dial,
+				MaxIdleConns: 0, // unlimited
+				MaxIdleConnsPerHost: 100, // 0 would fallback to DefaultMaxIdleConnsPerHost ie. 2
+				MaxConnsPerHost: 0, // unlimited
+				IdleConnTimeout: idleConnectionTimeout,
 			},
-			MaxIdleConnDuration: idleConnectionTimeout,
-			ReadTimeout: readTimeout,
-			WriteTimeout: writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -42,37 +44,38 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 
 // Do performs the action specified by the given Query. It uses fasthttp, and
 // tries to minimize heap allocations.
-func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
+func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error) {
 	// populate uri from the reusable byte slice:
 	uri := make([]byte, 0, 100)
 	uri = append(uri, w.Host...)
-	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
 
 	// populate a request with data from the Query:
-	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
+	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewBuffer(q.Body)) // TODO performance
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte("admin:changeit"))))
 
-	req.Header.SetMethodBytes(q.Method)
-	req.Header.SetRequestURIBytes(uri)
-	req.SetBody(q.Body)
-	// Perform the request while tracking latency:
-	resp := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
-	err = w.client.Do(req, resp)
+	resp, err := w.client.Do(req)
+	var respBody []byte
+	if err == nil {
+		respBody, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return
+		}
+	}
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
 
-	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
+	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
 
 	// Check that the status code was 200 OK:
 	if err == nil {
-		sc := resp.StatusCode()
-		if sc != fasthttp.StatusOK {
-			err = fmt.Errorf("Invalid write response (status %d): %s", sc, resp.Body())
+		sc := resp.StatusCode
+		if sc != http.StatusOK {
+			err = fmt.Errorf("Invalid write response (status %d): %s", sc, string(respBody))
 			return
 		}
 	}
@@ -90,7 +93,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		case 4:
 			fmt.Fprintf(os.Stderr, "debug: %s in %7.2fms -- %s\n", q.HumanLabel, lag, q.HumanDescription)
 			fmt.Fprintf(os.Stderr, "debug:   request: %s\n", string(q.String()))
-			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(resp.Body()))
+			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(respBody))
 		default:
 		}
 
@@ -100,19 +103,19 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 			// Flux responses are just simple CSV.
 
 			prefix := fmt.Sprintf("ID %d: ", q.ID)
-			if json.Valid(resp.Body()) {
+			if json.Valid(respBody) {
 				var pretty bytes.Buffer
-				err = json.Indent(&pretty, resp.Body(), prefix, "  ")
+				err = json.Indent(&pretty, respBody, prefix, "  ")
 				if err != nil {
 					return
 				}
 
-				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty.String())
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty)
 				if err != nil {
 					return
 				}
 			} else {
-				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, resp.Body())
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, respBody)
 				if err != nil {
 					return
 				}
@@ -123,6 +126,6 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	return lag, err
 }
 
-func (w *FastHTTPClient) HostString() string {
+func (w *DefaultHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
