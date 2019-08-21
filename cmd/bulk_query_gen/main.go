@@ -15,7 +15,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/influxdb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/opentsdb"
-	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/splunk"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
 	"log"
 	"math/rand"
@@ -64,7 +63,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost,
 			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost,
 			"graphite":         graphite.NewGraphiteDevopsSingleHost,
-			"splunk":           splunk.NewSplunkDevopsSingleHost,
 		},
 		DevOpsOneHostTwelveHours: {
 			"cassandra":        cassandra.NewCassandraDevopsSingleHost12hr,
@@ -75,7 +73,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"opentsdb":         opentsdb.NewOpenTSDBDevopsSingleHost12hr,
 			"timescaledb":      timescaledb.NewTimescaleDevopsSingleHost12hr,
 			"graphite":         graphite.NewGraphiteDevopsSingleHost12hr,
-			"splunk":           splunk.NewSplunkDevopsSingleHost12hr,
 		},
 		DevOpsEightHostsOneHour: {
 			"cassandra":        cassandra.NewCassandraDevops8Hosts,
@@ -86,7 +83,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"opentsdb":         opentsdb.NewOpenTSDBDevops8Hosts,
 			"timescaledb":      timescaledb.NewTimescaleDevops8Hosts1Hr,
 			"graphite":         graphite.NewGraphiteDevops8Hosts,
-			"splunk":           splunk.NewSplunkDevops8Hosts,
 		},
 		DevOpsGroupBy: {
 			"cassandra":        cassandra.NewCassandraDevopsGroupBy,
@@ -95,7 +91,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLDevopsGroupBy,
 			"timescaledb":      timescaledb.NewTimescaleDevopsGroupby,
 			"graphite":         graphite.NewGraphiteDevopsGroupBy,
-			"splunk":           splunk.NewSplunkDevopsGroupBy,
 		},
 	},
 	common.UseCaseIot: {
@@ -187,9 +182,9 @@ func init() {
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
-	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scale-var used for data generation).")
+	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scalevar used for data generation).")
 	flag.IntVar(&queryCount, "queries", 1000, "Number of queries to generate.")
-	flag.StringVar(&dbName, "db", "benchmark_db", "Database to use (ignored for ElasticSearch).")
+	flag.StringVar(&dbName, "db", "benchmark_db", "Database for influx to use (ignored for ElasticSearch).")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")

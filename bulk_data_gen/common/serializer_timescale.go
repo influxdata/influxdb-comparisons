@@ -23,8 +23,8 @@ func NewSerializerTimescaleBin() *SerializerTimescaleBin {
 	return &SerializerTimescaleBin{}
 }
 
-// SerializePoint writes Point data to the given writer, conforming to the
-// Timescale insert format.
+// SerializeTimeScale writes Point data to the given writer, conforming to the
+// TimeScale insert format.
 //
 // This function writes output that looks like:
 // INSERT INTO <tablename> (time,<tag_name list>,<field_name list>') VALUES (<timestamp in nanoseconds>, <tag values list>, <field values>)
