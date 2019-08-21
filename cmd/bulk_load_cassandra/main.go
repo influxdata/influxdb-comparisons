@@ -8,8 +8,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"io"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -20,169 +21,166 @@ import (
 	"strings"
 )
 
-// Program option vars:
-var (
-	daemonUrl      string
-	workers        int
-	batchSize      int
-	doLoad         bool
-	writeTimeout   time.Duration
-	reportDatabase string
-	reportHost     string
-	reportUser     string
-	reportPassword string
-	reportTagsCSV  string
-	compressor     string
-	useCase        string
-)
+type CassandraBulkLoad struct {
+	// Program option vars:
+	daemonUrl    string
+	writeTimeout time.Duration
+	compressor   string
+	useCase      string
 
-// Global vars
-var (
-	batchChan      chan *gocql.Batch
-	inputDone      chan struct{}
-	workersGroup   sync.WaitGroup
-	reportTags     [][2]string
-	reportHostname string
-)
+	// Global vars
+	batchChan    chan *gocql.Batch
+	inputDone    chan struct{}
+	session      *gocql.Session
+	scanFinished bool
+	valuesRead   int64
+	itemsRead    int64
+	bytesRead    int64
+}
+
+var load = &CassandraBulkLoad{}
 
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:9042", "Cassandra URL.")
-
-	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
-	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.DurationVar(&writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
-	flag.StringVar(&compressor, "compressor", "LZ4Compressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
-	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to set specific load behavior. Options: "+strings.Join(common.UseCaseChoices, ","))
-
-	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
-
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
-	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+	bulk_load.Runner.Init(100)
+	load.Init()
 
 	flag.Parse()
 
-	if reportHost != "" {
-		fmt.Printf("results report destination: %v\n", reportHost)
-		fmt.Printf("results report database: %v\n", reportDatabase)
+	bulk_load.Runner.Validate()
+	load.Validate()
 
-		var err error
-		reportHostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("hostname for results report: %v\n", reportHostname)
-
-		if reportTagsCSV != "" {
-			pairs := strings.Split(reportTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				reportTags = append(reportTags, tagpair)
-			}
-		}
-		fmt.Printf("results report tags: %v\n", reportTags)
-	}
 }
 
 func main() {
+	bulk_load.Runner.Run(load)
+
+}
+
+func (l *CassandraBulkLoad) Init() {
+	flag.StringVar(&l.daemonUrl, "url", "localhost:9042", "Cassandra URL.")
+
+	flag.DurationVar(&l.writeTimeout, "write-timeout", 60*time.Second, "Write timeout.")
+	flag.StringVar(&l.compressor, "compressor", "LZ4Compressor", "Table compressor: DeflateCompressor, LZ4Compressor or SnappyCompressor ")
+	flag.StringVar(&l.useCase, "use-case", common.UseCaseChoices[0], "Use case to set specific load behavior. Options: "+strings.Join(common.UseCaseChoices, ","))
+}
+
+func (l *CassandraBulkLoad) Validate() {
+
+}
+
+func (l *CassandraBulkLoad) CreateDb() {
 	var ucTablesMap = map[string][]string{
 		common.UseCaseDevOps: createTablesCQLDevops,
 		common.UseCaseIot:    createTablesCQLIot,
 	}
 
-	if doLoad {
-		log.Println("Creating keyspace")
-		if tablesCql, ok := ucTablesMap[useCase]; ok {
-			createKeyspace(daemonUrl, tablesCql)
-		} else {
-			log.Fatalf("Unsupport use-case: %s\n", useCase)
-		}
-	}
-
-	var session *gocql.Session
-
-	if doLoad {
-		cluster := gocql.NewCluster(daemonUrl)
-		cluster.Keyspace = "measurements"
-		cluster.Timeout = writeTimeout
-		cluster.Consistency = gocql.One
-		cluster.ProtoVersion = 4
-		var err error
-		session, err = cluster.CreateSession()
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer session.Close()
-	}
-
-	batchChan = make(chan *gocql.Batch, workers)
-	inputDone = make(chan struct{})
-	log.Println("Starting workers")
-	for i := 0; i < workers; i++ {
-		workersGroup.Add(1)
-		go processBatches(session)
-	}
-
-	start := time.Now()
-	itemsRead, bytesRead, valuesRead := scan(session, batchSize)
-
-	<-inputDone
-	close(batchChan)
-	workersGroup.Wait()
-	end := time.Now()
-	took := end.Sub(start)
-
-	itemsRate := float64(itemsRead) / float64(took.Seconds())
-	bytesRate := float64(bytesRead) / float64(took.Seconds())
-	valuesRate := float64(valuesRead) / float64(took.Seconds())
-
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %.2f/s, mean value rate %.2f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
-
-	if reportHost != "" {
-		//append db specific tags to custom tags
-		reportTags = append(reportTags, [2]string{"write_timeout", strconv.Itoa(int(writeTimeout))})
-
-		reportParams := &report.LoadReportParams{
-			ReportParams: report.ReportParams{
-				DBType:             "Cassandra",
-				ReportDatabaseName: reportDatabase,
-				ReportHost:         reportHost,
-				ReportUser:         reportUser,
-				ReportPassword:     reportPassword,
-				ReportTags:         reportTags,
-				Hostname:           reportHostname,
-				DestinationUrl:     daemonUrl,
-				Workers:            workers,
-				ItemLimit:          -1,
-			},
-			IsGzip:    false,
-			BatchSize: batchSize,
-		}
-		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
-
-		if err != nil {
-			log.Fatal(err)
-		}
+	log.Println("Creating keyspace")
+	if tablesCql, ok := ucTablesMap[l.useCase]; ok {
+		l.createKeyspace(l.daemonUrl, tablesCql)
+	} else {
+		log.Fatalf("Unsupport use-case: %s\n", l.useCase)
 	}
 }
 
+func (l *CassandraBulkLoad) PrepareWorkers() {
+	if bulk_load.Runner.DoLoad {
+		cluster := gocql.NewCluster(l.daemonUrl)
+		cluster.Keyspace = "measurements"
+		cluster.Timeout = l.writeTimeout
+		cluster.Consistency = gocql.One
+		cluster.ProtoVersion = 4
+		var err error
+		l.session, err = cluster.CreateSession()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	l.batchChan = make(chan *gocql.Batch, bulk_load.Runner.Workers)
+	l.inputDone = make(chan struct{})
+}
+
+func (l *CassandraBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
+	return l
+}
+
+func (l *CassandraBulkLoad) GetScanner() bulk_load.Scanner {
+	return l
+}
+
+func (l *CassandraBulkLoad) PrepareProcess(i int) {
+
+}
+
+func (l *CassandraBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
+	return l.processBatches(l.session, waitGroup)
+}
+
+func (l *CassandraBulkLoad) AfterRunProcess(i int) {
+
+}
+
+func (l *CassandraBulkLoad) EmptyBatchChanel() {
+	for range l.batchChan {
+		//read out remaining batches
+	}
+}
+
+func (l *CassandraBulkLoad) IsScanFinished() bool {
+	return l.scanFinished
+}
+
+func (l *CassandraBulkLoad) SyncEnd() {
+	<-l.inputDone
+	close(l.batchChan)
+}
+
+func (l *CassandraBulkLoad) CleanUp() {
+	if l.session != nil {
+		l.session.Close()
+	}
+}
+
+func (l *CassandraBulkLoad) UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal) {
+
+	reportTags = [][2]string{{"write_timeout", strconv.Itoa(int(l.writeTimeout))}}
+	params.DBType = "Cassandra"
+	params.DestinationUrl = l.daemonUrl
+
+	return
+}
+
+func (l *CassandraBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
+}
+
 // scan reads lines from stdin. It expects input in the Cassandra CQL format.
-func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
+func (l *CassandraBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
+	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
+
 	var batch *gocql.Batch
-	if doLoad {
-		batch = session.NewBatch(gocql.LoggedBatch)
+	if bulk_load.Runner.DoLoad {
+		batch = l.session.NewBatch(gocql.LoggedBatch)
 	}
 
 	var n int
 	var err error
-	var itemsRead, bytesRead int64
 	var totalPoints, totalValues int64
 
-	scanner := bufio.NewScanner(os.Stdin)
+	var deadline time.Time
+	if bulk_load.Runner.TimeLimit > 0 {
+		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
+	}
+
+	scanner := bufio.NewScanner(r)
+outer:
 	for scanner.Scan() {
 		line := scanner.Text()
 		totalPoints, totalValues, err = common.CheckTotalValues(line)
@@ -192,20 +190,29 @@ func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		itemsRead++
-		bytesRead += int64(len(scanner.Bytes()))
+		l.itemsRead++
+		l.bytesRead += int64(len(scanner.Bytes()))
 
-		if !doLoad {
+		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 
 		batch.Query(string(scanner.Bytes()))
 
 		n++
-		if n >= itemsPerBatch {
-			batchChan <- batch
-			batch = session.NewBatch(gocql.LoggedBatch)
+		if n >= bulk_load.Runner.BatchSize {
+			l.batchChan <- batch
+			batch = l.session.NewBatch(gocql.LoggedBatch)
 			n = 0
+			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
+				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
+				break outer
+			}
+		}
+		select {
+		case <-syncChanDone:
+			break outer
+		default:
 		}
 	}
 
@@ -215,33 +222,42 @@ func scan(session *gocql.Session, itemsPerBatch int) (int64, int64, int64) {
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- batch
+		l.batchChan <- batch
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
-	//cassandra's schema stores each value separately, point is represented in series_id
-	if itemsRead != totalPoints {
-		log.Fatalf("Incorrent number of read items: %d, expected: %d:", itemsRead, totalPoints)
-	}
+	close(l.inputDone)
 
-	return itemsRead, bytesRead, totalValues
+	l.valuesRead = totalValues
+	//cassandra's schema stores each value separately, point is represented in series_id
+	if l.itemsRead != totalPoints {
+		if !bulk_load.Runner.HasEndedPrematurely() {
+			log.Fatalf("Incorrent number of read items: %d, expected: %d:", l.itemsRead, totalPoints)
+		} else {
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+		}
+	}
+	l.scanFinished = true
+
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(session *gocql.Session) {
-	for batch := range batchChan {
-		if !doLoad {
+func (l *CassandraBulkLoad) processBatches(session *gocql.Session, waitGroup *sync.WaitGroup) error {
+	var rerr error
+	for batch := range l.batchChan {
+		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 
 		// Write the batch.
 		err := session.ExecuteBatch(batch)
 		if err != nil {
-			log.Fatalf("Error writing: %s\n", err.Error())
+			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
+			break
 		}
 	}
-	workersGroup.Done()
+	waitGroup.Done()
+	return rerr
 }
 
 var tableOptionsFmt = "with compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': 1, 'compaction_window_unit': 'DAYS'} and compression = {'class':'%s'}"
@@ -274,11 +290,11 @@ var createTablesCQLIot = []string{
 	"CREATE TABLE measurements.window_state_room (time bigint,room_id TEXT,sensor_id TEXT,window_id TEXT,home_id TEXT, state double,battery_voltage double, primary key(home_id, time)) %s;",
 }
 
-func createKeyspace(daemonUrl string, tableSchema []string) {
+func (l *CassandraBulkLoad) createKeyspace(daemonUrl string, tableSchema []string) {
 	cluster := gocql.NewCluster(daemonUrl)
 	cluster.Consistency = gocql.Quorum
 	cluster.ProtoVersion = 4
-	cluster.Timeout = writeTimeout
+	cluster.Timeout = l.writeTimeout
 	session, err := cluster.CreateSession()
 	if err != nil {
 		log.Fatal(err)
@@ -290,7 +306,7 @@ func createKeyspace(daemonUrl string, tableSchema []string) {
 		log.Print("echo 'drop keyspace measurements;' | cqlsh <host>")
 		log.Fatal(err)
 	}
-	tableOptions := fmt.Sprintf(tableOptionsFmt, compressor)
+	tableOptions := fmt.Sprintf(tableOptionsFmt, l.compressor)
 
 	for _, tableCQLFormat := range tableSchema {
 		tableCQL := fmt.Sprintf(tableCQLFormat, tableOptions)
