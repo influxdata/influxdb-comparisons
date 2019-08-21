@@ -8,8 +8,8 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,53 +26,18 @@ import (
 	"io"
 )
 
-// TODO VH: This should be calculated from available simulation data
-const ValuesPerMeasurement = 11.2222
-const DatabaseName = "benchmark_db"
-
-// Program option vars:
-var (
-	daemonUrl           string
-	workers             int
-	batchSize           int
-	doLoad              bool
-	doDbCreate          bool
-	reportDatabase      string
-	reportHost          string
-	reportUser          string
-	reportPassword      string
-	reportTagsCSV       string
-	psUser              string
-	psPassword          string
-	file                string
-	chunkDuration       time.Duration
-	usePostgresBatching bool
-)
-
-// Global vars
-var (
-	bufPool        sync.Pool
-	batchChan      chan *bytes.Buffer
-	batchChanBin   chan []FlatPoint
-	batchChanBatch chan []string
-	inputDone      chan struct{}
-	workersGroup   sync.WaitGroup
-	reportTags     [][2]string
-	reportHostname string
-	format         string
-	sourceReader   *os.File
-)
-
 // Output data format choices:
 var formatChoices = []string{"timescaledb-sql", "timescaledb-copyFrom"}
 
-var processes = map[string]struct {
-	scan    func(int, io.Reader) (int64, int64, int64)
-	process func(*pgx.Conn) int64
-}{
-	formatChoices[0]:           {scan, processBatches},
-	formatChoices[1]:           {scanBin, processBatchesBin},
-	"timescaledb-sql-batching": {scanBatch, processBatchesBatch},
+type procInfo struct {
+	scan    func(*TimescaleBulkLoad, io.Reader, chan int)
+	process func(*TimescaleBulkLoad, *pgx.Conn, *sync.WaitGroup) error
+}
+
+var processes = map[string]procInfo{
+	formatChoices[0]:           {(*TimescaleBulkLoad).scan, (*TimescaleBulkLoad).processBatches},
+	formatChoices[1]:           {(*TimescaleBulkLoad).scanBin, (*TimescaleBulkLoad).processBatchesBin},
+	"timescaledb-sql-batching": {(*TimescaleBulkLoad).scanBatch, (*TimescaleBulkLoad).processBatchesBatch},
 }
 
 type FlatPoint struct {
@@ -81,208 +46,223 @@ type FlatPoint struct {
 	Values          []interface{}
 }
 
+// TODO VH: This should be calculated from available simulation data
+const ValuesPerMeasurement = 11.2222
+const DatabaseName = "benchmark_db"
+
+type TimescaleBulkLoad struct {
+	// Program option vars:
+	daemonUrl  string
+	psUser     string
+	psPassword string
+
+	chunkDuration       time.Duration
+	usePostgresBatching bool
+	// Global vars
+	bufPool          sync.Pool
+	batchChan        chan *bytes.Buffer
+	batchChanBin     chan []FlatPoint
+	batchChanBatch   chan []string
+	inputDone        chan struct{}
+	format           string
+	formatProcessors procInfo
+	valuesRead       int64
+	itemsRead        int64
+	bytesRead        int64
+	scanFinished     bool
+}
+
+var load = &TimescaleBulkLoad{}
+
 // Parse args:
 func init() {
-	flag.StringVar(&daemonUrl, "url", "localhost:5432", "Timescale DB URL.")
-	flag.StringVar(&psUser, "user", "postgres", "Postgresql user")
-	flag.StringVar(&psPassword, "password", "", "Postgresql password")
-	flag.StringVar(&file, "file", "", "Input file")
-
-	flag.StringVar(&format, "format", formatChoices[1], "Input data format. One of: "+strings.Join(formatChoices, ","))
-	flag.IntVar(&batchSize, "batch-size", 100, "Batch size (input items).")
-	flag.IntVar(&workers, "workers", 1, "Number of parallel requests to make.")
-	flag.BoolVar(&usePostgresBatching, "postgresql-batching", false, "Whether to use Postgresql batching feature. Works only for '"+formatChoices[0]+"' format")
-
-	flag.BoolVar(&doLoad, "do-load", true, "Whether to write data. Set this flag to false to check input read speed.")
-	flag.BoolVar(&doDbCreate, "do-db-create", true, "Whether to create database. Set this flag to false to write data to existing database")
-	flag.DurationVar(&chunkDuration, "chunk-interval", time.Hour*24, "Timescale chunk interval")
-
-	flag.StringVar(&reportDatabase, "report-database", "database_benchmarks", "Database name where to store result metrics")
-	flag.StringVar(&reportHost, "report-host", "", "Host to send result metrics")
-	flag.StringVar(&reportUser, "report-user", "", "User for host to send result metrics")
-	flag.StringVar(&reportPassword, "report-password", "", "User password for Host to send result metrics")
-	flag.StringVar(&reportTagsCSV, "report-tags", "", "Comma separated k:v tags to send  alongside result metrics")
+	bulk_load.Runner.Init(100)
+	load.Init()
 
 	flag.Parse()
 
-	if _, ok := processes[format]; !ok {
-		log.Fatal("Invalid format choice '", format, "'. Available are: ", strings.Join(formatChoices, ","))
-	}
-	if usePostgresBatching {
-		if format == formatChoices[1] {
-			log.Fatal("Cannot use Postgresql batching when using format '", formatChoices[1], "'")
-		} else {
-			format = "timescaledb-sql-batching"
-		}
-	}
-	if reportHost != "" {
-		fmt.Printf("results report destination: %v\n", reportHost)
-		fmt.Printf("results report database: %v\n", reportDatabase)
-
-		var err error
-		reportHostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("os.Hostname() error: %s", err.Error())
-		}
-		fmt.Printf("hostname for results report: %v\n", reportHostname)
-
-		if reportTagsCSV != "" {
-			pairs := strings.Split(reportTagsCSV, ",")
-			for _, pair := range pairs {
-				fields := strings.SplitN(pair, ":", 2)
-				tagpair := [2]string{fields[0], fields[1]}
-				reportTags = append(reportTags, tagpair)
-			}
-		}
-		fmt.Printf("results report tags: %v\n", reportTags)
-	}
-
-	if file != "" {
-		if f, err := os.Open(file); err == nil {
-			sourceReader = f
-		} else {
-			log.Fatalf("Error opening %s: %v\n", file, err)
-		}
-	}
-	if sourceReader == nil {
-		sourceReader = os.Stdin
-	}
+	bulk_load.Runner.Validate()
+	load.Validate()
 
 }
 
 func main() {
-	if doLoad && doDbCreate {
-		createDatabase(daemonUrl)
-	}
+	bulk_load.Runner.Run(load)
+}
 
-	bufPool = sync.Pool{
+func (l *TimescaleBulkLoad) Init() {
+	flag.StringVar(&l.daemonUrl, "url", "localhost:5432", "Timescale DB URL.")
+	flag.StringVar(&l.psUser, "user", "postgres", "Postgresql user")
+	flag.StringVar(&l.psPassword, "password", "", "Postgresql password")
+	flag.StringVar(&l.format, "format", formatChoices[1], "Input data format. One of: "+strings.Join(formatChoices, ","))
+	flag.BoolVar(&l.usePostgresBatching, "postgresql-batching", false, "Whether to use Postgresql batching feature. Works only for '"+formatChoices[0]+"' format")
+	flag.DurationVar(&l.chunkDuration, "chunk-interval", time.Hour*24, "Timescale chunk interval")
+}
+
+func (l *TimescaleBulkLoad) Validate() {
+	if _, ok := processes[l.format]; !ok {
+		log.Fatal("Invalid format choice '", l.format, "'. Available are: ", strings.Join(formatChoices, ","))
+	}
+	if l.usePostgresBatching {
+		if l.format == formatChoices[1] {
+			log.Fatal("Cannot use Postgresql batching when using format '", formatChoices[1], "'")
+		} else {
+			l.format = "timescaledb-sql-batching"
+		}
+	}
+}
+
+func (l *TimescaleBulkLoad) CreateDb() {
+	l.createDatabase(l.daemonUrl)
+}
+
+func (l *TimescaleBulkLoad) PrepareWorkers() {
+	l.bufPool = sync.Pool{
 		New: func() interface{} {
 			return bytes.NewBuffer(make([]byte, 0, 4*1024*1024))
 		},
 	}
 
-	batchChan = make(chan *bytes.Buffer, workers)
-	batchChanBin = make(chan []FlatPoint, workers)
-	batchChanBatch = make(chan []string, workers)
-	inputDone = make(chan struct{})
+	l.batchChan = make(chan *bytes.Buffer, bulk_load.Runner.Workers)
+	l.batchChanBin = make(chan []FlatPoint, bulk_load.Runner.Workers)
+	l.batchChanBatch = make(chan []string, bulk_load.Runner.Workers)
+	l.inputDone = make(chan struct{})
 
-	procs := processes[format]
+	l.formatProcessors = processes[l.format]
 
-	procReads := make([]int64, workers)
-	for i := 0; i < workers; i++ {
-		workersGroup.Add(1)
-		var conn *pgx.Conn
-		var err error
-		if doLoad {
-			hostPort := strings.Split(daemonUrl, ":")
-			port, _ := strconv.Atoi(hostPort[1])
-			conn, err = pgx.Connect(pgx.ConnConfig{
-				Host:     hostPort[0],
-				Port:     uint16(port),
-				User:     psUser,
-				Password: psPassword,
-				Database: DatabaseName,
-			})
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		go func(ind int, connection *pgx.Conn) {
-			if doLoad {
-				defer connection.Close()
-			}
-			procReads[ind] = procs.process(connection)
-		}(i, conn)
-	}
+}
 
-	start := time.Now()
-	itemsRead, bytesRead, valuesRead := procs.scan(batchSize, sourceReader)
+func (l *TimescaleBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
+	return l
+}
 
-	<-inputDone
-	close(batchChan)
-	close(batchChanBin)
-	close(batchChanBatch)
-	workersGroup.Wait()
-	end := time.Now()
-	took := end.Sub(start)
-	itemsRate := float64(itemsRead) / float64(took.Seconds())
-	bytesRate := float64(bytesRead) / float64(took.Seconds())
+func (l *TimescaleBulkLoad) GetScanner() bulk_load.Scanner {
+	return l
+}
 
-	valuesRate := float64(valuesRead) / float64(took.Seconds())
+func (l *TimescaleBulkLoad) SyncEnd() {
+	<-l.inputDone
+	close(l.batchChan)
+	close(l.batchChanBin)
+	close(l.batchChanBatch)
+}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/sec,  %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), workers, itemsRate, valuesRate, bytesRate/(1<<20))
-	if file != "" {
-		sourceReader.Close()
-	}
+func (l *TimescaleBulkLoad) CleanUp() {
 
-	if reportHost != "" && doLoad {
-		reportTags = append(reportTags, [2]string{"format", format})
-		reportTags = append(reportTags, [2]string{"postgresql_batching", strconv.FormatBool(usePostgresBatching)})
-		reportTags = append(reportTags, [2]string{"chunk_interval", chunkDuration.String()})
-		reportParams := &report.LoadReportParams{
-			ReportParams: report.ReportParams{
-				DBType:             "TimeScaleDB",
-				ReportDatabaseName: reportDatabase,
-				ReportHost:         reportHost,
-				ReportUser:         reportUser,
-				ReportPassword:     reportPassword,
-				ReportTags:         reportTags,
-				Hostname:           reportHostname,
-				DestinationUrl:     daemonUrl,
-				Workers:            workers,
-				ItemLimit:          -1,
-			},
-			IsGzip:    false,
-			BatchSize: batchSize,
-		}
-		err := report.ReportLoadResult(reportParams, itemsRead, valuesRate, bytesRate, took)
+}
 
+func (l *TimescaleBulkLoad) UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal) {
+	reportTags = [][2]string{{"format", l.format}}
+	reportTags = append(reportTags, [2]string{"postgresql_batching", strconv.FormatBool(l.usePostgresBatching)})
+	reportTags = append(reportTags, [2]string{"chunk_interval", l.chunkDuration.String()})
+	params.DBType = "TimeScaleDB"
+	params.DestinationUrl = l.daemonUrl
+	return
+}
+
+func (l *TimescaleBulkLoad) PrepareProcess(i int) {
+
+}
+
+func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
+	var conn *pgx.Conn
+	var err error
+	if bulk_load.Runner.DoLoad {
+		hostPort := strings.Split(l.daemonUrl, ":")
+		port, _ := strconv.Atoi(hostPort[1])
+		conn, err = pgx.Connect(pgx.ConnConfig{
+			Host:     hostPort[0],
+			Port:     uint16(port),
+			User:     l.psUser,
+			Password: l.psPassword,
+			Database: DatabaseName,
+		})
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
+
+	err = l.formatProcessors.process(l, conn, waitGroup)
+
+	if bulk_load.Runner.DoLoad {
+		conn.Close()
+	}
+	return err
+}
+
+func (l *TimescaleBulkLoad) AfterRunProcess(i int) {
+
+}
+
+func (l *TimescaleBulkLoad) EmptyBatchChanel() {
+	for range l.batchChan {
+		//read out remaining batches
+	}
+}
+
+func (l *TimescaleBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
+	l.formatProcessors.scan(l, r, syncChanDone)
+}
+
+func (l *TimescaleBulkLoad) IsScanFinished() bool {
+	return l.scanFinished
+}
+
+func (l *TimescaleBulkLoad) GetReadStatistics() (itemsRead, bytesRead, valuesRead int64) {
+	itemsRead = l.itemsRead
+	bytesRead = l.bytesRead
+	valuesRead = l.valuesRead
+	return
 }
 
 // scan reads lines from stdin. It expects input in the postgresql sql format.
-func scan(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
+func (l *TimescaleBulkLoad) scan(reader io.Reader, syncChanDone chan int) {
 	var n int
-	var linesRead, bytesRead int64
 	var totalPoints, totalValues int64
+	var err error
 
-	buff := bufPool.Get().(*bytes.Buffer)
+	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
+
+	buff := l.bufPool.Get().(*bytes.Buffer)
 	newline := []byte("\n")
 
 	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
+	var deadline time.Time
+	if bulk_load.Runner.TimeLimit > 0 {
+		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
+	}
+outer:
 	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, common.DatasetSizeMarker) {
-			parts := common.DatasetSizeMarkerRE.FindAllStringSubmatch(line, -1)
-			if parts == nil || len(parts[0]) != 3 {
-				log.Fatalf("Incorrent number of matched groups: %#v", parts)
-			}
-			if i, err := strconv.Atoi(parts[0][1]); err == nil {
-				totalPoints = int64(i)
-			} else {
-				log.Fatal(err)
-			}
-			if i, err := strconv.Atoi(parts[0][2]); err == nil {
-				totalValues = int64(i)
-			} else {
-				log.Fatal(err)
-			}
+		totalPoints, totalValues, err = common.CheckTotalValues(scanner.Text())
+		if totalPoints > 0 || totalValues > 0 {
 			continue
 		}
-		linesRead++
+		if err != nil {
+			log.Fatal(err)
+		}
+		l.itemsRead++
 
 		buff.Write(scanner.Bytes())
 		buff.Write(newline)
 
 		n++
-		if n >= itemsPerBatch {
-			bytesRead += int64(buff.Len())
-			batchChan <- buff
-			buff = bufPool.Get().(*bytes.Buffer)
+		if n >= bulk_load.Runner.BatchSize {
+			l.bytesRead += int64(buff.Len())
+			l.batchChan <- buff
+			buff = l.bufPool.Get().(*bytes.Buffer)
 			n = 0
+			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
+				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
+				break outer
+			}
+		}
+		select {
+		case <-syncChanDone:
+			break outer
+		default:
 		}
 	}
 
@@ -292,31 +272,41 @@ func scan(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChan <- buff
+		l.batchChan <- buff
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
+	close(l.inputDone)
 
-	if linesRead != totalPoints {
-		log.Fatalf("Incorrent number of read points: %d, expected: %d:", linesRead, totalPoints)
+	l.valuesRead = totalValues
+	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+		if !bulk_load.Runner.HasEndedPrematurely() {
+			log.Fatalf("Incorrent number of read points: %d, expected: %d:", l.itemsRead, totalPoints)
+		} else {
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+		}
 	}
+	l.scanFinished = true
 
-	// The timescaledb format uses 1 line per item:
-	itemsRead := linesRead
-
-	return itemsRead, bytesRead, totalValues
 }
 
 // scan reads lines from stdin. It expects input in the postgresql sql format.
-func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
+func (l *TimescaleBulkLoad) scanBatch(reader io.Reader, syncChanDone chan int) {
 	var n int
-	var linesRead, bytesRead int64
 	var err error
 	var totalPoints, totalValues int64
+	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
 
 	scanner := bufio.NewScanner(bufio.NewReaderSize(reader, 4*1024*1024))
-	var buff = make([]string, 0, itemsPerBatch)
+	var buff = make([]string, 0, bulk_load.Runner.BatchSize)
+	var deadline time.Time
+	if bulk_load.Runner.TimeLimit > 0 {
+		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
+	}
+outer:
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -328,14 +318,23 @@ func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 			log.Fatal(err)
 		}
 
-		linesRead++
+		l.itemsRead++
 		buff = append(buff, line)
-		bytesRead += int64(len(line))
+		l.bytesRead += int64(len(line))
 		n++
-		if n >= itemsPerBatch {
-			batchChanBatch <- buff
-			buff = make([]string, 0, itemsPerBatch)
+		if n >= bulk_load.Runner.BatchSize {
+			l.batchChanBatch <- buff
+			buff = make([]string, 0, bulk_load.Runner.BatchSize)
 			n = 0
+			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
+				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
+				break outer
+			}
+		}
+		select {
+		case <-syncChanDone:
+			break outer
+		default:
 		}
 	}
 
@@ -345,43 +344,53 @@ func scanBatch(itemsPerBatch int, reader io.Reader) (int64, int64, int64) {
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChanBatch <- buff
+		l.batchChanBatch <- buff
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
+	close(l.inputDone)
 
-	if linesRead != totalPoints {
-		log.Fatalf("Incorrent number of read points: %d, expected: %d:", linesRead, totalPoints)
+	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
+		if !bulk_load.Runner.HasEndedPrematurely() {
+			log.Fatalf("Incorrent number of read points: %d, expected: %d:", l.itemsRead, totalPoints)
+		} else {
+			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
+		}
 	}
-
-	// The timescaledb format uses 1 line per item:
-	itemsRead := linesRead
-
-	return itemsRead, bytesRead, totalValues
+	l.valuesRead = totalValues
+	l.scanFinished = true
 }
 
 // scan reads data from stdin. It expects gop encoded points
-func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64, int64) {
+func (l *TimescaleBulkLoad) scanBin(reader io.Reader, syncChanDone chan int) {
 
 	var n int
-	var itemsRead, bytesRead int64
 	var err error
 	var lastMeasurement string
 	var p FlatPoint
 	var tsfp timescale_serialization.FlatPoint
 	var size uint64
 
-	buff := make([]FlatPoint, 0, itemsPerBatch)
+	l.scanFinished = false
+	l.itemsRead = 0
+	l.bytesRead = 0
+	l.valuesRead = 0
+
+	buff := make([]FlatPoint, 0, bulk_load.Runner.BatchSize)
 	byteBuff := make([]byte, 100*1024)
-	reader := bufio.NewReaderSize(origReader, 4*1024*1024)
+	buffReader := bufio.NewReaderSize(reader, 4*1024*1024)
+	var deadline time.Time
+	if bulk_load.Runner.TimeLimit > 0 {
+		deadline = time.Now().Add(bulk_load.Runner.TimeLimit)
+	}
+outer:
 	for {
-		err = binary.Read(reader, binary.LittleEndian, &size)
+		err = binary.Read(buffReader, binary.LittleEndian, &size)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Fatalf("cannot read size of %d item: %v\n", itemsRead, err)
+			log.Fatalf("cannot read size of %d item: %v\n", l.itemsRead, err)
 		}
 
 		if uint64(cap(byteBuff)) < size {
@@ -392,7 +401,7 @@ func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64, int64) {
 		for i := 10; i > 0; i-- {
 			r, err := reader.Read(byteBuff[bytesPerItem:size])
 			if err != nil && err != io.EOF {
-				log.Fatalf("cannot read %d item: %v\n", itemsRead, err)
+				log.Fatalf("cannot read %d item: %v\n", l.itemsRead, err)
 			}
 			bytesPerItem += uint64(r)
 			if bytesPerItem == size {
@@ -401,14 +410,14 @@ func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64, int64) {
 
 		}
 		if bytesPerItem != size {
-			log.Fatalf("cannot read %d item: read %d, expected %d\n", itemsRead, bytesPerItem, size)
+			log.Fatalf("cannot read %d item: read %d, expected %d\n", l.itemsRead, bytesPerItem, size)
 		}
 		err = tsfp.Unmarshal(byteBuff[:size])
 		if err != nil {
-			log.Fatalf("cannot unmarshall %d item: %v\n", itemsRead, err)
+			log.Fatalf("cannot unmarshall %d item: %v\n", l.itemsRead, err)
 		}
 
-		bytesRead += int64(size) + 8
+		l.bytesRead += int64(size) + 8
 
 		p.MeasurementName = tsfp.MeasurementName
 		p.Columns = tsfp.Columns
@@ -425,78 +434,87 @@ func scanBin(itemsPerBatch int, origReader io.Reader) (int64, int64, int64) {
 				p.Values[i] = f.StringVal
 				break
 			default:
-				log.Fatalf("invalid type of %d item: %d", itemsRead, f.Type)
+				log.Fatalf("invalid type of %d item: %d", l.itemsRead, f.Type)
 			}
 		}
+		l.valuesRead += int64(len(tsfp.Values))
 
 		//log.Printf("Decoded %d point\n",itemsRead+1)
-		newMeasurement := itemsRead > 1 && p.MeasurementName != lastMeasurement
+		newMeasurement := l.itemsRead > 1 && p.MeasurementName != lastMeasurement
 		if !newMeasurement {
 			buff = append(buff, p)
-			itemsRead++
+			l.itemsRead++
 			n++
 		}
-		if n > 0 && (n >= itemsPerBatch || newMeasurement) {
-			batchChanBin <- buff
+		if n > 0 && (n >= bulk_load.Runner.BatchSize || newMeasurement) {
+			l.batchChanBin <- buff
 			n = 0
 			buff = nil
-			buff = make([]FlatPoint, 0, itemsPerBatch)
+			buff = make([]FlatPoint, 0, bulk_load.Runner.BatchSize)
+			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
+				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
+				break outer
+			}
 		}
 		if newMeasurement {
 			buff = append(buff, p)
-			itemsRead++
+			l.itemsRead++
 			n++
 		}
 		lastMeasurement = p.MeasurementName
 		p = FlatPoint{}
 		tsfp = timescale_serialization.FlatPoint{}
+		select {
+		case <-syncChanDone:
+			break outer
+		default:
+		}
 	}
 
 	if err != nil && err != io.EOF {
-		log.Fatalf("Error reading input after %d items: %s", itemsRead, err.Error())
+		log.Fatalf("Error reading input after %d items: %s", l.itemsRead, err.Error())
 	}
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		batchChanBin <- buff
+		l.batchChanBin <- buff
 		buff = nil
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
-	close(inputDone)
-
-	return itemsRead, bytesRead, int64(float64(itemsRead) * ValuesPerMeasurement)
+	close(l.inputDone)
+	l.scanFinished = true
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatches(conn *pgx.Conn) int64 {
-	var total int64
-	for batch := range batchChan {
-		if !doLoad {
+func (l *TimescaleBulkLoad) processBatches(conn *pgx.Conn, workersGroup *sync.WaitGroup) error {
+	var rerr error
+	for batch := range l.batchChan {
+		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 
 		// Write the batch.
 		_, err := conn.Exec(string(batch.Bytes()))
 		if err != nil {
-			log.Fatalf("Error writing: %s\n", err.Error())
+			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
+			break
 		}
 
 		// Return the batch buffer to the pool.
 		batch.Reset()
-		bufPool.Put(batch)
-		total += int64(batch.Len())
+		l.bufPool.Put(batch)
 	}
 	workersGroup.Done()
-	return total
+	return rerr
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatchesBatch(conn *pgx.Conn) int64 {
-	var total int64
+func (l *TimescaleBulkLoad) processBatchesBatch(conn *pgx.Conn, workersGroup *sync.WaitGroup) error {
 	var batches int64
-	for batch := range batchChanBatch {
-		if !doLoad {
+	var rerr error
+	for batch := range l.batchChanBatch {
+		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 
@@ -509,22 +527,22 @@ func processBatchesBatch(conn *pgx.Conn) int64 {
 		err := sqlBatch.Send(context.Background(), nil)
 
 		if err != nil {
-			log.Fatalf("Error writing: %s\n", err.Error())
+			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
+			break
 		}
 
 		for i := 0; i < len(batch); i++ {
 			_, err = sqlBatch.ExecResults()
 			if err != nil {
-				log.Fatalf("Error line %d of batch %d: %s\n", i, batch, err.Error())
+				rerr = fmt.Errorf("Error line %d of batch %d: %s\n", i, batch, err.Error())
+				break
 			}
 		}
 		sqlBatch.Close()
-		// Return the batch buffer to the pool.
-		total += int64(len(batch))
 		batches++
 	}
 	workersGroup.Done()
-	return total
+	return rerr
 }
 
 // CopyFromPoint is implementation of the interface CopyFromSource  used by *Conn.CopyFrom as the source for copy data.
@@ -563,11 +581,11 @@ func (c *CopyFromPoint) Position() int {
 }
 
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
-func processBatchesBin(conn *pgx.Conn) int64 {
+func (l *TimescaleBulkLoad) processBatchesBin(conn *pgx.Conn, workersGroup *sync.WaitGroup) error {
 	n := 0
-	var total int64
-	for batch := range batchChanBin {
-		if !doLoad {
+	var rerr error
+	for batch := range l.batchChanBin {
+		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
@@ -576,16 +594,17 @@ func processBatchesBin(conn *pgx.Conn) int64 {
 		rows, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
-			log.Fatalf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
+			rerr = fmt.Errorf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
+			break
 		}
 		if rows != len(batch) {
-			log.Printf("Problem writing of %d batch: Written only %d rows of %d", n, rows, len(batch))
+			rerr = fmt.Errorf("Problem writing of %d batch: Written only %d rows of %d", n, rows, len(batch))
+			break
 		}
-		total += int64(len(batch))
 		n++
 	}
 	workersGroup.Done()
-	return total
+	return rerr
 }
 
 const createDatabaseSql = "create database " + DatabaseName + ";"
@@ -675,13 +694,13 @@ var iotCreateIndexSql = []string{
 	"CREATE index window_state_room_home_index on window_state_room(home_id, time DESC);",
 }
 
-func createDatabase(daemon_url string) {
+func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 	hostPort := strings.Split(daemon_url, ":")
 	port, _ := strconv.Atoi(hostPort[1])
 	conn, err := pgx.Connect(pgx.ConnConfig{
 		Host: hostPort[0],
 		Port: uint16(port),
-		User: psUser,
+		User: l.psUser,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -694,7 +713,7 @@ func createDatabase(daemon_url string) {
 	conn, err = pgx.Connect(pgx.ConnConfig{
 		Host:     hostPort[0],
 		Port:     uint16(port),
-		User:     psUser,
+		User:     l.psUser,
 		Database: DatabaseName,
 	})
 
@@ -734,13 +753,13 @@ func createDatabase(daemon_url string) {
 		}
 	}
 	for _, sql := range devopsCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)
 		}
