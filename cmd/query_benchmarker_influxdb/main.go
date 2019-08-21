@@ -173,7 +173,7 @@ loop:
 		qind++
 		select {
 		case <-closeChan:
-			fmt.Printf("Received finish request\n")
+			log.Println("Received finish request")
 			break loop
 		default:
 		}
