@@ -175,6 +175,8 @@ type Collector struct {
 	baseUri          string
 	encodedBasicAuth string
 	dbName           string
+	//1,2
+	influxDBVersion int
 
 	buf *bytes.Buffer
 }
@@ -198,6 +200,26 @@ func NewCollector(influxhost, dbname, userName, password string) *Collector {
 		writeUri:         influxhost + "/write?db=" + url.QueryEscape(dbname),
 		encodedBasicAuth: encodedBasicAuth,
 		dbName:           dbname,
+		influxDBVersion:  1,
+	}
+}
+
+func NewCollectorV2(influxhost, orgId, bucketId, authToken string) *Collector {
+	return &Collector{
+		buf:    new(bytes.Buffer),
+		Points: make([]*Point, 0, 0),
+		client: &fasthttp.Client{
+			Name: "collector",
+			TLSConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			MaxIdleConnDuration: 90 * time.Second,
+		},
+		baseUri:          influxhost,
+		writeUri:         influxhost + "/api/v2/write?org=" + orgId + "&bucket=" + bucketId,
+		encodedBasicAuth: authToken,
+		dbName:           bucketId,
+		influxDBVersion:  2,
 	}
 }
 
@@ -218,25 +240,28 @@ func (c *Collector) PrepBatch() {
 }
 
 func (c *Collector) CreateDatabase() error {
-	req := fasthttp.AcquireRequest()
-	req.Header.SetMethod("POST")
-	req.Header.SetRequestURI(c.baseUri + "/query?q=create%20database%20" + url.QueryEscape(c.dbName))
-	if c.encodedBasicAuth != "" {
-		req.Header.Set("Authorization", c.encodedBasicAuth)
+	var err error
+	err = nil
+	if c.influxDBVersion == 1 {
+		req := fasthttp.AcquireRequest()
+		req.Header.SetMethod("POST")
+		req.Header.SetRequestURI(c.baseUri + "/query?q=create%20database%20" + url.QueryEscape(c.dbName))
+		if c.encodedBasicAuth != "" {
+			req.Header.Set("Authorization", c.encodedBasicAuth)
+		}
+		req.SetBody(c.buf.Bytes())
+
+		// Perform the request while tracking latency:
+		resp := fasthttp.AcquireResponse()
+		err = c.client.Do(req, resp)
+
+		if resp.StatusCode() != fasthttp.StatusOK {
+			return fmt.Errorf("collector error: unexpected status code %d", resp.StatusCode())
+		}
+
+		fasthttp.ReleaseResponse(resp)
+		fasthttp.ReleaseRequest(req)
 	}
-	req.SetBody(c.buf.Bytes())
-
-	// Perform the request while tracking latency:
-	resp := fasthttp.AcquireResponse()
-	err := c.client.Do(req, resp)
-
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("collector error: unexpected status code %d", resp.StatusCode())
-	}
-
-	fasthttp.ReleaseResponse(resp)
-	fasthttp.ReleaseRequest(req)
-
 	return err
 }
 
@@ -245,7 +270,11 @@ func (c *Collector) SendBatch() error {
 	req.Header.SetMethod("POST")
 	req.Header.SetRequestURI(c.writeUri)
 	if c.encodedBasicAuth != "" {
-		req.Header.Set("Authorization", c.encodedBasicAuth)
+		if c.influxDBVersion == 1 {
+			req.Header.Set("Authorization", c.encodedBasicAuth)
+		} else {
+			req.Header.Add("Authorization", fmt.Sprintf("Token %s", c.encodedBasicAuth))
+		}
 	}
 	req.SetBody(c.buf.Bytes())
 
