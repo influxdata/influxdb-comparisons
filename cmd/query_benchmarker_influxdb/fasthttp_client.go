@@ -107,7 +107,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 					return
 				}
 
-				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty.String())
+				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty)
 				if err != nil {
 					return
 				}

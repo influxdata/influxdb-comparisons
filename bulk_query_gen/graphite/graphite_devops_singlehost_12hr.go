@@ -3,7 +3,7 @@ package graphite
 import "time"
 import bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 
-// GraphiteDevopsSingleHost12hr produces Influx-specific queries for the devops single-host case over a 12hr period.
+// InfluxDevopsSingleHost12hr produces Influx-specific queries for the devops single-host case over a 12hr period.
 type GraphiteDevopsSingleHost12hr struct {
 	GraphiteDevops
 }
