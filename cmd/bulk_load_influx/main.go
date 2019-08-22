@@ -276,8 +276,8 @@ func (l *InfluxBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.valuesRead = 0
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
-	var n, values int
-	var totalPoints, totalValues int64
+	var n, values  int
+	var totalPoints, totalValues, totalValuesCounted int64
 
 	newline := []byte("\n")
 	var deadline time.Time
@@ -301,7 +301,7 @@ outer:
 		} else {
 			fieldCnt := countFields(line)
 			values += fieldCnt
-			totalValues += int64(fieldCnt)
+			totalValuesCounted += int64(fieldCnt)
 		}
 		if err != nil {
 			log.Fatal(err)
@@ -362,12 +362,13 @@ outer:
 	close(l.inputDone)
 
 	l.valuesRead = totalValues
+	if totalValues == 0 {
+		l.valuesRead = totalValuesCounted
+	}
 	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !bulk_load.Runner.HasEndedPrematurely() {
 			log.Fatalf("Incorrent number of read points: %d, expected: %d:", l.itemsRead, totalPoints)
-		} /*else { // totalValues are up-to-date
-			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
-		}*/
+		}
 	}
 	l.scanFinished = true
 }
@@ -456,7 +457,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(batch.Values) // float64(batch.Items) * bulk_load.ValuesPerMeasurement
+		valuesWritten := float64(batch.Values)
 
 		// Apply ingest rate control if set
 		if l.ingestRateLimit > 0 {
