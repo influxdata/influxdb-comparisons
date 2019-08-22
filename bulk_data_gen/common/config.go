@@ -7,7 +7,9 @@ import (
 	"github.com/pelletier/go-toml"
 	"log"
 	"math/rand"
+	"net/http"
 	"reflect"
+	"strings"
 )
 
 type Source interface{}
@@ -116,19 +118,42 @@ func (c *ExternalConfig) GetFieldValue(measurementName, fieldKey string, failIfN
 }
 
 func NewConfig(path string) (*ExternalConfig, error) {
-	toml, err := toml.LoadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("file load failed: %v", err)
+	var tree *toml.Tree
+	var err error
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path,"https://") {
+		tree, err = LoadURL(path)
+	} else {
+		tree, err = toml.LoadFile(path)
 	}
-	obj := toml.ToMap()["measurements"]
+	if err != nil {
+		return nil, fmt.Errorf("config loading failed: %v", err)
+	}
+	obj := tree.ToMap()["measurements"]
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return nil, fmt.Errorf("marshall failed: %v", err)
+		return nil, fmt.Errorf("config marshall failed: %v", err)
 	}
 	config := ExternalConfig{}
 	err = json.Unmarshal(b, &config.measurements)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshall failed: %v", err)
+		return nil, fmt.Errorf("config unmarshall failed: %v", err)
 	}
 	return &config, nil
+}
+
+// LoadURL creates a Tree from a URL resource.
+func LoadURL(url string) (tree *toml.Tree, err error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("config loading failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		tree, err := toml.LoadReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("config parsing failed: %v", err)
+		}
+		return tree, nil
+	}
+	return nil, fmt.Errorf("config loading failed: response status code is: %s", resp.Status)
 }
