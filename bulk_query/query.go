@@ -310,7 +310,7 @@ func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
 	go func() {
 		for {
 			scanner.RunScan(qr, q.scanClose)
-			cont := !(q.responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached
+			cont := !(q.responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached && !q.sigtermReceived
 			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
 			if cont {
 				qr = bytes.NewReader(queriesData)
