@@ -36,6 +36,9 @@ func NewDiskIOMeasurement(start time.Time) *DiskIOMeasurement {
 	}
 
 	serial := []byte(fmt.Sprintf("%03d-%03d-%03d", rand.Intn(1000), rand.Intn(1000), rand.Intn(1000)))
+	if Config != nil { // partial override from external config
+		serial = Config.GetTagBytesValue(DiskIOByteString, SerialByteString, true, serial)
+	}
 	return &DiskIOMeasurement{
 		serial: serial,
 

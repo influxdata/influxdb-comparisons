@@ -76,6 +76,10 @@ func NewRedisMeasurement(start time.Time) *RedisMeasurement {
 
 	serverName := []byte(fmt.Sprintf("redis_%d", rand.Intn(100000)))
 	port := []byte(fmt.Sprintf("%d", rand.Intn(20000)+1024))
+	if Config != nil { // partial override from external config
+		serverName = Config.GetTagBytesValue(RedisByteString, RedisTags[1], true, serverName)
+		port = Config.GetTagBytesValue(RedisByteString, RedisTags[0], true, port)
+	}
 	return &RedisMeasurement{
 		port:       port,
 		serverName: serverName,

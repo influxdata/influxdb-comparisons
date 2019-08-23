@@ -15,6 +15,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -58,7 +59,7 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
-	flag.IntVar(&b.initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host")
+	flag.IntVar(&b.initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host (deprecated)")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 }
 
@@ -173,7 +174,7 @@ loop:
 		qind++
 		select {
 		case <-closeChan:
-			log.Print("Received finish request")
+			log.Println("Received finish request")
 			break loop
 		default:
 		}
@@ -205,6 +206,9 @@ func (b *InfluxQueryBenchmarker) processQueries(w HTTPClient, workersGroup *sync
 			for _, q := range queries {
 				go b.processSingleQuery(w, q, opts, errCh, doneCh, statPool, statChan)
 				queriesSeen++
+				if bulk_query.Benchmarker.GradualWorkersIncrease() {
+					time.Sleep(time.Duration(rand.Int63n(150)) * time.Millisecond) // random sleep 0-150ms
+				}
 			}
 
 		loop:

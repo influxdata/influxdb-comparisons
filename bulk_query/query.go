@@ -3,12 +3,16 @@ package bulk_query
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
+	"net/http"
 	"net/rpc"
 	"os"
 	"runtime/pprof"
@@ -53,6 +57,8 @@ type QueryBenchmarker struct {
 	gradualWorkersMax      int
 	increaseInterval       time.Duration
 	notificationHostPort   string
+	notificationGroup      string
+	notificationListenPort int
 	trendSamples           int
 	movingAverageInterval  time.Duration
 	reportTelemetry        bool
@@ -70,6 +76,10 @@ type QueryBenchmarker struct {
 	movingAverageStat *TimedStatGroup
 	isBurnIn          bool
 	sourceReader      *os.File
+	scanClose         chan int
+	scanCloseMutex    *sync.Mutex
+	notificationServer *http.Server
+	sigtermReceived   bool
 }
 
 const (
@@ -89,6 +99,10 @@ func (q QueryBenchmarker) Limit() int64 {
 
 func (q QueryBenchmarker) BatchSize() int {
 	return q.batchSize
+}
+
+func (q QueryBenchmarker) GradualWorkersIncrease() bool {
+	return q.gradualWorkersIncrease
 }
 
 func (q QueryBenchmarker) PrettyPrintResponses() bool {
@@ -124,6 +138,8 @@ func (q *QueryBenchmarker) Init() {
 	flag.DurationVar(&q.testDuration, "benchmark-duration", time.Second*0, "Run querying continually for defined time interval, instead of stopping after all queries have been used")
 	flag.DurationVar(&q.responseTimeLimit, "response-time-limit", time.Second*0, "Query response time limit, after which will client stop.")
 	flag.StringVar(&q.notificationHostPort, "notification-target", "", "host:port of finish message notification receiver")
+	flag.StringVar(&q.notificationGroup, "notification-group", "", "Terminate message notification siblings (comma-separated host:port list of other query benchmarkers)")
+	flag.IntVar(&q.notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely terminate benchmark (use -1 to disable it)")
 	flag.IntVar(&q.trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
 	flag.DurationVar(&q.movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
 	flag.StringVar(&q.file, "file", "", "Input file")
@@ -193,6 +209,26 @@ func (q *QueryBenchmarker) Validate() {
 	}
 	if q.sourceReader == nil {
 		q.sourceReader = os.Stdin
+	}
+
+	if q.notificationHostPort != "" {
+		fmt.Printf("notification target: %v\n", q.notificationHostPort)
+	}
+	if q.notificationGroup != "" {
+		fmt.Printf("notification group: %v\n", q.notificationGroup)
+	}
+	if q.notificationListenPort > 0 { // copied from bulk_load_influx/main.go
+		notif := new(bulk_load.NotifyReceiver)
+		rpc.Register(notif)
+		rpc.HandleHTTP()
+		bulk_load.RegisterHandler(q.notifyHandler)
+		l, e := net.Listen("tcp", fmt.Sprintf(":%d", q.notificationListenPort))
+		if e != nil {
+			log.Fatal("listen error:", e)
+		}
+		log.Println("Listening for incoming notification")
+		q.notificationServer = &http.Server{}
+		go q.notificationServer.Serve(l)
 	}
 }
 
@@ -264,16 +300,17 @@ func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
 
 	wallStart := time.Now()
 
-	scanRes := make(chan int)
-	scanClose := make(chan int)
+	scanRes := make(chan int, 1)
+	q.scanCloseMutex = &sync.Mutex{}
+	q.scanClose = make(chan int, 1)
 	responseTimeLimitReached := false
 	timeoutReached := false
 	timeLimit := q.testDuration.Nanoseconds() > 0
 	scanner := bulkQuery.GetScanner()
 	go func() {
 		for {
-			scanner.RunScan(qr, scanClose)
-			cont := !(q.responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached
+			scanner.RunScan(qr, q.scanClose)
+			cont := !(q.responseTimeLimit.Nanoseconds() > 0 && responseTimeLimitReached) && timeLimit && !timeoutReached && !q.sigtermReceived
 			//log.Printf("Scan done, should continue: %v, responseTimeLimit: %d, responseTimeLimitReached: %v, testDuration: %d, timeoutcheck %v", cont, responseTimeLimit, responseTimeLimitReached, testDuration, time.Now().Before(wallStart.Add(testDuration)))
 			if cont {
 				qr = bytes.NewReader(queriesData)
@@ -320,7 +357,7 @@ loop:
 		case <-responseTicker.C:
 			if !responseTimeLimitReached && q.responseTimeLimit > 0 && q.responseTimeLimit.Nanoseconds()*3 < int64(q.movingAverageStat.Avg()*1e6) {
 				responseTimeLimitReached = true
-				scanClose <- 1
+				q.stopScan()
 				respLimitms := float64(q.responseTimeLimit.Nanoseconds()) / 1e6
 				item := q.movingAverageStat.FindHistoryItemBelow(respLimitms)
 				if item == nil {
@@ -341,11 +378,7 @@ loop:
 			if timeLimit && tickerQuaters > 3 && !timeoutReached {
 				timeoutReached = true
 				log.Println("Time out reached")
-				if !scanner.IsScanFinished() {
-					scanClose <- 1
-				} else {
-					log.Println("Scan already finished")
-				}
+				q.stopScan()
 				if q.responseTimeLimit > 0 {
 					//still try to find response time limit
 					respLimitms := float64(q.responseTimeLimit.Nanoseconds()) / 1e6
@@ -365,7 +398,10 @@ loop:
 
 	}
 
-	close(scanClose)
+	q.scanCloseMutex.Lock()
+	close(q.scanClose)
+	q.scanClose = nil
+	q.scanCloseMutex.Unlock()
 	close(scanRes)
 
 	bulkQuery.CleanUp()
@@ -413,17 +449,22 @@ waitLoop:
 		fmt.Println("done shutting down telemetry.")
 	}
 
+	if q.notificationServer != nil {
+		fmt.Println("shutting down notification listener...")
+		q.notificationServer.Shutdown(context.Background())
+		fmt.Println("done shutting down notification listener.")
+	}
+
 	if q.notificationHostPort != "" {
-		client, err := rpc.DialHTTP("tcp", q.notificationHostPort)
-		if err != nil {
-			log.Println("error: dialing:", err)
-		} else {
-			var res int
-			input := 0
-			call := client.Go("NotifyReceiver.Notify", input, &res, nil)
-			if call.Error != nil {
-				log.Println("error: calling:", call.Error)
-			}
+		fmt.Printf("notify target %s...\n", q.notificationHostPort)
+		q.notify(q.notificationHostPort)
+	}
+
+	if q.notificationGroup != "" && !q.sigtermReceived {
+		siblings := strings.Split(q.notificationGroup, ",")
+		for _, sibling := range siblings {
+			fmt.Printf("notify sibling %s...\n", sibling)
+			q.notify(sibling)
 		}
 	}
 
@@ -599,5 +640,43 @@ func fprintStats(w io.Writer, statGroups StatsMap) {
 			log.Fatal(err)
 		}
 	}
+}
 
+func (q *QueryBenchmarker) stopScan() {
+	q.scanCloseMutex.Lock()
+	if q.scanClose != nil {
+		q.scanClose <- 1
+	}
+	q.scanCloseMutex.Unlock()
+}
+
+func (q *QueryBenchmarker) notify(target string) {
+	client, err := rpc.DialHTTP("tcp", target)
+	if err != nil {
+		log.Printf("error dialing %s: %v\n", target, err)
+	} else {
+		var res int
+		input := 0
+		call := client.Go("NotifyReceiver.Notify", input, &res, nil)
+		if call.Error != nil {
+			log.Printf("error calling %s: %v\n", target, call.Error)
+		}
+		client.Close()
+	}
+}
+
+func (q *QueryBenchmarker) notifyHandler(arg int) (int, error) {
+	var e error
+	if arg == 0 {
+		log.Println("Received external terminate request")
+		if !q.sigtermReceived {
+			q.sigtermReceived = true
+			q.stopScan()
+		} else {
+			log.Println("External terminate request already received")
+		}
+	} else {
+		e = fmt.Errorf("unknown notification code: %d", arg)
+	}
+	return 0, e
 }

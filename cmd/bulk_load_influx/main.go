@@ -39,6 +39,7 @@ type InfluxBulkLoad struct {
 	replicationFactor int
 	ingestRateLimit   int
 	backoff           time.Duration
+	backoffTimeOut    time.Duration
 	useGzip           bool
 	consistency       string
 	clientIndex       int
@@ -68,6 +69,7 @@ var consistencyChoices = map[string]struct{}{
 type batch struct {
 	Buffer *bytes.Buffer
 	Items  int
+	Values int
 }
 
 var load = &InfluxBulkLoad{}
@@ -101,6 +103,7 @@ func (l *InfluxBulkLoad) Init() {
 	flag.IntVar(&l.replicationFactor, "replication-factor", 1, "Cluster replication factor (only applies to clustered databases).")
 	flag.StringVar(&l.consistency, "consistency", "one", "Write consistency. Must be one of: any, one, quorum, all.")
 	flag.DurationVar(&l.backoff, "backoff", time.Second, "Time to sleep between requests when server indicates backpressure is needed.")
+	flag.DurationVar(&l.backoffTimeOut, "backoff-timeout", time.Minute*30, "Maximum time to spent when dealing with backoff messages in one shot")
 	flag.BoolVar(&l.useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
@@ -134,6 +137,10 @@ func (l *InfluxBulkLoad) Validate() {
 		}
 	} else {
 		log.Printf("Ingestion rate control is off")
+	}
+
+	if bulk_load.Runner.TimeLimit > 0 && l.backoffTimeOut > bulk_load.Runner.TimeLimit {
+		l.backoffTimeOut = bulk_load.Runner.TimeLimit
 	}
 }
 
@@ -269,8 +276,8 @@ func (l *InfluxBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.valuesRead = 0
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
-	var n int
-	var totalPoints, totalValues int64
+	var n, values  int
+	var totalPoints, totalValues, totalValuesCounted int64
 
 	newline := []byte("\n")
 	var deadline time.Time
@@ -287,9 +294,14 @@ outer:
 			break
 		}
 
-		totalPoints, totalValues, err = common.CheckTotalValues(scanner.Text())
+		line := scanner.Text()
+		totalPoints, totalValues, err = common.CheckTotalValues(line)
 		if totalPoints > 0 || totalValues > 0 {
 			continue
+		} else {
+			fieldCnt := countFields(line)
+			values += fieldCnt
+			totalValuesCounted += int64(fieldCnt)
 		}
 		if err != nil {
 			log.Fatal(err)
@@ -306,9 +318,10 @@ outer:
 			batchItemCount = 0
 
 			l.bytesRead += int64(buf.Len())
-			l.batchChan <- batch{buf, n}
+			l.batchChan <- batch{buf, n, values}
 			buf = l.bufPool.Get().(*bytes.Buffer)
 			n = 0
+			values = 0
 
 			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
 				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
@@ -342,18 +355,19 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		l.batchChan <- batch{buf, n}
+		l.batchChan <- batch{buf, n, values}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(l.inputDone)
 
 	l.valuesRead = totalValues
+	if totalValues == 0 {
+		l.valuesRead = totalValuesCounted
+	}
 	if l.itemsRead != totalPoints { // totalPoints is unknown (0) when exiting prematurely due to time limit
 		if !bulk_load.Runner.HasEndedPrematurely() {
 			log.Fatalf("Incorrent number of read points: %d, expected: %d:", l.itemsRead, totalPoints)
-		} else {
-			totalValues = int64(float64(l.itemsRead) * bulk_load.ValuesPerMeasurement) // needed for statistics summary
 		}
 	}
 	l.scanFinished = true
@@ -383,6 +397,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 		if bulk_load.Runner.DoLoad {
 			var err error
 			sleepTime := l.backoff
+			timeStart := time.Now()
 			for {
 				if l.useGzip {
 					compressedBatch := l.bufPool.Get().(*bytes.Buffer)
@@ -417,6 +432,11 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 						log.Printf("[worker %s] sleeping on backoff response way too long (10x %v)", telemetryWorkerLabel, l.backoff)
 						sleepTime = 10 * l.backoff
 					}
+					checkTime := time.Now()
+					if timeStart.Add(l.backoffTimeOut).Before(checkTime) {
+						log.Printf("[worker %s] Spent too much time in backoff: %ds\n", telemetryWorkerLabel, int64(checkTime.Sub(timeStart).Seconds()))
+						break
+					}
 				} else {
 					backoffSrc <- false
 					break
@@ -437,7 +457,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 
 		// Normally report after each batch
 		reportStat := true
-		valuesWritten := float64(batch.Items) * bulk_load.ValuesPerMeasurement
+		valuesWritten := float64(batch.Values)
 
 		// Apply ingest rate control if set
 		if l.ingestRateLimit > 0 {
@@ -445,8 +465,8 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 			if gvCount >= l.ingestionRateGran {
 				now := time.Now()
 				elapsed := now.Sub(gvStart)
-				overdelay := (gvCount - l.ingestionRateGran) / (l.ingestionRateGran / float64(RateControlGranularity))
-				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + int64(overdelay)
+				overDelay := (gvCount - l.ingestionRateGran) / (l.ingestionRateGran / float64(RateControlGranularity))
+				remainingMs := RateControlGranularity - (elapsed.Nanoseconds() / 1e6) + int64(overDelay)
 				valuesWritten = gvCount
 				lagMillis = float64(elapsed.Nanoseconds() / 1e6)
 				if remainingMs > 0 {
@@ -523,8 +543,8 @@ func createDb(daemonUrl, dbname string, replicationFactor int, consistency strin
 	defer resp.Body.Close()
 	// does the body need to be read into the void?
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad db create")
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
 	}
 	return nil
 }
@@ -538,6 +558,10 @@ func listDatabases(daemonUrl string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listDatabases returned status code: %v", resp.StatusCode)
+	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -559,7 +583,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		return nil, err
 	}
 
-	ret := []string{}
+	var ret []string
 	for _, nestedName := range listing.Results[0].Series[0].Values {
 		name := nestedName[0]
 		// the _internal database is skipped:
@@ -569,4 +593,17 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		ret = append(ret, name)
 	}
 	return ret, nil
+}
+
+// countFields return number of fields in protocol line
+func countFields(line string) int {
+	lineParts := strings.Split(line," ") // "measurement,tags fields timestamp"
+	if len(lineParts) != 3 {
+		log.Fatalf("invalid protocol line: '%s'", line)
+	}
+	fieldCnt := strings.Count(lineParts[1], "=")
+	if fieldCnt == 0 {
+		log.Fatalf("invalid fields parts: '%s'", lineParts[1])
+	}
+	return fieldCnt
 }
