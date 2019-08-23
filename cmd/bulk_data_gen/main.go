@@ -8,6 +8,7 @@
 // OpenTSDB bulk HTTP format
 // TimescaleDB SQL INSERT and binary COPY FROM
 // Graphite plaintext format
+// Splunk JSON format
 //
 // Supported use cases:
 // Devops: scale_var is the number of hosts to simulate, with log messages
@@ -30,7 +31,7 @@ import (
 )
 
 // Output data format choices:
-var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom", "graphite-line", "graphite-pickle"}
+var formatChoices = []string{"influx-bulk", "es-bulk", "es-bulk6x", "cassandra", "mongo", "opentsdb", "timescaledb-sql", "timescaledb-copyFrom", "graphite-line", "splunk-json"}
 
 // Program option vars:
 var (
@@ -94,7 +95,7 @@ func init() {
 		}
 	}
 	if !validFormat {
-		log.Fatal("invalid format specifier")
+		log.Fatalf("invalid format specifier: %v", format)
 	}
 
 	// the default seed is the current timestamp:
@@ -203,6 +204,8 @@ func main() {
 		serializer = common.NewSerializerTimescaleBin()
 	case "graphite-line":
 		serializer = common.NewSerializerGraphiteLine()
+	case "splunk-json":
+		serializer = common.NewSerializerSplunkJson()
 	default:
 		panic("unreachable")
 	}
