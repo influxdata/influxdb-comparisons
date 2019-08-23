@@ -1,3 +1,6 @@
+// Incomplete support for schema description and data generation
+// using TOML format as supported by influx_tools in branch 1.7+
+
 package common
 
 import (
