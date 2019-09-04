@@ -62,7 +62,7 @@ func (b *SplunkQueryBenchmarker) Init() {
 }
 
 func (b *SplunkQueryBenchmarker) Validate() {
-	fmt.Printf("Splunk REST URL: %v\n", b)
+	fmt.Printf("Splunk REST URL: %v\n", b.daemonUrl)
 
 	if b.httpClientType == "fast" || b.httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", b.httpClientType)
