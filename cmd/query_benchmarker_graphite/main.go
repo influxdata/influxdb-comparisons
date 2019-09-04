@@ -56,7 +56,7 @@ func (b *GraphiteQueryBenchmarker) Init() {
 }
 
 func (b *GraphiteQueryBenchmarker) Validate() {
-	fmt.Printf("Graphite URL: %v\n", b)
+	fmt.Printf("Graphite URL: %v\n", b.daemonUrl)
 
 	if b.httpClientType == "fast" || b.httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", b.httpClientType)
