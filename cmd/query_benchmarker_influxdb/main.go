@@ -3,8 +3,6 @@
 // It reads encoded Query objects from stdin, and makes concurrent requests
 // to the provided HTTP endpoint. This program has no knowledge of the
 // internals of the endpoint.
-//
-// TODO(rw): On my machine, this only decodes 700k/sec messages from stdin.
 package main
 
 import (
@@ -12,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_query"
+	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
@@ -30,12 +29,11 @@ type InfluxQueryBenchmarker struct {
 	readTimeout        time.Duration
 	writeTimeout       time.Duration
 	httpClientType     string
-	initialHttpClients int
 	clientIndex        int
 	scanFinished       bool
 
 	queryPool sync.Pool
-	queryChan chan []*Query
+	queryChan chan []*http.Query
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -59,7 +57,6 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
-	flag.IntVar(&b.initialHttpClients, "initial-http-clients", -1, "Number of precreated HTTP clients per target host (deprecated)")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 }
 
@@ -72,7 +69,7 @@ func (b *InfluxQueryBenchmarker) Validate() {
 
 	if b.httpClientType == "fast" || b.httpClientType == "default" {
 		fmt.Printf("Using HTTP client: %v\n", b.httpClientType)
-		useFastHttp = b.httpClientType == "fast"
+		http.UseFastHttp = b.httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
 	}
@@ -82,7 +79,7 @@ func (b *InfluxQueryBenchmarker) Prepare() {
 	// Make pools to minimize heap usage:
 	b.queryPool = sync.Pool{
 		New: func() interface{} {
-			return &Query{
+			return &http.Query{
 				HumanLabel:       make([]byte, 0, 1024),
 				HumanDescription: make([]byte, 0, 1024),
 				Method:           make([]byte, 0, 1024),
@@ -93,11 +90,7 @@ func (b *InfluxQueryBenchmarker) Prepare() {
 	}
 
 	// Make data and control channels:
-	b.queryChan = make(chan []*Query)
-
-	if b.initialHttpClients > 0 {
-		InitPools(b.initialHttpClients, b.daemonUrls, bulk_query.Benchmarker.Debug(), b.dialTimeout, b.readTimeout, b.writeTimeout)
-	}
+	b.queryChan = make(chan []*http.Query)
 }
 
 func (b *InfluxQueryBenchmarker) GetProcessor() bulk_query.Processor {
@@ -112,7 +105,7 @@ func (b *InfluxQueryBenchmarker) PrepareProcess(i int) {
 
 func (b *InfluxQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) {
 	daemonUrl := b.daemonUrls[(i+b.clientIndex)%len(b.daemonUrls)]
-	w := NewHTTPClient(daemonUrl, bulk_query.Benchmarker.Debug(), b.dialTimeout, b.readTimeout, b.writeTimeout)
+	w := http.NewHTTPClient(daemonUrl, bulk_query.Benchmarker.Debug(), b.dialTimeout, b.readTimeout, b.writeTimeout)
 	b.processQueries(w, workersGroup, statPool, statChan)
 }
 
@@ -142,7 +135,7 @@ var qind int64
 func (b *InfluxQueryBenchmarker) RunScan(r io.Reader, closeChan chan int) {
 	dec := gob.NewDecoder(r)
 
-	batch := make([]*Query, 0, bulk_query.Benchmarker.BatchSize())
+	batch := make([]*http.Query, 0, bulk_query.Benchmarker.BatchSize())
 
 	i := 0
 loop:
@@ -151,7 +144,7 @@ loop:
 			break
 		}
 
-		q := b.queryPool.Get().(*Query)
+		q := b.queryPool.Get().(*http.Query)
 		err := dec.Decode(q)
 		if err == io.EOF {
 			break
@@ -167,7 +160,7 @@ loop:
 			b.queryChan <- batch
 			//batch = batch[:0]
 			batch = nil
-			batch = make([]*Query, 0, bulk_query.Benchmarker.BatchSize())
+			batch = make([]*http.Query, 0, bulk_query.Benchmarker.BatchSize())
 			i = 0
 		}
 
@@ -185,8 +178,8 @@ loop:
 
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
-func (b *InfluxQueryBenchmarker) processQueries(w HTTPClient, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) error {
-	opts := &HTTPClientDoOptions{
+func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) error {
+	opts := &http.HTTPClientDoOptions{
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
@@ -237,7 +230,7 @@ func (b *InfluxQueryBenchmarker) processQueries(w HTTPClient, workersGroup *sync
 	return nil
 }
 
-func (b *InfluxQueryBenchmarker) processSingleQuery(w HTTPClient, q *Query, opts *HTTPClientDoOptions, errCh chan error, doneCh chan int, statPool sync.Pool, statChan chan *bulk_query.Stat) error {
+func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Query, opts *http.HTTPClientDoOptions, errCh chan error, doneCh chan int, statPool sync.Pool, statChan chan *bulk_query.Stat) error {
 	defer func() {
 		if doneCh != nil {
 			doneCh <- 1
