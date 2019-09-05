@@ -1,10 +1,10 @@
-package main
+package http
 
 import "time"
 
 const DefaultIdleConnectionTimeout = 90 * time.Second
 
-var useFastHttp = true
+var UseFastHttp = true
 var idleConnectionTimeout = DefaultIdleConnectionTimeout
 
 // HTTPClient is a reusable HTTP Client.
@@ -16,6 +16,7 @@ type HTTPClientCommon struct {
 
 // HTTPClientDoOptions wraps options uses when calling `Do`.
 type HTTPClientDoOptions struct {
+	Authorization		 string
 	Debug                int
 	PrettyPrintResponses bool
 }
@@ -23,12 +24,11 @@ type HTTPClientDoOptions struct {
 // HTTPClient interface.
 type HTTPClient interface {
 	HostString() string
-	Ping()
 	Do(q *Query, opts *HTTPClientDoOptions) (lag float64, err error)
 }
 
 func NewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) HTTPClient {
-	if useFastHttp {
+	if UseFastHttp {
 		return NewFastHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)
 	} else {
 		return NewDefaultHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)

@@ -1,4 +1,4 @@
-package main
+package http
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ type FastHTTPClient struct {
 func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeout time.Duration, writeTimeout time.Duration) *FastHTTPClient {
 	return &FastHTTPClient{
 		client: fasthttp.Client{
-			Name: "query_benchmarker",
+			Name: "bulk_query",
 			Dial: func(addr string) (net.Conn, error) {
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
@@ -55,6 +55,9 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
+	if opts.Authorization != "" {
+		req.Header.Add("Authorization", opts.Authorization)
+	}
 	req.SetBody(q.Body)
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
