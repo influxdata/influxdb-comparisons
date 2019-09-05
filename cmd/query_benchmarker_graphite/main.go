@@ -48,7 +48,7 @@ func init() {
 }
 
 func (b *GraphiteQueryBenchmarker) Init() {
-	flag.StringVar(&b.daemonUrl, "urls", "http://localhost:8080", "Graphite URL.")
+	flag.StringVar(&b.daemonUrl, "url", "http://localhost:8080", "Graphite URL.")
 	flag.DurationVar(&b.dialTimeout, "dial-timeout", time.Second*15, "TCP dial timeout.")
 	flag.DurationVar(&b.readTimeout, "write-timeout", time.Second*300, "TCP write timeout.")
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
