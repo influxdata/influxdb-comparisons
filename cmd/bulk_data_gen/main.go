@@ -155,8 +155,8 @@ func main() {
 		log.Printf("Using config file %s\n", configFile)
 	}
 
-	//out := bufio.NewWriterSize(os.Stdout, 4<<20)
-	out := bufio.NewWriterSize(os.Stdout, 4<<22)
+	//out := bufio.NewWriterSize(os.Stdout, 4<<20) //original buffer size
+	out := bufio.NewWriterSize(os.Stdout, 4<<24)  // most potimized size based on inspection via test regression
 	defer out.Flush()
 
 	var sim common.Simulator
