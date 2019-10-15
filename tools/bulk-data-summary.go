@@ -92,7 +92,7 @@ func main() {
 		fmt.Println("Total number of field sets: ", numOfFeildSets)
 		fmt.Println()
 
-		fmt.Println("Total number of series numOfTimestamps: ", numOfTimestamps)
+		fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
 
 		fmt.Println()
 		fmt.Println()
