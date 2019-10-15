@@ -9,10 +9,17 @@ import (
 	"strings"
 )
 
+type MeasurementMetrics struct {
+	tagSets   int
+	fieldSets int
+}
+
 func main() {
 	const lineProtocolMinLen = 50
 	var numOfSeries, numOfTagSets, numOfFeildSets, numOfTimestamps = 0, 0, 0, 0
+	//var people []*MeasurementMetrics
 	m := make(map[string]int)
+	//m := make(map[string]MeasurementMetrics)
 
 	argsWithProg := os.Args
 
@@ -75,32 +82,57 @@ func main() {
 				fmt.Println("numOfTimestamps = ", numOfTimestamps)
 			}
 		}
-		fmt.Println()
-		fmt.Println("----------------------------------------------------------------------------")
-		fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
-		fmt.Println("----------------------------------------------------------------------------")
-		fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
-		fmt.Println("Total catagories of measurements: ", len(m)) //measurements map length
-		for key, _ := range m {                                   // not using element (value), just printing keys
-			fmt.Println("	Measurement Name: ", key)
-		}
-		fmt.Println()
+		/*
+			fmt.Println()
+			fmt.Println("----------------------------------------------------------------------------")
+			fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
+			fmt.Println("----------------------------------------------------------------------------")
+			fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
+			fmt.Println("Total catagories of measurements: ", len(m)) //measurements map length
+			for key, _ := range m {                                   // not using element (value), just printing keys
+				fmt.Println("	Measurement Name: ", key)
+			}
+			fmt.Println()
 
-		fmt.Println("Total number of tag sets: ", numOfTagSets)
-		fmt.Println()
+			fmt.Println("Total number of tag sets: ", numOfTagSets)
+			fmt.Println()
 
-		fmt.Println("Total number of field sets: ", numOfFeildSets)
-		fmt.Println()
+			fmt.Println("Total number of field sets: ", numOfFeildSets)
+			fmt.Println()
 
-		fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
+			fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
 
-		fmt.Println()
-		fmt.Println()
-		fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
-		fmt.Println("----------------------------------------------------------------------------")
-		//panic(0)
+			fmt.Println()
+			fmt.Println()
+			fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
+			fmt.Println("----------------------------------------------------------------------------")
+			//panic(0)
+		*/
 	}
+	fmt.Println()
+	fmt.Println("----------------------------------------------------------------------------")
+	fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
+	fmt.Println("----------------------------------------------------------------------------")
+	fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
+	fmt.Println("Total catagories of measurements: ", len(m)) //measurements map length
+	for key, _ := range m {                                   // not using element (value), just printing keys
+		fmt.Println("	Measurement Name: ", key)
+	}
+	fmt.Println()
 
+	fmt.Println("Total number of tag sets: ", numOfTagSets)
+	fmt.Println()
+
+	fmt.Println("Total number of field sets: ", numOfFeildSets)
+	fmt.Println()
+
+	fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
+
+	fmt.Println()
+	fmt.Println()
+	fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
+	fmt.Println("----------------------------------------------------------------------------")
+	//panic(0)
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
