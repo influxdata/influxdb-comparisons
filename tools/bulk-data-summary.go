@@ -1,4 +1,4 @@
-// bulk_data_gen generates time series data from pre-specified use cases.
+// Tool created to verify bulk_data_gen time series data from pre-specified use cases.
 package main
 
 import (
