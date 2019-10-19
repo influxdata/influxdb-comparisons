@@ -10,16 +10,23 @@ import (
 )
 
 type MeasurementMetrics struct {
-	tagSets   int
-	fieldSets int
+	_measurement    string
+	_numOfTagSets   int
+	_numOfFieldSets int
 }
 
+const lineProtocolMinLen = 50
+
 func main() {
-	const lineProtocolMinLen = 50
+	var measurement string
+	var fieldSets string
+	//var measuresTagSets []string
+	var tagSetParts []string
+	var fieldSetParts []string
 	var numOfSeries, numOfTagSets, numOfFeildSets, numOfTimestamps = 0, 0, 0, 0
-	//var people []*MeasurementMetrics
-	m := make(map[string]int)
-	//m := make(map[string]MeasurementMetrics)
+	m := make(map[string]MeasurementMetrics)
+
+	mm := make(map[int]MeasurementMetrics)
 
 	argsWithProg := os.Args
 
@@ -52,20 +59,28 @@ func main() {
 				measuresTagSets := parts[i]
 				i = strings.Index(parts[i], ",")
 				fmt.Println("Index: ", i)
-				measurement := measuresTagSets[:i]
+				measurement = measuresTagSets[:i]
 				fmt.Println("measurement = ", measurement)
 				numOfSeries++
 
 				// Split the line on commas.
-				tagSetParts := strings.Split(measuresTagSets, ",")
+				tagSetParts = strings.Split(measuresTagSets, ",")
 				fmt.Println("tagSetParts = ", len(tagSetParts))
 				numOfTagSets = numOfTagSets + len(tagSetParts)
 				fmt.Println("numOfSeries = ", numOfSeries)
-				m[measurement] = numOfSeries
+				m[measurement] = MeasurementMetrics{
+					_measurement: measurement,
+				}
+
+				mm[numOfSeries] = MeasurementMetrics{
+					_measurement:    measurement,
+					_numOfTagSets:   len(tagSetParts),
+					_numOfFieldSets: len(fieldSetParts),
+				}
 
 			case 1:
 				// parts[1] --> field set(s)
-				fieldSets := parts[i]
+				fieldSets = parts[i]
 				fmt.Println("fieldSets = ", fieldSets)
 				// Split the line on commas.
 				fieldSetParts := strings.Split(fieldSets, ",")
@@ -74,49 +89,45 @@ func main() {
 				fmt.Println("Index: ", i)
 				numOfFeildSets = numOfFeildSets + len(fieldSetParts)
 
+				mm[numOfSeries] = MeasurementMetrics{
+					_measurement:    measurement,
+					_numOfTagSets:   len(tagSetParts),
+					_numOfFieldSets: len(fieldSetParts),
+				}
+
 			case 2:
 				// parts[2] --> timestamp
-				timestamps := parts[i]
-				fmt.Println("timestamps = ", timestamps)
+				timestamp := parts[i]
+				fmt.Println("timestamp = ", timestamp)
 				numOfTimestamps++
 				fmt.Println("numOfTimestamps = ", numOfTimestamps)
 			}
 		}
-		/*
-			fmt.Println()
-			fmt.Println("----------------------------------------------------------------------------")
-			fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
-			fmt.Println("----------------------------------------------------------------------------")
-			fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
-			fmt.Println("Total catagories of measurements: ", len(m)) //measurements map length
-			for key, _ := range m {                                   // not using element (value), just printing keys
-				fmt.Println("	Measurement Name: ", key)
+	}
+	totalTags := 0
+	totalFields := 0
+	for key := range m {
+		totalTags = 0
+		totalFields = 0
+		for j := 1; j <= len(mm); j++ {
+			if m[key]._measurement == mm[j]._measurement {
+				totalTags += mm[j]._numOfTagSets
+				totalFields += mm[j]._numOfFieldSets
 			}
-			fmt.Println()
-
-			fmt.Println("Total number of tag sets: ", numOfTagSets)
-			fmt.Println()
-
-			fmt.Println("Total number of field sets: ", numOfFeildSets)
-			fmt.Println()
-
-			fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
-
-			fmt.Println()
-			fmt.Println()
-			fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
-			fmt.Println("----------------------------------------------------------------------------")
-			//panic(0)
-		*/
+		}
+		m[key] = MeasurementMetrics{
+			_numOfTagSets:   totalTags,
+			_numOfFieldSets: totalFields,
+		}
 	}
 	fmt.Println()
 	fmt.Println("----------------------------------------------------------------------------")
 	fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
 	fmt.Println("----------------------------------------------------------------------------")
 	fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
-	fmt.Println("Total catagories of measurements: ", len(m)) //measurements map length
-	for key, _ := range m {                                   // not using element (value), just printing keys
-		fmt.Println("	Measurement Name: ", key)
+	fmt.Println("Total catagories of measurements: ", len(mm)) //measurements map length
+	for key, val := range m {                                  // not using element (value), just printing keys
+		fmt.Println("	Measurement Name: ", key, "			#Tags: ", val._numOfTagSets, "			#Fields ", val._numOfFieldSets)
 	}
 	fmt.Println()
 
