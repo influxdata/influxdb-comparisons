@@ -126,8 +126,10 @@ func main() {
 	fmt.Println("----------------------------------------------------------------------------")
 	fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
 	fmt.Println("Total catagories of measurements: ", len(mm)) //measurements map length
-	for key, val := range m {                                  // not using element (value), just printing keys
-		fmt.Println("	Measurement Name: ", key, "			#Tags: ", val._numOfTagSets, "			#Fields ", val._numOfFieldSets)
+	fmt.Println("  	------------------------------------------------------------------------------")
+	for key, val := range m { // not using element (value), just printing keys
+		fmt.Println("	Measurement Name: ", key, " TotalTagSets:", val._numOfTagSets, " TotalFieldSets", val._numOfFieldSets)
+		fmt.Println("  	------------------------------------------------------------------------------")
 	}
 	fmt.Println()
 
