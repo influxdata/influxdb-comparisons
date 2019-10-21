@@ -20,8 +20,8 @@ const lineProtocolMinLen = 50
 func main() {
 	var measurement string
 	var fieldSets string
-	//var measuresTagSets []string
 	var tagSetParts []string
+	var tsp int
 	var fieldSetParts []string
 	var numOfSeries, numOfTagSets, numOfFeildSets, numOfTimestamps = 0, 0, 0, 0
 	m := make(map[string]MeasurementMetrics)
@@ -65,8 +65,9 @@ func main() {
 
 				// Split the line on commas.
 				tagSetParts = strings.Split(measuresTagSets, ",")
-				fmt.Println("tagSetParts = ", len(tagSetParts))
-				numOfTagSets = numOfTagSets + len(tagSetParts)
+				tsp = len(tagSetParts) - 1 // minus one to account for measurement
+				fmt.Println("tagSetParts = ", tsp)
+				numOfTagSets = numOfTagSets + tsp
 				fmt.Println("numOfSeries = ", numOfSeries)
 				m[measurement] = MeasurementMetrics{
 					_measurement: measurement,
@@ -74,7 +75,7 @@ func main() {
 
 				mm[numOfSeries] = MeasurementMetrics{
 					_measurement:    measurement,
-					_numOfTagSets:   len(tagSetParts),
+					_numOfTagSets:   len(tagSetParts) - 1,
 					_numOfFieldSets: len(fieldSetParts),
 				}
 
@@ -91,7 +92,7 @@ func main() {
 
 				mm[numOfSeries] = MeasurementMetrics{
 					_measurement:    measurement,
-					_numOfTagSets:   len(tagSetParts),
+					_numOfTagSets:   len(tagSetParts) - 1,
 					_numOfFieldSets: len(fieldSetParts),
 				}
 
