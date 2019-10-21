@@ -1,4 +1,4 @@
-// Tool created to verify bulk_data_gen time series data from pre-specified use cases.
+// Tool created to verify Influx line protocal time series data and provide summary metrics of the overall data.
 package main
 
 import (
@@ -10,9 +10,10 @@ import (
 )
 
 type MeasurementMetrics struct {
-	_measurement    string
-	_numOfTagSets   int
-	_numOfFieldSets int
+	_measurement       string
+	_numOfMeasurements int
+	_numOfTagSets      int
+	_numOfFieldSets    int
 }
 
 const lineProtocolMinLen = 50
@@ -23,7 +24,7 @@ func main() {
 	var tagSetParts []string
 	var tsp int
 	var fieldSetParts []string
-	var numOfSeries, numOfTagSets, numOfFeildSets, numOfTimestamps = 0, 0, 0, 0
+	var numOfSeries, numOfMeasurements, numOfTagSets, numOfFeildSets, numOfTimestamps = 0, 0, 0, 0, 0
 	m := make(map[string]MeasurementMetrics)
 
 	mm := make(map[int]MeasurementMetrics)
@@ -75,7 +76,7 @@ func main() {
 
 				mm[numOfSeries] = MeasurementMetrics{
 					_measurement:    measurement,
-					_numOfTagSets:   len(tagSetParts) - 1,
+					_numOfTagSets:   tsp,
 					_numOfFieldSets: len(fieldSetParts),
 				}
 
@@ -91,9 +92,10 @@ func main() {
 				numOfFeildSets = numOfFeildSets + len(fieldSetParts)
 
 				mm[numOfSeries] = MeasurementMetrics{
-					_measurement:    measurement,
-					_numOfTagSets:   len(tagSetParts) - 1,
-					_numOfFieldSets: len(fieldSetParts),
+					_measurement:       measurement,
+					_numOfMeasurements: numOfMeasurements + 1, // add measurement instance count
+					_numOfTagSets:      len(tagSetParts) - 1,
+					_numOfFieldSets:    len(fieldSetParts),
 				}
 
 			case 2:
@@ -105,20 +107,27 @@ func main() {
 			}
 		}
 	}
+	totalMeasurements := 0
 	totalTags := 0
 	totalFields := 0
 	for key := range m {
+
+		// reset counters
+		totalMeasurements = 0
 		totalTags = 0
 		totalFields = 0
+
 		for j := 1; j <= len(mm); j++ {
 			if m[key]._measurement == mm[j]._measurement {
+				totalMeasurements += mm[j]._numOfMeasurements
 				totalTags += mm[j]._numOfTagSets
 				totalFields += mm[j]._numOfFieldSets
 			}
 		}
 		m[key] = MeasurementMetrics{
-			_numOfTagSets:   totalTags,
-			_numOfFieldSets: totalFields,
+			_numOfMeasurements: totalMeasurements,
+			_numOfTagSets:      totalTags,
+			_numOfFieldSets:    totalFields,
 		}
 	}
 	fmt.Println()
@@ -129,7 +138,7 @@ func main() {
 	fmt.Println("Total catagories of measurements: ", len(mm)) //measurements map length
 	fmt.Println("  	------------------------------------------------------------------------------")
 	for key, val := range m { // not using element (value), just printing keys
-		fmt.Println("	Measurement Name: ", key, " TotalTagSets:", val._numOfTagSets, " TotalFieldSets", val._numOfFieldSets)
+		fmt.Println("	Measurement Name: ", key, "(", val._numOfMeasurements, ")", " TotalTagSets:", val._numOfTagSets, " TotalFieldSets", val._numOfFieldSets)
 		fmt.Println("  	------------------------------------------------------------------------------")
 	}
 	fmt.Println()
