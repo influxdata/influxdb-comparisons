@@ -131,22 +131,24 @@ func main() {
 		}
 	}
 	fmt.Println()
-	fmt.Println("----------------------------------------------------------------------------")
+	fmt.Println("---------------------------------------------------------------------------------")
 	fmt.Println("Line Protocol Workload File: ", argsWithProg[1])
-	fmt.Println("----------------------------------------------------------------------------")
+	fmt.Println("---------------------------------------------------------------------------------")
 	fmt.Println("Total number of measurements entries (series/points): ", numOfSeries)
 	fmt.Println("Total catagories of measurements: ", len(mm)) //measurements map length
-	fmt.Println("  	------------------------------------------------------------------------------")
+	fmt.Println("  	-----------------------------------------------------------------------------------")
 	for key, val := range m { // not using element (value), just printing keys
-		fmt.Println("	Measurement Name: ", key, "(", val._numOfMeasurements, ")", " TotalTagSets:", val._numOfTagSets, " TotalFieldSets", val._numOfFieldSets)
-		fmt.Println("  	------------------------------------------------------------------------------")
+		fmt.Println("	Measurement Name: ", key, "(", val._numOfMeasurements, ")")
+		fmt.Println("	     TagSets:", val._numOfTagSets/val._numOfMeasurements, " FieldSets:", val._numOfFieldSets/val._numOfMeasurements)
+		fmt.Println("	     TotalTagSets:", val._numOfTagSets, " TotalFieldSets:", val._numOfFieldSets, "values to be written to InfluxDB.")
+		fmt.Println("  	-----------------------------------------------------------------------------------")
 	}
 	fmt.Println()
 
 	fmt.Println("Total number of tag sets: ", numOfTagSets)
 	fmt.Println()
 
-	fmt.Println("Total number of field sets: ", numOfFeildSets)
+	fmt.Println("Total number of field sets: ", numOfFeildSets, "total values to be written to InfluxDB.")
 	fmt.Println()
 
 	fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
@@ -154,7 +156,7 @@ func main() {
 	fmt.Println()
 	fmt.Println()
 	fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
-	fmt.Println("----------------------------------------------------------------------------")
+	fmt.Println("-----------------------------------------------------------------------------------------")
 	//panic(0)
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
