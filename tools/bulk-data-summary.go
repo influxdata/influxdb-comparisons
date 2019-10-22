@@ -139,23 +139,22 @@ func main() {
 	fmt.Println("  	-----------------------------------------------------------------------------------")
 	for key, val := range m { // not using element (value), just printing keys
 		fmt.Println("	Measurement Name: ", key, "(", val._numOfMeasurements, ")")
-		fmt.Println("	     TagSets:", val._numOfTagSets/val._numOfMeasurements, " FieldSets:", val._numOfFieldSets/val._numOfMeasurements)
-		fmt.Println("	     TotalTagSets:", val._numOfTagSets, " TotalFieldSets:", val._numOfFieldSets, "values to be written to InfluxDB.")
+		fmt.Println("	     Tags:", val._numOfTagSets/val._numOfMeasurements, " Fields:", val._numOfFieldSets/val._numOfMeasurements)
+		fmt.Println("	     TotalTags:", val._numOfTagSets, " TotalFields:", val._numOfFieldSets, "values to be written to InfluxDB.")
 		fmt.Println("  	-----------------------------------------------------------------------------------")
 	}
 	fmt.Println()
 
-	fmt.Println("Total number of tag sets: ", numOfTagSets)
+	fmt.Println("Total number of tags: ", numOfTagSets)
 	fmt.Println()
 
-	fmt.Println("Total number of field sets: ", numOfFeildSets, "total values to be written to InfluxDB.")
+	fmt.Println("Total number of fields: ", numOfFeildSets, "total values to be written to InfluxDB.")
 	fmt.Println()
 
 	fmt.Println("Total number of series Timestamps: ", numOfTimestamps)
 
 	fmt.Println()
-	fmt.Println()
-	fmt.Println("Total elements in the data set (numOfSeries + numOfTagSets + numOfFeildSets): ", numOfSeries+numOfTagSets+numOfFeildSets)
+	fmt.Println("Total elements in the data set (numOfSeries + numOfTags + numOfFields): ", numOfSeries+numOfTagSets+numOfFeildSets)
 	fmt.Println("-----------------------------------------------------------------------------------------")
 	//panic(0)
 	if err := scanner.Err(); err != nil {
