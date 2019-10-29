@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/valyala/fasthttp"
 	"net"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -29,8 +30,8 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
 			MaxIdleConnDuration: idleConnectionTimeout,
-			ReadTimeout: readTimeout,
-			WriteTimeout: writeTimeout,
+			ReadTimeout:         readTimeout,
+			WriteTimeout:        writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -63,8 +64,13 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
+
+	time.Sleep(12 * 1750000) // MM
+
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
+
+	time.Sleep(5 * (1000000 - 10000)) // MM
 
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
