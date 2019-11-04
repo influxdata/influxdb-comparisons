@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,10 +21,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
+
+	"strconv"
+
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/valyala/fasthttp"
-	"strconv"
 )
 
 // TODO AP: Maybe useless
@@ -57,6 +59,11 @@ type InfluxBulkLoad struct {
 	valuesRead            int64
 	itemsRead             int64
 	bytesRead             int64
+
+	// InfluxDb V2
+	orgId     string
+	authToken string
+	bucketId  string
 }
 
 var consistencyChoices = map[string]struct{}{
@@ -83,6 +90,7 @@ func init() {
 
 	bulk_load.Runner.Validate()
 	load.Validate()
+	fmt.Println("org = ", load.orgId, " bucket Id = ", load.bucketId, " token = ", load.authToken)
 
 }
 
@@ -107,6 +115,10 @@ func (l *InfluxBulkLoad) Init() {
 	flag.BoolVar(&l.useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
+	// InfluxDB V2 related flags
+	flag.StringVar(&l.orgId, "orgId", "myOrgId", "Organization Id of the bucket where to store load metrics (InfluxDb 2)")
+	flag.StringVar(&l.authToken, "authToken", "myAuthToken", "Authentication token for InfluxDb 2 where to store load metrics")
+	flag.StringVar(&l.bucketId, "bucketId", "myBucketId", "BucketId where to store load metrics (InfluxDb 2). Bucket must exist!")
 }
 
 func (l *InfluxBulkLoad) Validate() {
@@ -276,7 +288,7 @@ func (l *InfluxBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.valuesRead = 0
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
-	var n, values  int
+	var n, values int
 	var totalPoints, totalValues, totalValuesCounted int64
 
 	newline := []byte("\n")
@@ -597,7 +609,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 
 // countFields return number of fields in protocol line
 func countFields(line string) int {
-	lineParts := strings.Split(line," ") // "measurement,tags fields timestamp"
+	lineParts := strings.Split(line, " ") // "measurement,tags fields timestamp"
 	if len(lineParts) != 3 {
 		log.Fatalf("invalid protocol line: '%s'", line)
 	}
