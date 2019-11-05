@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -52,7 +54,7 @@ type HTTPWriter struct {
 func NewHTTPWriter(c HTTPWriterConfig, consistency string) *HTTPWriter {
 	return &HTTPWriter{
 		client: fasthttp.Client{
-			Name: "bulk_load_influx",
+			Name:                "bulk_load_influx",
 			MaxIdleConnDuration: DefaultIdleConnectionTimeout,
 		},
 
@@ -97,6 +99,107 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 	fasthttp.ReleaseRequest(req)
 
 	return lat, err
+}
+
+// WriteLineProtocolV2 (InfluxDB V2) writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
+// It returns the latency in nanoseconds and any error received while sending the data over HTTP,
+// or it returns a new error if the HTTP response isn't as expected.
+func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool) (int64, error) {
+	req := fasthttp.AcquireRequest()
+	req.Header.SetContentTypeBytes(textPlain)
+	req.Header.SetMethodBytes(post)
+	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
+	v2Host := "https://influx.nortal-hayles.com/"
+	orgId := "perf-reference-test-v2"
+	bucketId := "perf-reference-test-v2-bucket000"
+	authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg==" // good auth token
+	//authToken := "xxxLJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="  // bad auth token
+
+	url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(v2Host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))
+	u := []byte(url) // convert string into bytes
+	fmt.Println("url =", url)
+	req.Header.SetRequestURIBytes(u)
+	//req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
+	req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
+
+	if isGzip {
+		req.Header.Add("Content-Encoding", "gzip")
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(body)))
+	req.SetBody(body)
+
+	resp := fasthttp.AcquireResponse()
+	start := time.Now()
+	err := w.client.Do(req, resp)
+	lat := time.Since(start).Nanoseconds()
+	if err == nil {
+		sc := resp.StatusCode()
+		fmt.Println("status code = ", sc)
+		if sc == 500 && backpressurePred(resp.Body()) {
+			err = BackoffError
+			log.Printf("backoff suggested, reason: %s", resp.Body())
+		} else if sc != fasthttp.StatusNoContent {
+			err = fmt.Errorf("[DebugInfo: %s] Invalid write response (status %d): %s", w.c.DebugInfo, sc, resp.Body())
+		}
+	}
+
+	fasthttp.ReleaseResponse(resp)
+	fasthttp.ReleaseRequest(req)
+
+	return lat, err
+	/*
+		//	u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(sim.Host, "/"), url.QueryEscape(org), url.QueryEscape(bucket))
+		u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
+		req, err := http.NewRequest("POST", u, bytes.NewBuffer(buf))
+		if err != nil {
+			return 0, nil, err
+		}
+
+		// Add authorisation token
+		//phttp.SetToken(token, req)
+
+		// SetToken adds the token to the request.
+		//func SetToken(token string, req *http.Request) {
+		req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
+		//}
+
+		//if s.Gzip {
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+		//}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, nil, err
+		}
+		return resp.StatusCode, resp.Body, nil
+	*/
+	/*
+		var buf []byte
+		code, bodyreader, err := load.CreateBucket(buf)
+		if err != nil {
+			return -1
+		}
+
+		// Return body as error if unsuccessful.
+		if code != 204 {
+			//s.mu.Lock()
+			//s.currentErrors++
+			//s.totalErrors++
+			//s.mu.Unlock()
+
+			body, err := ioutil.ReadAll(bodyreader)
+			if err != nil {
+				body = []byte(err.Error())
+			}
+
+			// Close the body.
+			bodyreader.Close()
+
+			// Flatten any error message.
+			fmt.Errorf("[%d] %s", code, strings.Replace(string(body), "\n", " ", -1))
+		}
+	*/
 }
 
 func backpressurePred(body []byte) bool {

@@ -21,12 +21,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"github.com/gcp-influxdata/influxdb-comparisons/bulk_load" //TODO: MM
 
 	"strconv"
 
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
+
+	//phttp "github.com/influxdata/influxdb/http"
 	"github.com/valyala/fasthttp"
 )
 
@@ -61,6 +63,7 @@ type InfluxBulkLoad struct {
 	bytesRead             int64
 
 	// InfluxDb V2
+	v2Host    string
 	orgId     string
 	authToken string
 	bucketId  string
@@ -90,8 +93,7 @@ func init() {
 
 	bulk_load.Runner.Validate()
 	load.Validate()
-	fmt.Println("org = ", load.orgId, " bucket Id = ", load.bucketId, " token = ", load.authToken)
-
+	fmt.Println("org = ", load.orgId, " bucket Id = ", load.bucketId, " token = ", load.authToken, " host = ", load.v2Host)
 }
 
 func main() {
@@ -116,9 +118,10 @@ func (l *InfluxBulkLoad) Init() {
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	// InfluxDB V2 related flags
-	flag.StringVar(&l.orgId, "orgId", "myOrgId", "Organization Id of the bucket where to store load metrics (InfluxDb 2)")
-	flag.StringVar(&l.authToken, "authToken", "myAuthToken", "Authentication token for InfluxDb 2 where to store load metrics")
-	flag.StringVar(&l.bucketId, "bucketId", "myBucketId", "BucketId where to store load metrics (InfluxDb 2). Bucket must exist!")
+	flag.StringVar(&l.v2Host, "v2Host", "", "Hostname of the InfluxDb 2 enpoint.")
+	flag.StringVar(&l.orgId, "orgId", "", "Organization Id of the bucket where to store load metrics (InfluxDb 2).")
+	flag.StringVar(&l.bucketId, "bucketId", "", "BucketId where to store load metrics (InfluxDb 2). Bucket must exist!")
+	flag.StringVar(&l.authToken, "authToken", "", "Authentication token for InfluxDb 2 where to store load metrics")
 }
 
 func (l *InfluxBulkLoad) Validate() {
@@ -181,6 +184,35 @@ func (l *InfluxBulkLoad) CreateDb() {
 
 }
 
+/*
+func (l *InfluxBulkLoad) CreateBucket(buf []byte) (statusCode int, body io.ReadCloser, err error) {
+	//	u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(sim.Host, "/"), url.QueryEscape(org), url.QueryEscape(bucket))
+	u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
+	req, err := http.NewRequest("POST", u, bytes.NewBuffer(buf))
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// Add authorisation token
+	//phttp.SetToken(token, req)
+
+	// SetToken adds the token to the request.
+	//func SetToken(token string, req *http.Request) {
+	req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
+	//}
+
+	//if s.Gzip {
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	//}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	return resp.StatusCode, resp.Body, nil
+}
+*/
 func (l *InfluxBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
 	return l
 }
@@ -415,13 +447,25 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 					compressedBatch := l.bufPool.Get().(*bytes.Buffer)
 					fasthttp.WriteGzip(compressedBatch, batch.Buffer.Bytes())
 					//bodySize = len(compressedBatch.Bytes())
-					_, err = w.WriteLineProtocol(compressedBatch.Bytes(), true)
+					if l.bucketId != "" {
+						fmt.Println("************* WriteLineProtocolV2 with GZIP")
+						_, err = w.WriteLineProtocolV2(compressedBatch.Bytes(), true)
+					} else {
+						fmt.Println("************* WriteLineProtocolV1 with GZIP")
+						_, err = w.WriteLineProtocol(compressedBatch.Bytes(), true)
+					}
 					// Return the compressed batch buffer to the pool.
 					compressedBatch.Reset()
 					l.bufPool.Put(compressedBatch)
 				} else {
 					//bodySize = len(batch.Bytes())
-					_, err = w.WriteLineProtocol(batch.Buffer.Bytes(), false)
+					if l.bucketId != "" {
+						fmt.Println("************* WriteLineProtocolV2 with NO GZIP")
+						_, err = w.WriteLineProtocolV2(batch.Buffer.Bytes(), true)
+					} else {
+						fmt.Println("************* WriteLineProtocolV1 with NO GZIP")
+						_, err = w.WriteLineProtocol(batch.Buffer.Bytes(), false)
+					}
 				}
 
 				if err == BackoffError {
