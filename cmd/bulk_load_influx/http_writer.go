@@ -109,10 +109,11 @@ func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool) (int64, error
 	req.Header.SetContentTypeBytes(textPlain)
 	req.Header.SetMethodBytes(post)
 	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
-	v2Host := "https://influx.nortal-hayles.com/"
-	orgId := "perf-reference-test-v2"
-	bucketId := "perf-reference-test-v2-bucket000"
-	authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg==" // good auth token
+	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
+	orgId := "perf-v2"
+	bucketId := "perf-v2-bucket"
+	authToken := "e4h5pPRWECQE09x7DEBvQVr_2BZNZlCId6lcDml028aLcseLEV76obC8xxUe1u0iMFj8PpolrPL4XLMF4H49lA==" // good auth token EU all access
+	//authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg==" // good auth token kelly
 	//authToken := "xxxLJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="  // bad auth token
 
 	url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(v2Host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))

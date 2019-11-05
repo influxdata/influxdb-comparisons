@@ -25,7 +25,7 @@ import (
 
 	"strconv"
 
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/gcp-influxdata/influxdb-comparisons/bulk_data_gen/common" //TODO: MM
 	"github.com/influxdata/influxdb-comparisons/util/report"
 
 	"github.com/valyala/fasthttp"
@@ -309,6 +309,7 @@ outer:
 		}
 
 		line := scanner.Text()
+		fmt.Println("***** line = ", line)
 		totalPoints, totalValues, err = common.CheckTotalValues(line)
 		if totalPoints > 0 || totalValues > 0 {
 			continue
