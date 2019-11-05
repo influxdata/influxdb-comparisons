@@ -30,7 +30,7 @@ type BulkLoad interface {
 	Init()
 	Validate()
 	CreateDb()
-/*	CreateBucket(buf []byte) (statusCode int, body io.ReadCloser, err error) */
+	/*	CreateBucket(buf []byte) (statusCode int, body io.ReadCloser, err error) */
 	PrepareWorkers()
 	GetBatchProcessor() BatchProcessor
 	GetScanner() Scanner
@@ -224,32 +224,6 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 	}
 	if r.DoLoad && r.DoDBCreate {
 		load.CreateDb()
-		/*
-			var buf []byte
-			code, bodyreader, err := load.CreateBucket(buf)
-			if err != nil {
-				return -1
-			}
-
-			// Return body as error if unsuccessful.
-			if code != 204 {
-				//s.mu.Lock()
-				//s.currentErrors++
-				//s.totalErrors++
-				//s.mu.Unlock()
-
-				body, err := ioutil.ReadAll(bodyreader)
-				if err != nil {
-					body = []byte(err.Error())
-				}
-
-				// Close the body.
-				bodyreader.Close()
-
-				// Flatten any error message.
-				fmt.Errorf("[%d] %s", code, strings.Replace(string(body), "\n", " ", -1))
-			}
-		*/
 	}
 
 	r.StatPool = sync.Pool{

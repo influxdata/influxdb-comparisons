@@ -28,7 +28,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 
-	//phttp "github.com/influxdata/influxdb/http"
 	"github.com/valyala/fasthttp"
 )
 
@@ -184,35 +183,6 @@ func (l *InfluxBulkLoad) CreateDb() {
 
 }
 
-/*
-func (l *InfluxBulkLoad) CreateBucket(buf []byte) (statusCode int, body io.ReadCloser, err error) {
-	//	u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(sim.Host, "/"), url.QueryEscape(org), url.QueryEscape(bucket))
-	u := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
-	req, err := http.NewRequest("POST", u, bytes.NewBuffer(buf))
-	if err != nil {
-		return 0, nil, err
-	}
-
-	// Add authorisation token
-	//phttp.SetToken(token, req)
-
-	// SetToken adds the token to the request.
-	//func SetToken(token string, req *http.Request) {
-	req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
-	//}
-
-	//if s.Gzip {
-	req.Header.Set("Content-Encoding", "gzip")
-	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
-	//}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	return resp.StatusCode, resp.Body, nil
-}
-*/
 func (l *InfluxBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
 	return l
 }
