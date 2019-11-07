@@ -49,30 +49,90 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	uri = append(uri, w.Host...)
 	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
-
-	fmt.Println("***** uri =", uri)
-	
+​
+	fmt.Println("********** Query String = ", q.String())
+	// InfluxDB V2
+	v2Host := "https://influx.nortal-hayles.com/"
+	orgId := "perf-reference-test-v2"
+	//bucketId := "perf-reference-test-v2-bucket000"
+	authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg==" // good auth token
+	uriV2 := make([]byte, 0, 100)
+	uriV2 = append(uriV2, v2Host...)
+	uriV2 = append(uriV2, bytesSlash...)
+	urlV2Path := fmt.Sprintf("%s/api/v2/query?org=%s", strings.TrimSuffix(v2Host, "/"), url.QueryEscape(orgId))
+	uV2Path := []byte(urlV2Path) // convert string into bytes
+	fmt.Println("urlV2 =", urlV2Path)
+	uriV2 = append(uriV2, urlV2Path...)
+	/*
+			url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(v2Host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))
+		    u := []byte(url) // convert string into bytes
+		    fmt.Println("url =", url)
+		    req.Header.SetRequestURIBytes(u)
+		    //req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
+		    req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
+	*/
+	/*
+	       sbRequestBody := chilkat.NewStringBuilder()
+	   	   sbRequestBody.Append("from(bucket:\"example-bucket\")\n")
+	       sbRequestBody.Append("        |> range(start:-1000h)\n")
+	       sbRequestBody.Append("        |> group(columns:[\"_measurement\"], mode:\"by\")\n")
+	       sbRequestBody.Append("        |> sum()")
+​
+	       rest.AddHeader("Content-type","application/vnd.flux")
+	       rest.AddHeader("Accept","application/csv")
+	       rest.AddHeader("Authorization","Token YOURAUTHTOKEN")
+​
+	       sbResponseBody := chilkat.NewStringBuilder()
+	       success = rest.FullRequestSb("POST","/api/v2/query?org=my-org",sbRequestBody,sbResponseBody)
+	*/
+​
 	// populate a request with data from the Query:
 	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
-	req.Header.SetMethodBytes(q.Method)
-	req.Header.SetRequestURIBytes(uri)
-	if opts.Authorization != "" {
-		req.Header.Add("Authorization", opts.Authorization)
+	req2 := fasthttp.AcquireRequest() // InfluxDB V2
+​
+	if v2Host == "" {
+		defer fasthttp.ReleaseRequest(req)
+		req.Header.SetMethodBytes(q.Method)
+		req.Header.SetRequestURIBytes(uri)
+		if opts.Authorization != "" {
+			req.Header.Add("Authorization", opts.Authorization)
+		}
+		req.SetBody(q.Body)
+	} else {
+​
+		// InfluxDB V2
+		// populate a request with data from the Query:
+		defer fasthttp.ReleaseRequest(req2)
+		req2.Header.SetMethodBytes([]byte("POST"))
+		req2.Header.SetRequestURIBytes(uV2Path)
+		bodyV2 := make([]byte, 0, 100)
+		bodyV2 = append(bodyV2, "from(bucket:\"perf-v2-bucket\")\n"...)
+		bodyV2 = append(bodyV2, "        |> range(start:-1000h)\n"...)
+		bodyV2 = append(bodyV2, "        |> group(columns:[\"_measurement\"], mode:\"by\")\n"...)
+		bodyV2 = append(bodyV2, "        |> sum()"...)
+		req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
+		req2.Header.Set("Content-type", "application/vnd.flux")
+		req2.Header.Set("Accept", "application/csv")
+​
+		req2.SetBody(bodyV2)
 	}
-	req.SetBody(q.Body)
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
-
+​
 	time.Sleep(12 * 1750000) // MM
-
-	err = w.client.Do(req, resp)
+​
+	if v2Host == "" {
+		err = w.client.Do(req, resp)
+	} else { // Influx DB V2
+		err = w.client.Do(req2, resp)
+	}
+​
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
-
+​
 	time.Sleep(5 * (1000000 - 10000)) // MM
-
+​
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)

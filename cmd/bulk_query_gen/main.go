@@ -7,6 +7,12 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"sort"
+	"time"
+
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	bulkQueryGen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/cassandra"
@@ -17,11 +23,6 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/opentsdb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/splunk"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
-	"log"
-	"math/rand"
-	"os"
-	"sort"
-	"time"
 )
 
 const (
