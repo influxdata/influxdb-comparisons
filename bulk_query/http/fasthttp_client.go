@@ -140,6 +140,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	// Check that the status code was 200 OK:
 	if err == nil {
 		sc := resp.StatusCode()
+		fmt.Println("bulk_query status code = ", sc)  // MM
 		if sc != fasthttp.StatusOK {
 			err = fmt.Errorf("Invalid write response (status %d): %s", sc, resp.Body())
 			return
