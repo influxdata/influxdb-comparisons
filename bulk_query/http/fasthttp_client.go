@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -49,7 +50,6 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	uri = append(uri, w.Host...)
 	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
-​
 	fmt.Println("********** Query String = ", q.String())
 	// InfluxDB V2
 	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
@@ -72,24 +72,22 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		    req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 	*/
 	/*
-	       sbRequestBody := chilkat.NewStringBuilder()
-	   	   sbRequestBody.Append("from(bucket:\"example-bucket\")\n")
-	       sbRequestBody.Append("        |> range(start:-1000h)\n")
-	       sbRequestBody.Append("        |> group(columns:[\"_measurement\"], mode:\"by\")\n")
-	       sbRequestBody.Append("        |> sum()")
-​
-	       rest.AddHeader("Content-type","application/vnd.flux")
-	       rest.AddHeader("Accept","application/csv")
-	       rest.AddHeader("Authorization","Token YOURAUTHTOKEN")
-​
-	       sbResponseBody := chilkat.NewStringBuilder()
-	       success = rest.FullRequestSb("POST","/api/v2/query?org=my-org",sbRequestBody,sbResponseBody)
+			       sbRequestBody := chilkat.NewStringBuilder()
+			   	   sbRequestBody.Append("from(bucket:\"example-bucket\")\n")
+			       sbRequestBody.Append("        |> range(start:-1000h)\n")
+			       sbRequestBody.Append("        |> group(columns:[\"_measurement\"], mode:\"by\")\n")
+			       sbRequestBody.Append("        |> sum()")
+		​
+			       rest.AddHeader("Content-type","application/vnd.flux")
+			       rest.AddHeader("Accept","application/csv")
+			       rest.AddHeader("Authorization","Token YOURAUTHTOKEN")
+		​
+			       sbResponseBody := chilkat.NewStringBuilder()
+			       success = rest.FullRequestSb("POST","/api/v2/query?org=my-org",sbRequestBody,sbResponseBody)
 	*/
-​
 	// populate a request with data from the Query:
 	req := fasthttp.AcquireRequest()
 	req2 := fasthttp.AcquireRequest() // InfluxDB V2
-​
 	if v2Host == "" {
 		defer fasthttp.ReleaseRequest(req)
 		req.Header.SetMethodBytes(q.Method)
@@ -98,9 +96,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 			req.Header.Add("Authorization", opts.Authorization)
 		}
 		req.SetBody(q.Body)
-	} else {
-​
-		// InfluxDB V2
+	} else { // InfluxDB V2
 		// populate a request with data from the Query:
 		defer fasthttp.ReleaseRequest(req2)
 		req2.Header.SetMethodBytes([]byte("POST"))
@@ -113,26 +109,20 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 		req2.Header.Set("Content-type", "application/vnd.flux")
 		req2.Header.Set("Accept", "application/csv")
-​
 		req2.SetBody(bodyV2)
 	}
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
-​
 	time.Sleep(12 * 1750000) // MM
-​
 	if v2Host == "" {
 		err = w.client.Do(req, resp)
 	} else { // Influx DB V2
 		err = w.client.Do(req2, resp)
 	}
-​
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
-​
-	time.Sleep(5 * (1000000 - 10000)) // MM
-​
+	time.Sleep(5 * (1000000 - 10000))                    // MM
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
@@ -140,7 +130,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	// Check that the status code was 200 OK:
 	if err == nil {
 		sc := resp.StatusCode()
-		fmt.Println("bulk_query status code = ", sc)  // MM
+		fmt.Println("bulk_query status code = ", sc) // MM
 		if sc != fasthttp.StatusOK {
 			err = fmt.Errorf("Invalid write response (status %d): %s", sc, resp.Body())
 			return
@@ -191,4 +181,3 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 func (w *FastHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
-
