@@ -21,11 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gcp-influxdata/influxdb-comparisons/bulk_load" //TODO: MM
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 
 	"strconv"
 
-	"github.com/gcp-influxdata/influxdb-comparisons/bulk_data_gen/common" //TODO: MM
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 
 	"github.com/valyala/fasthttp"
