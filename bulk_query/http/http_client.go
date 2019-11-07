@@ -49,6 +49,8 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	uri = append(uri, w.Host...)
 	uri = append(uri, q.Path...)
 
+	fmt.Println("***** uri =", uri)
+
 	// populate a request with data from the Query:
 	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewBuffer(q.Body)) // TODO performance
 	if opts.Authorization != "" {

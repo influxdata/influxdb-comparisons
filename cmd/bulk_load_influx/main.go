@@ -309,6 +309,9 @@ outer:
 		}
 
 		line := scanner.Text()
+		if line[0] != 'c' { // only allow cpu measurements
+			continue
+		}
 		fmt.Println("***** line = ", line)
 		totalPoints, totalValues, err = common.CheckTotalValues(line)
 		if totalPoints > 0 || totalValues > 0 {

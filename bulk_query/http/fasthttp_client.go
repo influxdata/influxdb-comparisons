@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/valyala/fasthttp"
 	"net"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -29,8 +30,8 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
 			MaxIdleConnDuration: idleConnectionTimeout,
-			ReadTimeout: readTimeout,
-			WriteTimeout: writeTimeout,
+			ReadTimeout:         readTimeout,
+			WriteTimeout:        writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -49,10 +50,11 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
 
+	fmt.Println("***** uri =", uri)
+	
 	// populate a request with data from the Query:
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
-
 	req.Header.SetMethodBytes(q.Method)
 	req.Header.SetRequestURIBytes(uri)
 	if opts.Authorization != "" {
@@ -63,14 +65,18 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
+
+	time.Sleep(12 * 1750000) // MM
+
 	err = w.client.Do(req, resp)
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
+
+	time.Sleep(5 * (1000000 - 10000)) // MM
 
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
-
 	// Check that the status code was 200 OK:
 	if err == nil {
 		sc := resp.StatusCode()
@@ -79,7 +85,6 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 			return
 		}
 	}
-
 	if opts != nil {
 		// Print debug messages, if applicable:
 		switch opts.Debug {
@@ -96,12 +101,10 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 			fmt.Fprintf(os.Stderr, "debug:   response: %s\n", string(resp.Body()))
 		default:
 		}
-
 		// Pretty print JSON responses, if applicable:
 		if opts.PrettyPrintResponses {
 			// InfluxQL responses are in JSON and can be pretty-printed here.
 			// Flux responses are just simple CSV.
-
 			prefix := fmt.Sprintf("ID %d: ", q.ID)
 			if json.Valid(resp.Body()) {
 				var pretty bytes.Buffer
@@ -109,7 +112,6 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 				if err != nil {
 					return
 				}
-
 				_, err = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, pretty.String())
 				if err != nil {
 					return
@@ -122,10 +124,10 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 			}
 		}
 	}
-
 	return lag, err
 }
 
 func (w *FastHTTPClient) HostString() string {
 	return w.HTTPClientCommon.HostString
 }
+
