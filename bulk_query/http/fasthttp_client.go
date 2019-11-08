@@ -56,7 +56,8 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
 	orgId := "perf-v2"
 	//bucketId := "perf-v2-bucket"
-	authToken := "e4h5pPRWECQE09x7DEBvQVr_2BZNZlCId6lcDml028aLcseLEV76obC8xxUe1u0iMFj8PpolrPL4XLMF4H49lA==" // good auth token EU AWS
+	authToken := "LN1hZhkVK7FNfK2-fJENOKCMIUlpggfwlbbG60PL2-Ot0dgDvMEcqDhPtSZqgNoW9Zqp86kpk3BsplFqXfbvOA=="
+
 	uriV2 := make([]byte, 0, 100)
 	uriV2 = append(uriV2, v2Host...)
 	uriV2 = append(uriV2, bytesSlash...)

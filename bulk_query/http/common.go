@@ -16,7 +16,7 @@ type HTTPClientCommon struct {
 
 // HTTPClientDoOptions wraps options uses when calling `Do`.
 type HTTPClientDoOptions struct {
-	Authorization		 string
+	Authorization        string
 	Debug                int
 	PrettyPrintResponses bool
 }
@@ -34,4 +34,3 @@ func NewHTTPClient(host string, debug int, dialTimeout time.Duration, readTimeou
 		return NewDefaultHTTPClient(host, debug, dialTimeout, readTimeout, writeTimeout)
 	}
 }
-
