@@ -104,25 +104,25 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 // WriteLineProtocolV2 (InfluxDB V2) writes the given byte slice to the HTTP server described in the Writer's HTTPWriterConfig.
 // It returns the latency in nanoseconds and any error received while sending the data over HTTP,
 // or it returns a new error if the HTTP response isn't as expected.
-func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool) (int64, error) {
+func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool, host string, orgId string, bucketId string, authToken string) (int64, error) {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetContentTypeBytes(textPlain)
 	req.Header.SetMethodBytes(post)
 	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
-	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
-	//orgId := "mmurphy+eu2@influxdata.com"
-	orgId := "perf-v2"
+	fmt.Println("***** ====>", host, orgId, bucketId, authToken)
+	//myhost := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
+	//myorgId := "perf-v2"
 
-	bucketId := "perf-v2-bucket"
-	authToken := "e4h5pPRWECQE09x7DEBvQVr_2BZNZlCId6lcDml028aLcseLEV76obC8xxUe1u0iMFj8PpolrPL4XLMF4H49lA==" // good auth token EU all access
-	//authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg==" // good auth token kelly
-	//authToken := "xxxLJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="  // bad auth token
+	//mybucketId := "perf-v2-bucket"
+	//myauthToken := "LN1hZhkVK7FNfK2-fJENOKCMIUlpggfwlbbG60PL2-Ot0dgDvMEcqDhPtSZqgNoW9Zqp86kpk3BsplFqXfbvOA==" // good auth token EU all access
 
-	url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(v2Host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))
+	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(myhost, "/"), url.QueryEscape(myorgId), url.QueryEscape(mybucketId))
+	url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))
 	u := []byte(url) // convert string into bytes
 	fmt.Println("url =", url)
 	req.Header.SetRequestURIBytes(u)
 	//req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
+	//req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", myauthToken))
 	req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 
 	if isGzip {

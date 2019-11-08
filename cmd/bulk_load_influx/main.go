@@ -423,7 +423,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 					//bodySize = len(compressedBatch.Bytes())
 					if l.bucketId != "" {
 						fmt.Println("************* WriteLineProtocolV2 with GZIP")
-						_, err = w.WriteLineProtocolV2(compressedBatch.Bytes(), true)
+						_, err = w.WriteLineProtocolV2(compressedBatch.Bytes(), true, l.v2Host, l.orgId, l.bucketId, l.authToken)
 					} else {
 						fmt.Println("************* WriteLineProtocolV1 with GZIP")
 						_, err = w.WriteLineProtocol(compressedBatch.Bytes(), true)
@@ -435,7 +435,7 @@ func (l *InfluxBulkLoad) processBatches(w *HTTPWriter, backoffSrc chan bool, tel
 					//bodySize = len(batch.Bytes())
 					if l.bucketId != "" {
 						fmt.Println("************* WriteLineProtocolV2 with NO GZIP")
-						_, err = w.WriteLineProtocolV2(batch.Buffer.Bytes(), true)
+						_, err = w.WriteLineProtocolV2(batch.Buffer.Bytes(), false, l.v2Host, l.orgId, l.bucketId, l.authToken)
 					} else {
 						fmt.Println("************* WriteLineProtocolV1 with NO GZIP")
 						_, err = w.WriteLineProtocol(batch.Buffer.Bytes(), false)
