@@ -50,7 +50,8 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	uri = append(uri, w.Host...)
 	uri = append(uri, bytesSlash...)
 	uri = append(uri, q.Path...)
-	fmt.Println("********** Query String = ", q.String())
+	//fmt.Println("********** Query String = ", q.String())
+
 	// InfluxDB V2
 	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
 	orgId := "perf-v2"
