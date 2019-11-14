@@ -53,10 +53,10 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	//fmt.Println("********** Query String = ", q.String())
 
 	// InfluxDB V2
-	v2Host := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
-	orgId := "perf-v2"
-	//bucketId := "perf-v2-bucket"
-	authToken := "LN1hZhkVK7FNfK2-fJENOKCMIUlpggfwlbbG60PL2-Ot0dgDvMEcqDhPtSZqgNoW9Zqp86kpk3BsplFqXfbvOA=="
+	v2Host := "https://influx.nortal-hayles.com/"
+	orgId := "perf-reference-test-v2"
+	//bucketId := "perf-reference-test-v2-bucket000"
+	authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="
 
 	uriV2 := make([]byte, 0, 100)
 	uriV2 = append(uriV2, v2Host...)
@@ -104,15 +104,26 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		req2.Header.SetMethodBytes([]byte("POST"))
 		req2.Header.SetRequestURIBytes(uV2Path)
 		bodyV2 := make([]byte, 0, 100)
-		bodyV2 = append(bodyV2, "from(bucket:\"perf-v2-bucket\")\n"...)
-		bodyV2 = append(bodyV2, "        |> range(start:-1000h)\n"...)
-		bodyV2 = append(bodyV2, "        |> group(columns:[\"_measurement\"], mode:\"by\")\n"...)
-		bodyV2 = append(bodyV2, "        |> sum()"...)
+		bodyV2 = append(bodyV2, "from(bucket:\"perf-reference-test-v2-bucket000\")\n"...)
+		bodyV2 = append(bodyV2, "        |> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)\n"...)
+		bodyV2 = append(bodyV2, "        |> filter(fn:(r) => r._measurement == \"cpu\" and r._field == \"usage_user\")\n"...)
+		bodyV2 = append(bodyV2, "        |> group()"...)
+		bodyV2 = append(bodyV2, "        |> mean()"...)
+		bodyV2 = append(bodyV2, "        |> yield()"...)
 		req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 		req2.Header.Set("Content-type", "application/vnd.flux")
 		req2.Header.Set("Accept", "application/csv")
 		req2.SetBody(bodyV2)
 	}
+	/*
+		from(bucket: "perf-reference-test-v2-bucket000")
+			|> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)
+			|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user")
+			|> group()
+			|> mean()
+			|> yield()
+	*/
+
 	// Perform the request while tracking latency:
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
