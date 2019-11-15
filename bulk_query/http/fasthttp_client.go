@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/valyala/fasthttp"
+
+	"github.com/influxdata/influxdb-comparisons/util/statemanager"
 )
 
 var bytesSlash = []byte("/") // heap optimization
@@ -52,11 +54,20 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	uri = append(uri, q.Path...)
 	//fmt.Println("********** Query String = ", q.String())
 
-	// InfluxDB V2
+	// Get InfluxDB V2 Init Params
+	sm := statemanager.GetManager()
+
 	v2Host := "https://influx.nortal-hayles.com/"
+	v2Host = sm.Getv2Host()
+
 	orgId := "perf-reference-test-v2"
-	//bucketId := "perf-reference-test-v2-bucket000"
+	orgId = sm.GetOrgId()
+
+	bucketId := "perf-reference-test-v2-bucket000"
+	bucketId = sm.GetBucketId()
+
 	authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="
+	authToken = sm.GetAuthToken()
 
 	uriV2 := make([]byte, 0, 100)
 	uriV2 = append(uriV2, v2Host...)
@@ -104,7 +115,10 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		req2.Header.SetMethodBytes([]byte("POST"))
 		req2.Header.SetRequestURIBytes(uV2Path)
 		bodyV2 := make([]byte, 0, 100)
-		bodyV2 = append(bodyV2, "from(bucket:\"perf-reference-test-v2-bucket000\")\n"...)
+
+		bucketStr := fmt.Sprintf("from(bucket:\"%s\")\n", bucketId)
+		//		bodyV2 = append(bodyV2, "from(bucket:\"perf-reference-test-v2-bucket000\")\n"...)
+		bodyV2 = append(bodyV2, bucketStr...)
 		bodyV2 = append(bodyV2, "        |> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)\n"...)
 		bodyV2 = append(bodyV2, "        |> filter(fn:(r) => r._measurement == \"cpu\" and r._field == \"usage_user\")\n"...)
 		bodyV2 = append(bodyV2, "        |> group()"...)

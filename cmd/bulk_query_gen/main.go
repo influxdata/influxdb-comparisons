@@ -23,6 +23,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/opentsdb"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/splunk"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/timescaledb"
+	"github.com/influxdata/influxdb-comparisons/util/statemanager"
 )
 
 const (
@@ -163,6 +164,12 @@ var (
 
 	interleavedGenerationGroupID uint
 	interleavedGenerationGroups  uint
+
+	// InfluxDB V2 related flags
+	v2Host    string
+	orgId     string
+	bucketId  string
+	authToken string
 )
 
 // Parse args:
@@ -204,7 +211,24 @@ func init() {
 	flag.UintVar(&interleavedGenerationGroupID, "interleaved-generation-group-id", 0, "Group (0-indexed) to perform round-robin serialization within. Use this to scale up data generation to multiple processes.")
 	flag.UintVar(&interleavedGenerationGroups, "interleaved-generation-groups", 1, "The number of round-robin serialization groups. Use this to scale up data generation to multiple processes.")
 
+	// InfluxDB V2 related flags
+	flag.StringVar(&v2Host, "v2Host", "", "Hostname of the InfluxDb 2 enpoint.")
+	flag.StringVar(&orgId, "orgId", "", "Organization Id of the bucket where to send query metrics (InfluxDb 2).")
+	flag.StringVar(&bucketId, "bucketId", "", "BucketId where to send query metrics (InfluxDb 2). Bucket must exist!")
+	flag.StringVar(&authToken, "authToken", "", "Authentication token for InfluxDb 2 where to send query metrics")
+
 	flag.Parse()
+
+	// Set InfluxDB V2 Init Params
+	sm := statemanager.GetManager()
+	//v2Host := "https://influx.nortal-hayles.com/"
+	sm.Setv2Host(v2Host)
+	//orgId := "perf-reference-test-v2"
+	sm.SetOrgId(orgId)
+	//bucketId := "perf-reference-test-v2-bucket000"
+	sm.SetBucketId(bucketId)
+	//authToken := "LJ80J4poOlHLrH1Dt6TPbMBp8dzWmRhCg3-igj-hM4DcIzibpjrpTOenEEkDFZbRQKjE2h5gzHlclVQfR2Q4yg=="
+	sm.SetAuthToken(authToken)
 
 	if queryType == DevOpsEightHostsOneHour && scaleVar < 8 {
 		log.Fatal("\"scale-var\" must be greater than the hosts grouping number")
