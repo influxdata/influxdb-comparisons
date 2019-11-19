@@ -109,19 +109,31 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		req2.Header.SetMethodBytes([]byte("POST"))
 		req2.Header.SetRequestURIBytes(uV2Path)
 		bodyV2 := make([]byte, 0, 100)
-
 		bucketStr := fmt.Sprintf("from(bucket:\"%s\")\n", bucketId)
 		//bodyV2 = append(bodyV2, "from(bucket:\"perf-reference-test-v2-bucket000\")\n"...)
+
+		//from(bucket: "ame=perf-reference-test-v2-bucket000") |> range(start: -7d) |> yield()
+		/*
+			bodyV2 = append(bodyV2, bucketStr...)
+			bodyV2 = append(bodyV2, "        |> range(start: -7d)\n"...)
+			bodyV2 = append(bodyV2, "        |> yield()"...)
+			req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
+			req2.Header.Set("Content-type", "application/vnd.flux")
+			req2.Header.Set("Accept", "application/csv")
+			req2.SetBody(bodyV2)
+		*/
+
 		bodyV2 = append(bodyV2, bucketStr...)
 		bodyV2 = append(bodyV2, "        |> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)\n"...)
 		bodyV2 = append(bodyV2, "        |> filter(fn:(r) => r._measurement == \"cpu\" and r._field == \"usage_user\")\n"...)
-		bodyV2 = append(bodyV2, "        |> group()"...)
-		bodyV2 = append(bodyV2, "        |> mean()"...)
+		//bodyV2 = append(bodyV2, "        |> group()"...)
+		//bodyV2 = append(bodyV2, "        |> mean()"...)
 		bodyV2 = append(bodyV2, "        |> yield()"...)
 		req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 		req2.Header.Set("Content-type", "application/vnd.flux")
 		req2.Header.Set("Accept", "application/csv")
 		req2.SetBody(bodyV2)
+
 	}
 	/*
 		from(bucket: "perf-reference-test-v2-bucket000")
