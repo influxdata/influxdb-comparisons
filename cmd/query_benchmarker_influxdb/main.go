@@ -9,15 +9,17 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_query"
-	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
-	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
+	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
+	"github.com/influxdata/influxdb-comparisons/util/report"
+	"github.com/influxdata/influxdb-comparisons/util/statemanager"
 )
 
 // Program option vars:
@@ -25,18 +27,26 @@ type InfluxQueryBenchmarker struct {
 	csvDaemonUrls string
 	daemonUrls    []string
 
-	dialTimeout        time.Duration
-	readTimeout        time.Duration
-	writeTimeout       time.Duration
-	httpClientType     string
-	clientIndex        int
-	scanFinished       bool
+	dialTimeout    time.Duration
+	readTimeout    time.Duration
+	writeTimeout   time.Duration
+	httpClientType string
+	clientIndex    int
+	scanFinished   bool
 
 	queryPool sync.Pool
 	queryChan chan []*http.Query
 }
 
 var querier = &InfluxQueryBenchmarker{}
+
+var (
+	// InfluxDB V2 related flags
+	v2Host    string
+	orgId     string
+	bucketId  string
+	authToken string
+)
 
 // Parse args:
 func init() {
@@ -45,6 +55,13 @@ func init() {
 	querier.Init()
 
 	flag.Parse()
+
+	// Set InfluxDB V2 Init Params
+	sm := statemanager.GetManager()
+	sm.Setv2Host(v2Host)
+	sm.SetOrgId(orgId)
+	sm.SetBucketId(bucketId)
+	sm.SetAuthToken(authToken)
 
 	bulk_query.Benchmarker.Validate()
 	querier.Validate()
@@ -58,6 +75,12 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
+
+	// InfluxDB V2 related flags
+	flag.StringVar(&v2Host, "v2Host", "", "Hostname of the InfluxDb 2 enpoint.")
+	flag.StringVar(&orgId, "orgId", "", "Organization Id of the bucket where to send query metrics (InfluxDb 2).")
+	flag.StringVar(&bucketId, "bucketId", "", "BucketId where to send query metrics (InfluxDb 2). Bucket must exist!")
+	flag.StringVar(&authToken, "authToken", "", "Authentication token for InfluxDb 2 where to send query metrics")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
