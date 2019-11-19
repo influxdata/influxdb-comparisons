@@ -124,11 +124,12 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 		*/
 
 		bodyV2 = append(bodyV2, bucketStr...)
-		bodyV2 = append(bodyV2, "        |> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)\n"...)
-		bodyV2 = append(bodyV2, "        |> filter(fn:(r) => r._measurement == \"cpu\" and r._field == \"usage_user\")\n"...)
+		bodyV2 = append(bodyV2, "        |> range(start: -1s)\n"...)
+		//bodyV2 = append(bodyV2, "        |> range(start: 2019-05-13T15:17:29.000000000Z, stop: 2019-05-20T15:17:29.000000000Z)\n"...)
+		//bodyV2 = append(bodyV2, "        |> filter(fn:(r) => r._measurement == \"cpu\" and r._field == \"usage_user\")\n"...)
 		//bodyV2 = append(bodyV2, "        |> group()"...)
 		//bodyV2 = append(bodyV2, "        |> mean()"...)
-		bodyV2 = append(bodyV2, "        |> yield()"...)
+		//bodyV2 = append(bodyV2, "        |> yield()"...)
 		req2.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", authToken))
 		req2.Header.Set("Content-type", "application/vnd.flux")
 		req2.Header.Set("Accept", "application/csv")
@@ -148,14 +149,17 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 	start := time.Now()
-	time.Sleep(12 * 1750000) // MM
 	if v2Host == "" {
+		time.Sleep(12 * 1750000) // MM
 		err = w.client.Do(req, resp)
 	} else { // Influx DB V2
 		err = w.client.Do(req2, resp)
 	}
 	lag = float64(time.Since(start).Nanoseconds()) / 1e6 // milliseconds
-	time.Sleep(5 * (1000000 - 10000))                    // MM
+	if v2Host == "" {
+		time.Sleep(5 * (1000000 - 10000)) // MM
+	} else {
+	}
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
 		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
