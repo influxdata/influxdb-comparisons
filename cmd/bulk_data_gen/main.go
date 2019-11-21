@@ -19,15 +19,17 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
 	"os"
 	"runtime/pprof"
 	"strings"
 	"time"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
+	"github.com/influxdata/influxdb-comparisons/util/statemanager"
 )
 
 // Output data format choices:
@@ -58,6 +60,8 @@ var (
 	debug int
 
 	cpuProfile string
+
+	filterInMeasurement string
 )
 
 // Parse args:
@@ -81,7 +85,13 @@ func init() {
 
 	flag.StringVar(&cpuProfile, "cpu-profile", "", "Write CPU profile to `file`")
 
+	flag.StringVar(&filterInMeasurement, "filter-in-measurement", "", "filter in only this measurement to output`")
+
 	flag.Parse()
+
+	// Set filter-in-measurement
+	sm := statemanager.GetManager()
+	sm.SetFilterInMeasurement(filterInMeasurement)
 
 	if !(interleavedGenerationGroupID < interleavedGenerationGroups) {
 		log.Fatal("incorrect interleaved groups configuration")

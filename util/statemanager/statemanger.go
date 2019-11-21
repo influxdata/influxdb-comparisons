@@ -3,7 +3,8 @@ package statemanager
 import "sync"
 
 type manager struct {
-	state string
+	state               string
+	filterInMeasurement string
 
 	// InfluxDB V2
 	v2Host    string
@@ -50,4 +51,10 @@ func (sm *manager) GetAuthToken() string {
 }
 func (sm *manager) SetAuthToken(s string) {
 	sm.authToken = s
+}
+func (sm *manager) GetFilterInMeasurement() string {
+	return sm.filterInMeasurement
+}
+func (sm *manager) SetFilterInMeasurement(s string) {
+	sm.filterInMeasurement = s
 }
