@@ -124,7 +124,15 @@ func init() {
 	log.Printf("Using sampling interval %v\n", devops.EpochDuration)
 }
 
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
+}
+
+
 func main() {
+	defer timeTrack(time.Now(), "bulk_data_gen - main()")
+
 	if cpuProfile != "" {
 		f, err := os.Create(cpuProfile)
 		if err != nil {
@@ -147,7 +155,8 @@ func main() {
 		log.Printf("Using config file %s\n", configFile)
 	}
 
-	out := bufio.NewWriterSize(os.Stdout, 4<<20)
+	//out := bufio.NewWriterSize(os.Stdout, 4<<20) //original buffer size
+	out := bufio.NewWriterSize(os.Stdout, 4<<24)  // most potimized size based on inspection via test regression
 	defer out.Flush()
 
 	var sim common.Simulator
