@@ -8,12 +8,16 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgconn"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
+	"github.com/influxdata/sandbox/pgx/pgxpool"
 
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/jackc/pgx"
@@ -21,9 +25,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
-	"github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 	"io"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	timescale_serialization "github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 )
 
 // Output data format choices:
@@ -70,6 +75,7 @@ type TimescaleBulkLoad struct {
 	itemsRead        int64
 	bytesRead        int64
 	scanFinished     bool
+	pool             *pgxpool.Pool
 }
 
 var load = &TimescaleBulkLoad{}
@@ -170,13 +176,17 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	if bulk_load.Runner.DoLoad {
 		hostPort := strings.Split(l.daemonUrl, ":")
 		port, _ := strconv.Atoi(hostPort[1])
-		conn, err = pgx.Connect(pgx.ConnConfig{
-			Host:     hostPort[0],
-			Port:     uint16(port),
-			User:     l.psUser,
-			Password: l.psPassword,
-			Database: DatabaseName,
-		})
+		conn, err = pgx.ConnectConfig(context.Background(),
+			&pgx.ConnConfig{
+				Config: pgconn.Config{
+					Host:     hostPort[0],
+					Port:     uint16(port),
+					User:     l.psUser,
+					Password: l.psPassword,
+					Database: DatabaseName,
+				},
+			})
+
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -185,7 +195,7 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	err = l.formatProcessors.process(l, conn, waitGroup)
 
 	if bulk_load.Runner.DoLoad {
-		conn.Close()
+		conn.Close(context.Background())
 	}
 	return err
 }
@@ -495,7 +505,7 @@ func (l *TimescaleBulkLoad) processBatches(conn *pgx.Conn, workersGroup *sync.Wa
 		}
 
 		// Write the batch.
-		_, err := conn.Exec(string(batch.Bytes()))
+		_, err := conn.Exec(context.Background(), string(batch.Bytes()))
 		if err != nil {
 			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
 			break
@@ -519,26 +529,35 @@ func (l *TimescaleBulkLoad) processBatchesBatch(conn *pgx.Conn, workersGroup *sy
 		}
 
 		// Write the batch.
-		sqlBatch := conn.BeginBatch()
+		//sqlBatch := conn.BeginBatch()
+		sqlBatch := pgx.Batch{}
 		for _, line := range batch {
 			sqlBatch.Queue(line, nil, nil, nil)
 		}
 
-		err := sqlBatch.Send(context.Background(), nil)
-
-		if err != nil {
-			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
-			break
+		sqlBatchResults := l.pool.SendBatch(context.Background(), &sqlBatch)
+		if err := sqlBatchResults.Close(); err != nil {
+			log.Fatalf("failed to close a batch operation %v", err)
 		}
 
-		for i := 0; i < len(batch); i++ {
-			_, err = sqlBatch.ExecResults()
+		/*
+			err := sqlBatch.Send(context.Background(), nil)
+
 			if err != nil {
-				rerr = fmt.Errorf("Error line %d of batch %d: %s\n", i, batch, err.Error())
+				rerr = fmt.Errorf("Error writing: %s\n", err.Error())
 				break
 			}
-		}
-		sqlBatch.Close()
+		*/
+		/*
+			for i := 0; i < len(batch); i++ {
+				_, err = sqlBatch.ExecResults()
+				if err != nil {
+					rerr = fmt.Errorf("Error line %d of batch %d: %s\n", i, batch, err.Error())
+					break
+				}
+			}
+		*/
+		//sqlBatch.Close()
 		batches++
 	}
 	workersGroup.Done()
@@ -591,13 +610,13 @@ func (l *TimescaleBulkLoad) processBatchesBin(conn *pgx.Conn, workersGroup *sync
 		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
 		// Write the batch.
 		c := NewCopyFromPoint(batch)
-		rows, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
+		rows, err := conn.CopyFrom(context.Background(), pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
 			rerr = fmt.Errorf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
 			break
 		}
-		if rows != len(batch) {
+		if rows != int64(len(batch)) {
 			rerr = fmt.Errorf("Problem writing of %d batch: Written only %d rows of %d", n, rows, len(batch))
 			break
 		}
@@ -697,69 +716,75 @@ var iotCreateIndexSql = []string{
 func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 	hostPort := strings.Split(daemon_url, ":")
 	port, _ := strconv.Atoi(hostPort[1])
-	conn, err := pgx.Connect(pgx.ConnConfig{
-		Host: hostPort[0],
-		Port: uint16(port),
-		User: l.psUser,
-	})
+	conn, err := pgx.ConnectConfig(context.Background(),
+		&pgx.ConnConfig{
+			Config: pgconn.Config{
+				Host: hostPort[0],
+				Port: uint16(port),
+				User: l.psUser,
+			},
+		})
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = conn.Exec(createDatabaseSql)
-	conn.Close()
+	_, err = conn.Exec(context.Background(), createDatabaseSql)
+	conn.Close(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
-	conn, err = pgx.Connect(pgx.ConnConfig{
-		Host:     hostPort[0],
-		Port:     uint16(port),
-		User:     l.psUser,
-		Database: DatabaseName,
-	})
+	conn, err = pgx.ConnectConfig(context.Background(),
+		&pgx.ConnConfig{
+			Config: pgconn.Config{
+				Host:     hostPort[0],
+				Port:     uint16(port),
+				User:     l.psUser,
+				Database: DatabaseName,
+			},
+		})
 
 	defer func() {
-		conn.Close()
+		conn.Close(context.Background())
 	}()
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = conn.Exec(createExtensionSql)
+	_, err = conn.Exec(context.Background(), createExtensionSql)
 	if err != nil {
 		log.Fatal(err)
 	}
 	//TODO create only use-case specific schema
 	for _, sql := range DevopsCreateTableSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range IotCreateTableSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateIndexSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateIndexSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
 		if err != nil {
 			log.Fatal(err)
 		}
