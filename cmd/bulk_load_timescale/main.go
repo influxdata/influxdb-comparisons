@@ -15,10 +15,9 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
-	"github.com/influxdata/sandbox/pgx/pgxpool"
-
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgxpool"
 
 	"bytes"
 	"context"
