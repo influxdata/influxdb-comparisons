@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgconn"
-
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/sandbox/pgx/pgxpool"
 
@@ -174,10 +172,20 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	var conn *pgx.Conn
 	var err error
 	if bulk_load.Runner.DoLoad {
-		hostPort := strings.Split(l.daemonUrl, ":")
-		port, _ := strconv.Atoi(hostPort[1])
-		conn, err = pgx.ConnectConfig(context.Background(),
-			&pgx.ConnConfig{
+		//hostPort := strings.Split(l.daemonUrl, ":")
+		//port, _ := strconv.Atoi(hostPort[1])
+
+		//# Example DSN
+		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+		//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
+		dsn := fmt.Sprintf("host=%s port=%d user=%s password=password", "localhost", uint16(5432), l.psUser)
+		fmt.Println("*****", dsn)
+		config, err := pgx.ParseConfig(dsn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		conn, err = pgx.ConnectConfig(context.Background(), config)
+		/*	&pgx.ConnConfig{
 				Config: pgconn.Config{
 					Host:     hostPort[0],
 					Port:     uint16(port),
@@ -186,7 +194,7 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 					Database: DatabaseName,
 				},
 			})
-
+		*/
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -396,6 +404,7 @@ func (l *TimescaleBulkLoad) scanBin(reader io.Reader, syncChanDone chan int) {
 outer:
 	for {
 		err = binary.Read(buffReader, binary.LittleEndian, &size)
+		fmt.Println("********** size = ", size)
 		if err == io.EOF {
 			break
 		}
@@ -714,26 +723,51 @@ var iotCreateIndexSql = []string{
 }
 
 func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
-	hostPort := strings.Split(daemon_url, ":")
-	port, _ := strconv.Atoi(hostPort[1])
-	conn, err := pgx.ConnectConfig(context.Background(),
-		&pgx.ConnConfig{
-			Config: pgconn.Config{
-				Host: hostPort[0],
-				Port: uint16(port),
-				User: l.psUser,
-			},
-		})
+	//hostPort := strings.Split(daemon_url, ":")
+	//port, _ := strconv.Atoi(hostPort[1])
+
+	//# Example DSN
+	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+	//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=password", "localhost", uint16(5432), l.psUser)
+	fmt.Println("*****", dsn)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
+	conn, err := pgx.ConnectConfig(context.Background(), config)
+	/*		&pgx.ConnConfig{
+				Config: pgconn.Config{
+					Host: hostPort[0],
+					Port: uint16(port),
+					User: l.psUser,
+				},
+			})
+	*/
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	_, err = conn.Exec(context.Background(), createDatabaseSql)
+
 	conn.Close(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
-	conn, err = pgx.ConnectConfig(context.Background(),
-		&pgx.ConnConfig{
+
+	//# Example DSN
+	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+	//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
+
+	dsn = fmt.Sprintf("host=%s port=%d user=%s password=password database=benchmark_db", "localhost", uint16(5432), l.psUser)
+	fmt.Println("***** 2", dsn)
+	config, err = pgx.ParseConfig(dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn, err = pgx.ConnectConfig(context.Background(), config)
+
+	/*	&pgx.ConnConfig{
 			Config: pgconn.Config{
 				Host:     hostPort[0],
 				Port:     uint16(port),
@@ -741,6 +775,7 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 				Database: DatabaseName,
 			},
 		})
+	*/
 
 	defer func() {
 		conn.Close(context.Background())
@@ -755,36 +790,42 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 	//TODO create only use-case specific schema
 	for _, sql := range DevopsCreateTableSql {
 		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range IotCreateTableSql {
 		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateIndexSql {
 		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateIndexSql {
 		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateHypertableSql {
 		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateHypertableSql {
 		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
