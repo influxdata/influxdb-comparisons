@@ -171,12 +171,8 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	var conn *pgx.Conn
 	var err error
 	if bulk_load.Runner.DoLoad {
-		//hostPort := strings.Split(l.daemonUrl, ":")
-		//port, _ := strconv.Atoi(hostPort[1])
-
 		//# Example DSN
 		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
-		//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
 		dsn := fmt.Sprintf("host=%s port=%d user=%s password=password database=benchmark_db", "localhost", uint16(5432), l.psUser)
 		fmt.Println("*****", dsn)
 		config, err := pgx.ParseConfig(dsn)
@@ -184,16 +180,6 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 			log.Fatal(err)
 		}
 		conn, err = pgx.ConnectConfig(context.Background(), config)
-		/*	&pgx.ConnConfig{
-				Config: pgconn.Config{
-					Host:     hostPort[0],
-					Port:     uint16(port),
-					User:     l.psUser,
-					Password: l.psPassword,
-					Database: DatabaseName,
-				},
-			})
-		*/
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -537,7 +523,6 @@ func (l *TimescaleBulkLoad) processBatchesBatch(conn *pgx.Conn, workersGroup *sy
 		}
 
 		// Write the batch.
-		//sqlBatch := conn.BeginBatch()
 		sqlBatch := pgx.Batch{}
 		for _, line := range batch {
 			sqlBatch.Queue(line, nil, nil, nil)
@@ -547,25 +532,6 @@ func (l *TimescaleBulkLoad) processBatchesBatch(conn *pgx.Conn, workersGroup *sy
 		if err := sqlBatchResults.Close(); err != nil {
 			log.Fatalf("failed to close a batch operation %v", err)
 		}
-
-		/*
-			err := sqlBatch.Send(context.Background(), nil)
-
-			if err != nil {
-				rerr = fmt.Errorf("Error writing: %s\n", err.Error())
-				break
-			}
-		*/
-		/*
-			for i := 0; i < len(batch); i++ {
-				_, err = sqlBatch.ExecResults()
-				if err != nil {
-					rerr = fmt.Errorf("Error line %d of batch %d: %s\n", i, batch, err.Error())
-					break
-				}
-			}
-		*/
-		//sqlBatch.Close()
 		batches++
 	}
 	workersGroup.Done()
@@ -722,12 +688,8 @@ var iotCreateIndexSql = []string{
 }
 
 func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
-	//hostPort := strings.Split(daemon_url, ":")
-	//port, _ := strconv.Atoi(hostPort[1])
-
 	//# Example DSN
 	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
-	//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=password", "localhost", uint16(5432), l.psUser)
 	fmt.Println("*****", dsn)
 	config, err := pgx.ParseConfig(dsn)
@@ -735,14 +697,6 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 		log.Fatal(err)
 	}
 	conn, err := pgx.ConnectConfig(context.Background(), config)
-	/*		&pgx.ConnConfig{
-				Config: pgconn.Config{
-					Host: hostPort[0],
-					Port: uint16(port),
-					User: l.psUser,
-				},
-			})
-	*/
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -756,8 +710,6 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 
 	//# Example DSN
 	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
-	//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
-
 	dsn = fmt.Sprintf("host=%s port=%d user=%s password=password database=benchmark_db", "localhost", uint16(5432), l.psUser)
 	fmt.Println("***** 2", dsn)
 	config, err = pgx.ParseConfig(dsn)
@@ -765,16 +717,6 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 		log.Fatal(err)
 	}
 	conn, err = pgx.ConnectConfig(context.Background(), config)
-
-	/*	&pgx.ConnConfig{
-			Config: pgconn.Config{
-				Host:     hostPort[0],
-				Port:     uint16(port),
-				User:     l.psUser,
-				Database: DatabaseName,
-			},
-		})
-	*/
 
 	defer func() {
 		conn.Close(context.Background())

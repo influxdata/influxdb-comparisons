@@ -107,7 +107,6 @@ func (b *TimescaleQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGro
 	if b.doQueries {
 		//# Example DSN
 		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
-		//dsn := fmt.Sprintf("host=%s port=%s user=%s", hostPort[0], uint16(port), l.psUser)
 		dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s database=%s", b.hostPort[0], uint16(b.port), b.psUser, b.psPassword, DatabaseName)
 		fmt.Println("***** qyuery", dsn)
 		config, err := pgx.ParseConfig(dsn)
@@ -115,14 +114,6 @@ func (b *TimescaleQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGro
 			log.Fatal(err)
 		}
 		conn, err = pgx.ConnectConfig(context.Background(), config)
-
-		/* pgx.Connect(pgx.ConnConfig{
-			Host:     b.hostPort[0],
-			Port:     uint16(b.port),
-			User:     b.psUser,
-			Password: b.psPassword,
-			Database: DatabaseName,
-		}) */
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -253,12 +244,9 @@ func (b *TimescaleQueryBenchmarker) oneQuery(conn *pgx.Conn, q *Query) (float64,
 }
 
 func (b *TimescaleQueryBenchmarker) batchQueries(conn *pgx.Conn, batch []*Query) (float64, error) {
-	//var timeCol int64
-	//var valCol float64
 	var err error
 
 	start := time.Now().UnixNano()
-	//sqlBatch := conn.BeginBatch()
 	sqlBatch := pgx.Batch{}
 	for _, query := range batch {
 		sqlBatch.Queue(string(query.QuerySQL), nil, nil, []int16{pgx.BinaryFormatCode, pgx.BinaryFormatCode})
@@ -269,33 +257,6 @@ func (b *TimescaleQueryBenchmarker) batchQueries(conn *pgx.Conn, batch []*Query)
 		log.Fatalf("failed to close a batch operation %v", err)
 	}
 
-	/*
-		err := sqlBatch.Send(context.Background(), nil)
-
-		if err != nil {
-			log.Fatalf("Error writing: %s\n", err.Error())
-		}
-
-		for i := 0; i < len(batch); i++ {
-			rows, err := sqlBatch.QueryResults()
-			if err != nil {
-				log.Fatalf("Error line %d of batch: %s\n", i, err.Error())
-			}
-			for rows.Next() {
-				if bulk_query.Benchmarker.PrettyPrintResponses() {
-					err = rows.Scan(&timeCol, &valCol)
-					if err != nil {
-						log.Fatalf("Error scan row of query %d of batch: %s\n", i, err.Error())
-					}
-					t := time.Unix(0, timeCol).UTC()
-					fmt.Printf("ID %d: %s, %f\n", batch[i].ID, t, valCol)
-				}
-			}
-
-			rows.Close()
-		}
-		sqlBatch.Close()
-	*/
 	// Return the batch buffer to the pool.
 	took := time.Now().UnixNano() - start
 	lag := float64(took) / 1e6 // milliseconds
