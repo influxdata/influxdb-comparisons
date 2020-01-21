@@ -19,15 +19,16 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"log"
 	"os"
 	"runtime/pprof"
 	"strings"
 	"time"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 )
 
 // Output data format choices:
@@ -43,6 +44,7 @@ var (
 	configFile       string
 	scaleVar         int64
 	scaleVarOffset   int64
+	cardinality      int64
 	samplingInterval time.Duration
 
 	timestampStartStr string
@@ -60,12 +62,25 @@ var (
 	cpuProfile string
 )
 
+const NHostSims = 9
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
+
 // Parse args:
 func init() {
 	flag.StringVar(&format, "format", formatChoices[0], fmt.Sprintf("Format to emit. (choices: %s)", strings.Join(formatChoices, ", ")))
 
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], fmt.Sprintf("Use case to model. (choices: %s)", strings.Join(common.UseCaseChoices, ", ")))
 	flag.Int64Var(&scaleVar, "scale-var", 1, "Scaling variable specific to the use case.")
+	flag.Int64Var(&cardinality, "cardinality", 1, "Target measures/tags unique counts (over writes the 'scale-var').")
 	flag.Int64Var(&scaleVarOffset, "scale-var-offset", 0, "Scaling variable offset specific to the use case.")
 	flag.DurationVar(&samplingInterval, "sampling-interval", devops.EpochDuration, "Simulated sampling interval.")
 	flag.StringVar(&configFile, "config-file", "", "Simulator config file in TOML format (experimental)")
@@ -122,13 +137,19 @@ func init() {
 	}
 	devops.EpochDuration = samplingInterval
 	log.Printf("Using sampling interval %v\n", devops.EpochDuration)
+
+	if isFlagPassed("cardinality") == true {
+		scaleVar = cardinality / NHostSims
+	} else {
+		cardinality = scaleVar * NHostSims
+	}
+	log.Printf("Using cardinality of %v\n", cardinality)
 }
 
 func timeTrack(start time.Time, name string) {
 	elapsed := time.Since(start)
 	log.Printf("%s took %s", name, elapsed)
 }
-
 
 func main() {
 	defer timeTrack(time.Now(), "bulk_data_gen - main()")
@@ -156,7 +177,7 @@ func main() {
 	}
 
 	//out := bufio.NewWriterSize(os.Stdout, 4<<20) //original buffer size
-	out := bufio.NewWriterSize(os.Stdout, 4<<24)  // most potimized size based on inspection via test regression
+	out := bufio.NewWriterSize(os.Stdout, 4<<24) // most potimized size based on inspection via test regression
 	defer out.Flush()
 
 	var sim common.Simulator
