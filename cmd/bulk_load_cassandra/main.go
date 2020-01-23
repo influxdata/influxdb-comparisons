@@ -29,7 +29,7 @@ type CassandraBulkLoad struct {
 	useCase      string
 
 	// Global vars
-	batchChan    chan *gocql.Batch
+	inputChan    chan *gocql.Query
 	inputDone    chan struct{}
 	session      *gocql.Session
 	scanFinished bool
@@ -97,7 +97,7 @@ func (l *CassandraBulkLoad) PrepareWorkers() {
 		}
 	}
 
-	l.batchChan = make(chan *gocql.Batch, bulk_load.Runner.Workers)
+	l.inputChan = make(chan *gocql.Query, bulk_load.Runner.Workers)
 	l.inputDone = make(chan struct{})
 }
 
@@ -122,7 +122,7 @@ func (l *CassandraBulkLoad) AfterRunProcess(i int) {
 }
 
 func (l *CassandraBulkLoad) EmptyBatchChanel() {
-	for range l.batchChan {
+	for range l.inputChan {
 		//read out remaining batches
 	}
 }
@@ -133,7 +133,7 @@ func (l *CassandraBulkLoad) IsScanFinished() bool {
 
 func (l *CassandraBulkLoad) SyncEnd() {
 	<-l.inputDone
-	close(l.batchChan)
+	close(l.inputChan)
 }
 
 func (l *CassandraBulkLoad) CleanUp() {
@@ -165,11 +165,7 @@ func (l *CassandraBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.bytesRead = 0
 	l.valuesRead = 0
 
-	var batch *gocql.Batch
-	if bulk_load.Runner.DoLoad {
-		batch = l.session.NewBatch(gocql.LoggedBatch)
-	}
-
+	var input *gocql.Query
 	var n int
 	var err error
 	var totalPoints, totalValues int64
@@ -197,12 +193,10 @@ outer:
 			continue
 		}
 
-		batch.Query(string(scanner.Bytes()))
-
+		input = l.session.Query(string(scanner.Bytes()))
 		n++
 		if n >= bulk_load.Runner.BatchSize {
-			l.batchChan <- batch
-			batch = l.session.NewBatch(gocql.LoggedBatch)
+			l.inputChan <- input
 			n = 0
 			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
 				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
@@ -222,7 +216,7 @@ outer:
 
 	// Finished reading input, make sure last batch goes out.
 	if n > 0 {
-		l.batchChan <- batch
+		l.inputChan <- input
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -244,13 +238,13 @@ outer:
 // processBatches reads byte buffers from batchChan and writes them to the target server, while tracking stats on the write.
 func (l *CassandraBulkLoad) processBatches(session *gocql.Session, waitGroup *sync.WaitGroup) error {
 	var rerr error
-	for batch := range l.batchChan {
+	for input := range l.inputChan {
 		if !bulk_load.Runner.DoLoad {
 			continue
 		}
 
 		// Write the batch.
-		err := session.ExecuteBatch(batch)
+		err := input.Exec()
 		if err != nil {
 			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
 			break
