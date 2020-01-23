@@ -8,22 +8,24 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgxpool"
 
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
-	"github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 	"io"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	timescale_serialization "github.com/influxdata/influxdb-comparisons/timescale_serializaition"
 )
 
 // Output data format choices:
@@ -70,6 +72,7 @@ type TimescaleBulkLoad struct {
 	itemsRead        int64
 	bytesRead        int64
 	scanFinished     bool
+	pool             *pgxpool.Pool
 }
 
 var load = &TimescaleBulkLoad{}
@@ -168,15 +171,15 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	var conn *pgx.Conn
 	var err error
 	if bulk_load.Runner.DoLoad {
-		hostPort := strings.Split(l.daemonUrl, ":")
-		port, _ := strconv.Atoi(hostPort[1])
-		conn, err = pgx.Connect(pgx.ConnConfig{
-			Host:     hostPort[0],
-			Port:     uint16(port),
-			User:     l.psUser,
-			Password: l.psPassword,
-			Database: DatabaseName,
-		})
+		//# Example DSN
+		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+		dsn := fmt.Sprintf("host=%s port=%d user=%s password=password database=benchmark_db", "localhost", uint16(5432), l.psUser)
+		fmt.Println("*****", dsn)
+		config, err := pgx.ParseConfig(dsn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		conn, err = pgx.ConnectConfig(context.Background(), config)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -185,7 +188,7 @@ func (l *TimescaleBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemet
 	err = l.formatProcessors.process(l, conn, waitGroup)
 
 	if bulk_load.Runner.DoLoad {
-		conn.Close()
+		conn.Close(context.Background())
 	}
 	return err
 }
@@ -386,6 +389,7 @@ func (l *TimescaleBulkLoad) scanBin(reader io.Reader, syncChanDone chan int) {
 outer:
 	for {
 		err = binary.Read(buffReader, binary.LittleEndian, &size)
+		fmt.Println("********** size = ", size)
 		if err == io.EOF {
 			break
 		}
@@ -495,7 +499,7 @@ func (l *TimescaleBulkLoad) processBatches(conn *pgx.Conn, workersGroup *sync.Wa
 		}
 
 		// Write the batch.
-		_, err := conn.Exec(string(batch.Bytes()))
+		_, err := conn.Exec(context.Background(), string(batch.Bytes()))
 		if err != nil {
 			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
 			break
@@ -519,26 +523,15 @@ func (l *TimescaleBulkLoad) processBatchesBatch(conn *pgx.Conn, workersGroup *sy
 		}
 
 		// Write the batch.
-		sqlBatch := conn.BeginBatch()
+		sqlBatch := pgx.Batch{}
 		for _, line := range batch {
 			sqlBatch.Queue(line, nil, nil, nil)
 		}
 
-		err := sqlBatch.Send(context.Background(), nil)
-
-		if err != nil {
-			rerr = fmt.Errorf("Error writing: %s\n", err.Error())
-			break
+		sqlBatchResults := l.pool.SendBatch(context.Background(), &sqlBatch)
+		if err := sqlBatchResults.Close(); err != nil {
+			log.Fatalf("failed to close a batch operation %v", err)
 		}
-
-		for i := 0; i < len(batch); i++ {
-			_, err = sqlBatch.ExecResults()
-			if err != nil {
-				rerr = fmt.Errorf("Error line %d of batch %d: %s\n", i, batch, err.Error())
-				break
-			}
-		}
-		sqlBatch.Close()
 		batches++
 	}
 	workersGroup.Done()
@@ -591,13 +584,13 @@ func (l *TimescaleBulkLoad) processBatchesBin(conn *pgx.Conn, workersGroup *sync
 		//log.Printf("CopyFrom %d of %s\n", n, batch[0].MeasurementName)
 		// Write the batch.
 		c := NewCopyFromPoint(batch)
-		rows, err := conn.CopyFrom(pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
+		rows, err := conn.CopyFrom(context.Background(), pgx.Identifier{batch[0].MeasurementName}, batch[0].Columns, c)
 		//log.Println("CopyFrom End")
 		if err != nil {
 			rerr = fmt.Errorf("Error writing %d batch of '%s' of size %d in position %d: %s\n", n, batch[0].MeasurementName, len(batch), c.Position(), err.Error())
 			break
 		}
-		if rows != len(batch) {
+		if rows != int64(len(batch)) {
 			rerr = fmt.Errorf("Problem writing of %d batch: Written only %d rows of %d", n, rows, len(batch))
 			break
 		}
@@ -616,7 +609,7 @@ var DevopsCreateTableSql = []string{
 	"CREATE table disk(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, path TEXT, fstype TEXT, total bigint, free bigint, used bigint, used_percent bigint, inodes_total bigint, inodes_free bigint, inodes_used bigint);",
 	"CREATE table kernel(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, boot_time bigint, interrupts bigint, context_switches bigint, processes_forked bigint, disk_pages_in bigint, disk_pages_out bigint);",
 	"CREATE table mem(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, total bigint, available bigint, used bigint, free bigint, cached bigint, buffered bigint, used_percent float8, available_percent float8, buffered_percent float8);",
-	"CREATE table Net(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, interface TEXT, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint );",
+	"CREATE table net(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, interface TEXT, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint, bytes_sent bigint, bytes_recv bigint, packets_sent bigint, packets_recv bigint, err_in bigint, err_out bigint, drop_in bigint, drop_out bigint );",
 	"CREATE table nginx(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, accepts bigint, active bigint, handled bigint, reading bigint, requests bigint, waiting bigint, writing bigint );",
 	"CREATE table postgresl(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, numbackends bigint, xact_commit bigint, xact_rollback bigint, blks_read bigint, blks_hit bigint, tup_returned bigint, tup_fetched bigint, tup_inserted bigint, tup_updated bigint, tup_deleted bigint, conflicts bigint, temp_files bigint, temp_bytes bigint, deadlocks bigint, blk_read_time bigint, blk_write_time bigint );",
 	"CREATE table redis(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, port TEXT, server TEXT, uptime_in_seconds bigint, total_connections_received bigint, expired_keys bigint, evicted_keys bigint, keyspace_hits bigint, keyspace_misses bigint, instantaneous_ops_per_sec bigint, instantaneous_input_kbps bigint, instantaneous_output_kbps bigint, connected_clients bigint, used_memory bigint, used_memory_rss bigint, used_memory_peak bigint, used_memory_lua bigint, rdb_changes_since_last_save bigint, sync_full bigint, sync_partial_ok bigint, sync_partial_err bigint, pubsub_channels bigint, pubsub_patterns bigint, latest_fork_usec bigint, connected_slaves bigint, master_repl_offset bigint, repl_backlog_active bigint, repl_backlog_size bigint, repl_backlog_histlen bigint, mem_fragmentation_ratio bigint, used_cpu_sys bigint, used_cpu_user bigint, used_cpu_sys_children bigint, used_cpu_user_children bigint );",
@@ -695,71 +688,85 @@ var iotCreateIndexSql = []string{
 }
 
 func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
-	hostPort := strings.Split(daemon_url, ":")
-	port, _ := strconv.Atoi(hostPort[1])
-	conn, err := pgx.Connect(pgx.ConnConfig{
-		Host: hostPort[0],
-		Port: uint16(port),
-		User: l.psUser,
-	})
+	//# Example DSN
+	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=password", "localhost", uint16(5432), l.psUser)
+	fmt.Println("*****", dsn)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = conn.Exec(createDatabaseSql)
-	conn.Close()
+	conn, err := pgx.ConnectConfig(context.Background(), config)
 	if err != nil {
 		log.Fatal(err)
 	}
-	conn, err = pgx.Connect(pgx.ConnConfig{
-		Host:     hostPort[0],
-		Port:     uint16(port),
-		User:     l.psUser,
-		Database: DatabaseName,
-	})
+
+	_, err = conn.Exec(context.Background(), createDatabaseSql)
+
+	conn.Close(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//# Example DSN
+	//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca
+	dsn = fmt.Sprintf("host=%s port=%d user=%s password=password database=benchmark_db", "localhost", uint16(5432), l.psUser)
+	fmt.Println("***** 2", dsn)
+	config, err = pgx.ParseConfig(dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn, err = pgx.ConnectConfig(context.Background(), config)
 
 	defer func() {
-		conn.Close()
+		conn.Close(context.Background())
 	}()
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = conn.Exec(createExtensionSql)
+	_, err = conn.Exec(context.Background(), createExtensionSql)
 	if err != nil {
 		log.Fatal(err)
 	}
 	//TODO create only use-case specific schema
 	for _, sql := range DevopsCreateTableSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range IotCreateTableSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateIndexSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateIndexSql {
-		_, err = conn.Exec(sql)
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range devopsCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	for _, sql := range iotCreateHypertableSql {
-		_, err = conn.Exec(fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		fmt.Println(sql)
 		if err != nil {
 			log.Fatal(err)
 		}
