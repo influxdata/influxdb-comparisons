@@ -276,7 +276,7 @@ func (l *InfluxBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.valuesRead = 0
 	buf := l.bufPool.Get().(*bytes.Buffer)
 
-	var n, values  int
+	var n, values int
 	var totalPoints, totalValues, totalValuesCounted int64
 
 	newline := []byte("\n")
@@ -590,6 +590,9 @@ func listDatabases(daemonUrl string) ([]string, error) {
 		if name == "_internal" {
 			continue
 		}
+		if name == "telegraf" {
+			continue
+		}
 		ret = append(ret, name)
 	}
 	return ret, nil
@@ -597,7 +600,7 @@ func listDatabases(daemonUrl string) ([]string, error) {
 
 // countFields return number of fields in protocol line
 func countFields(line string) int {
-	lineParts := strings.Split(line," ") // "measurement,tags fields timestamp"
+	lineParts := strings.Split(line, " ") // "measurement,tags fields timestamp"
 	if len(lineParts) != 3 {
 		log.Fatalf("invalid protocol line: '%s'", line)
 	}
