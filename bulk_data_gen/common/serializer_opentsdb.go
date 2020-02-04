@@ -46,6 +46,8 @@ func (m *SerializerOpenTSDB) SerializePoint(w io.Writer, p *Point) (err error) {
 		buf := scratchBufPool.Get().([]byte)
 		buf = append(buf, []byte(`{"`)...)
 		buf = append(buf, p.MeasurementName...)
+		buf = append(buf, '.')
+		buf = append(buf, p.FieldKeys[i]...)
 		buf = append(buf, []byte(`","timestamp":`)...)
 		buf = strconv.AppendInt(buf, p.Timestamp.UTC().UnixNano()/1e6, 10)
 		buf = append(buf, []byte(`,"value":`)...)
