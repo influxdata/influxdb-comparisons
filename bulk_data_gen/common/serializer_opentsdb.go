@@ -1,9 +1,8 @@
 package common
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
+	"strconv"
 )
 
 type SerializerOpenTSDB struct {
@@ -29,54 +28,46 @@ func NewSerializerOpenTSDB() *SerializerOpenTSDB {
 // For example:
 // { "metric": "cpu.usage_user", "timestamp": 14516064000000, "value": 99.5170917755353770, "tags": { "hostname": "host_01", "region": "ap-southeast-2", "datacenter": "ap-southeast-2a" } }
 func (m *SerializerOpenTSDB) SerializePoint(w io.Writer, p *Point) (err error) {
-	type wirePoint struct {
-		Metric    string            `json:"metric"`
-		Timestamp int64             `json:"timestamp"`
-		Tags      map[string]string `json:"tags"`
-		Value     float64           `json:"value"`
-	}
-
-	metricBase := string(p.MeasurementName) // will be re-used
-	encoder := json.NewEncoder(w)
-
-	wp := wirePoint{}
-	// Timestamps in OpenTSDB must be millisecond precision:
-	wp.Timestamp = p.Timestamp.UTC().UnixNano() / 1e6
-	// sanity check
-	{
-		x := fmt.Sprintf("%d", wp.Timestamp)
-		if len(x) != 13 {
-			panic("serialized timestamp was not 13 digits")
-		}
-	}
-	wp.Tags = make(map[string]string, len(p.TagKeys))
-	for i := 0; i < len(p.TagKeys); i++ {
-		// so many allocs..
-		key := string(p.TagKeys[i])
-		val := string(p.TagValues[i])
-		wp.Tags[key] = val
-	}
-
-	// for each Value, generate a new line in the output:
 	for i := 0; i < len(p.FieldKeys); i++ {
-		wp.Metric = metricBase + "." + string(p.FieldKeys[i])
+		var value float64
 		switch x := p.FieldValues[i].(type) {
 		case int:
-			wp.Value = float64(x)
+			value = float64(x)
 		case int64:
-			wp.Value = float64(x)
+			value = float64(x)
 		case float32:
-			wp.Value = float64(x)
+			value = float64(x)
 		case float64:
-			wp.Value = float64(x)
+			value = x
 		default:
 			panic("bad numeric value for OpenTSDB serialization")
 		}
 
-		err := encoder.Encode(wp)
-		if err != nil {
-			return err
+		buf := scratchBufPool.Get().([]byte)
+		buf = append(buf, []byte(`{"`)...)
+		buf = append(buf, p.MeasurementName...)
+		buf = append(buf, '.')
+		buf = append(buf, p.FieldKeys[i]...)
+		buf = append(buf, []byte(`","timestamp":`)...)
+		buf = strconv.AppendInt(buf, p.Timestamp.UTC().UnixNano()/1e6, 10)
+		buf = append(buf, []byte(`,"value":`)...)
+		buf = strconv.AppendFloat(buf, value, 'f', 16, 64)
+		buf = append(buf, []byte(`,"tags":{`)...)
+		for i := 0; i < len(p.TagKeys); i++ {
+			buf = append(buf, []byte(`"`)...)
+			buf = append(buf, p.TagKeys[i]...)
+			buf = append(buf, []byte(`":"`)...)
+			buf = append(buf, p.TagValues[i]...)
+			buf = append(buf, []byte(`"`)...)
+			if i+1 != len(p.TagValues) {
+				buf = append(buf, ',')
+			}
 		}
+		buf = append(buf, "}}\n"...)
+		_, err = w.Write(buf)
+
+		buf = buf[:0]
+		scratchBufPool.Put(buf)
 	}
 
 	return nil
