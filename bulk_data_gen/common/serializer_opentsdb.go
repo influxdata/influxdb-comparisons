@@ -44,7 +44,7 @@ func (m *SerializerOpenTSDB) SerializePoint(w io.Writer, p *Point) (err error) {
 		}
 
 		buf := scratchBufPool.Get().([]byte)
-		buf = append(buf, []byte(`{"`)...)
+		buf = append(buf, []byte(`{"metric":"`)...)
 		buf = append(buf, p.MeasurementName...)
 		buf = append(buf, '.')
 		buf = append(buf, p.FieldKeys[i]...)
