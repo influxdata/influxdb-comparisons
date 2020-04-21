@@ -109,7 +109,7 @@ func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool, host string, 
 	req.Header.SetContentTypeBytes(textPlain)
 	req.Header.SetMethodBytes(post)
 	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(l.v2Host, "/"), url.QueryEscape(l.orgId), url.QueryEscape(l.bucketId))
-	fmt.Println("***** ====>", host, orgId, bucketId, authToken)
+	//fmt.Println("***** ====>", host, orgId, bucketId, authToken)
 	//myhost := "https://eu-central-1-1.aws.cloud2.influxdata.com/"
 	//myorgId := "perf-v2"
 
@@ -119,7 +119,7 @@ func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool, host string, 
 	//url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(myhost, "/"), url.QueryEscape(myorgId), url.QueryEscape(mybucketId))
 	url := fmt.Sprintf("%s/api/v2/write?org=%s&bucket=%s", strings.TrimSuffix(host, "/"), url.QueryEscape(orgId), url.QueryEscape(bucketId))
 	u := []byte(url) // convert string into bytes
-	fmt.Println("url =", url)
+	//fmt.Println("url =", url)
 	req.Header.SetRequestURIBytes(u)
 	//req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", l.authToken))
 	//req.Header.Set("Authorization", fmt.Sprintf("%s%s", "Token ", myauthToken))
@@ -137,7 +137,7 @@ func (w *HTTPWriter) WriteLineProtocolV2(body []byte, isGzip bool, host string, 
 	lat := time.Since(start).Nanoseconds()
 	if err == nil {
 		sc := resp.StatusCode()
-		fmt.Println("status code = ", sc)
+		//fmt.Println("status code = ", sc)
 		if sc == 500 && backpressurePred(resp.Body()) {
 			err = BackoffError
 			log.Printf("backoff suggested, reason: %s", resp.Body())
