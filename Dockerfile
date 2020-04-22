@@ -11,6 +11,8 @@ RUN cd cmd/bulk_load_influx && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE
 
 FROM debian:stable
 WORKDIR /
+COPY entrypoint.sh /entrypoint.sh 
 COPY --from=builder /workspace/bin/bulk_data_gen .
 COPY --from=builder /workspace/bin/bulk_load_influx .
 ENTRYPOINT ["/bin/bash"]
+CMD ["/entrypoint.sh"]
