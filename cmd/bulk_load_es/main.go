@@ -33,10 +33,12 @@ var (
 		"default": {
 			"5": defaultTemplate,
 			"6": defaultTemplate6x,
+			"7": defaultTemplate7x,
 		},
 		"aggregation": {
 			"5": aggregationTemplate,
 			"6": aggregationTemplate6x,
+			"7": aggregationTemplate7x,
 		},
 	}
 )
@@ -183,6 +185,76 @@ var aggregationTemplate6x = []byte(`
           "doc_values": true,
           "index": true
         }
+      }
+    }
+  }
+}
+`)
+
+var defaultTemplate7x = []byte(`
+{
+  "index_patterns": "*",
+  "settings": {
+    "index": {
+      "refresh_interval": "5s",
+      "number_of_replicas": {{.NumberOfReplicas}},
+      "number_of_shards": {{.NumberOfShards}},
+      "translog.retention.size": "20mb",
+      "translog.retention.age" : "10s",
+      "translog.flush_threshold_size" : "20mb"
+    }
+  },
+  "mappings": {
+    "_source":         { "enabled": true },
+    "properties": {
+      "timestamp":    { "type": "date", "doc_values": true }
+    }
+  }
+}
+`)
+
+var aggregationTemplate7x = []byte(`
+{
+  "index_patterns": "*",
+  "settings": {
+    "index": {
+      "refresh_interval": "5s",
+      "number_of_replicas": {{.NumberOfReplicas}},
+      "number_of_shards": {{.NumberOfShards}},
+      "translog.retention.size": "20mb",
+      "translog.retention.age" : "10s",
+      "translog.flush_threshold_size" : "20mb"
+    }
+  },
+  "mappings": {
+    "dynamic_templates": [
+      {
+        "all_string_fields_can_be_used_for_filtering": {
+          "match": "*",
+          "match_mapping_type": "string",
+          "mapping": {
+            "type": "keyword",
+            "doc_values": true
+          }
+        }
+      },
+      {
+        "all_nonstring_fields_are_just_stored_in_column_index": {
+          "match": "*",
+          "match_mapping_type": "*",
+          "mapping": {
+            "doc_values": true,
+            "index": false
+          }
+        }
+      }
+    ],
+    "_source": { "enabled": false },
+    "properties": {
+      "timestamp": {
+        "type": "date",
+        "doc_values": true,
+        "index": true
       }
     }
   }
