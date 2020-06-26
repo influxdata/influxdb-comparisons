@@ -16,6 +16,9 @@ func NewSerializerElastic(version string) *SerializerElastic {
 	typeName := typeName5x
 	if strings.HasPrefix(version, "6") {
 		typeName = typeName6x
+	} else if strings.HasPrefix(version, "7") {
+		// ES 7.x has typeless API https://www.elastic.co/blog/moving-from-types-to-typeless-apis-in-elasticsearch-7-0
+		typeName = nil
 	}
 	return &SerializerElastic{typeName: typeName}
 }
@@ -38,8 +41,10 @@ func (s *SerializerElastic) SerializePoint(w io.Writer, p *Point) error {
 
 	buf = append(buf, "{ \"index\" : { \"_index\" : \""...)
 	buf = append(buf, p.MeasurementName...)
-	buf = append(buf, "\", \"_type\" : \""...)
-	buf = append(buf, s.typeName...)
+	if s.typeName != nil {
+		buf = append(buf, "\", \"_type\" : \""...)
+		buf = append(buf, s.typeName...)
+	}
 	buf = append(buf, "\" } }\n"...)
 
 	buf = append(buf, '{')
