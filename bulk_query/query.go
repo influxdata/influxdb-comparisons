@@ -101,6 +101,10 @@ func (q QueryBenchmarker) BatchSize() int {
 	return q.batchSize
 }
 
+func (q QueryBenchmarker) BurnIn() uint64 {
+	return q.burnIn
+}
+
 func (q QueryBenchmarker) GradualWorkersIncrease() bool {
 	return q.gradualWorkersIncrease
 }
