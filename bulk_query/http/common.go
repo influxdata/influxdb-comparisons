@@ -16,7 +16,8 @@ type HTTPClientCommon struct {
 
 // HTTPClientDoOptions wraps options uses when calling `Do`.
 type HTTPClientDoOptions struct {
-	Authorization		 string
+	ContentType          string
+	Authorization        string
 	Debug                int
 	PrettyPrintResponses bool
 }
