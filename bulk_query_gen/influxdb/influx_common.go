@@ -48,11 +48,8 @@ func (d *InfluxCommon) getHttpQuery(humanLabel, intervalStart, query string, q *
 		q.Path = []byte(fmt.Sprintf("/query?%s", getValues.Encode()))
 		q.Body = nil
 	} else {
-		getValues := url.Values{}
-		getValues.Set("org", "my-org")
 		q.Method = []byte("POST")
-		//q.Path = []byte("/api/v2/query")
-		q.Path = []byte(fmt.Sprintf("/api/v2/query?%s", getValues.Encode()))
+		//q.Path will be set in query_benchmarker_influxdb
 		q.Body = []byte(query)
 	}
 }

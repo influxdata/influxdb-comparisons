@@ -220,8 +220,8 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	if b.useApiV2 {
 		opts.ContentType = "application/vnd.flux"
 		opts.Accept = "application/csv"
-		//opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId)) // to override generated path
 		opts.AuthToken = b.authToken
+		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId)) // query path is empty for 2.x in generated queries
 	}
 	var queriesSeen int64
 	for queries := range b.queryChan {
@@ -276,9 +276,9 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 			doneCh <- 1
 		}
 	}()
-	//if opts.Path != nil { // override query path when set (InfluxDB 2.x)
-	//	q.Path = opts.Path
-	//}
+	if b.useApiV2 {
+		q.Path = opts.Path
+	}
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*bulk_query.Stat)
 	stat.Init(q.HumanLabel, lagMillis)
