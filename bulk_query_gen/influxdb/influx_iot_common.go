@@ -65,9 +65,7 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHo
 		query = fmt.Sprintf(`from(bucket:"%s") `+
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature" and (%s)) `+
-			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
-			`|> window(every:1h) `+
-			`|> mean() `+
+			`|> aggregateWindow(every:1h, fn:mean) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
