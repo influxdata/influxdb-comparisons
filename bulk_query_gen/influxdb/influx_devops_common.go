@@ -90,8 +90,8 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
 			`|> group() `+
-			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
-			`|> drop(columns:["_start", "_stop"])`,
+			`|> aggregateWindow(every: 1m, fn: max) `+
+			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
 			combinedHostnameClause)
