@@ -42,8 +42,8 @@ type InfluxBulkLoad struct {
 	useGzip           bool
 	consistency       string
 	clientIndex       int
-	dbOrganization    string // InfluxDB v2
-	dbCredentialFile  string // InfluxDB v2
+	organization      string // InfluxDB v2
+	credentialFile    string // InfluxDB v2
 	//runtime vars
 	bufPool               sync.Pool
 	batchChan             chan batch
@@ -60,8 +60,8 @@ type InfluxBulkLoad struct {
 	bytesRead             int64
 	useApiV2              bool
 	authToken             string // InfluxDB v2
-	dbId                  string // InfluxDB v2
-	dbOrgId               string // InfluxDB v2
+	bucketId              string // InfluxDB v2
+	orgId                 string // InfluxDB v2
 }
 
 var consistencyChoices = map[string]struct{}{
@@ -112,8 +112,8 @@ func (l *InfluxBulkLoad) Init() {
 	flag.BoolVar(&l.useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
-	flag.StringVar(&l.dbOrganization, "organization", "", "Organization name (InfluxDB v2).")
-	flag.StringVar(&l.dbCredentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
+	flag.StringVar(&l.organization, "organization", "", "Organization name (InfluxDB v2).")
+	flag.StringVar(&l.credentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
 }
 
 func (l *InfluxBulkLoad) Validate() {
@@ -150,11 +150,11 @@ func (l *InfluxBulkLoad) Validate() {
 		l.backoffTimeOut = bulk_load.Runner.TimeLimit
 	}
 
-	if l.dbOrganization != "" || l.dbCredentialFile != "" {
-		if l.dbOrganization == "" {
+	if l.organization != "" || l.credentialFile != "" {
+		if l.organization == "" {
 			log.Fatalf("organization must be set for InfluxDB v2")
 		}
-		if l.dbCredentialFile == "" {
+		if l.credentialFile == "" {
 			log.Fatalf("credentials-file must be set for InfluxDB v2")
 		}
 		l.useApiV2 = true
@@ -166,22 +166,22 @@ func (l *InfluxBulkLoad) CreateDb() {
 	listDatabasesFn := l.listDatabases
 	createDbFn := l.createDb
 
-	// use proper functions for 1.x vs 2.x
-	if l.dbCredentialFile != "" {
-		authTokenBytes, err := ioutil.ReadFile(l.dbCredentialFile)
+	// use proper functions per version
+	if l.credentialFile != "" {
+		authTokenBytes, err := ioutil.ReadFile(l.credentialFile)
 		if err != nil {
 			log.Fatalf("error reading credentials file: %v", err)
 		}
 		l.authToken = string(authTokenBytes)
 	}
-	if l.dbOrganization != "" {
-		organizations, err := l.listOrgs2(l.daemonUrls[0], l.dbOrganization)
+	if l.organization != "" {
+		organizations, err := l.listOrgs2(l.daemonUrls[0], l.organization)
 		if err != nil {
 			log.Fatalf("error listing organizations: %v", err)
 		}
-		l.dbOrgId, _ = organizations[l.dbOrganization]
-		if l.dbOrgId == "" {
-			log.Fatalf("organization '%s' not found", l.dbOrganization)
+		l.orgId, _ = organizations[l.organization]
+		if l.orgId == "" {
+			log.Fatalf("organization '%s' not found", l.organization)
 		}
 		listDatabasesFn = l.listDatabases2
 		createDbFn = l.createDb2
@@ -204,17 +204,17 @@ func (l *InfluxBulkLoad) CreateDb() {
 	var id string
 	id, ok := existingDatabases[bulk_load.Runner.DbName]
 	if ok {
-		log.Printf("database %s [%s] already exists", bulk_load.Runner.DbName, id)
+		log.Printf("Database %s [%s] already exists", bulk_load.Runner.DbName, id)
 	} else {
 		id, err = createDbFn(l.daemonUrls[0], bulk_load.Runner.DbName)
 		if err != nil {
 			log.Fatal(err)
 		}
 		time.Sleep(1000 * time.Millisecond)
-		log.Printf("database %s [%s] created", bulk_load.Runner.DbName, id)
+		log.Printf("Database %s [%s] created", bulk_load.Runner.DbName, id)
 	}
 	if l.useApiV2 {
-		l.dbId = id
+		l.bucketId = id
 	}
 }
 
@@ -268,13 +268,26 @@ func (l *InfluxBulkLoad) PrepareProcess(i int) {
 		backingOffChan: make(chan bool, 100),
 		backingOffDone: make(chan struct{}),
 	}
-	l.configs[i].writer = NewHTTPWriter(HTTPWriterConfig{
-		DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
-		Host:           l.configs[i].url,
-		Database:       bulk_load.Runner.DbName,
-		BackingOffChan: l.configs[i].backingOffChan,
-		BackingOffDone: l.configs[i].backingOffDone,
-	}, l.consistency)
+	if l.useApiV2 {
+		l.configs[i].writer = NewHTTPWriter2(HTTPWriterConfig{
+			DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
+			Host:           l.configs[i].url,
+			Database:       bulk_load.Runner.DbName,
+			BackingOffChan: l.configs[i].backingOffChan,
+			BackingOffDone: l.configs[i].backingOffDone,
+			OrgId:          l.orgId,
+			BucketId:       l.bucketId,
+			AuthToken:      l.authToken,
+		}, l.consistency)
+	} else {
+		l.configs[i].writer = NewHTTPWriter(HTTPWriterConfig{
+			DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
+			Host:           l.configs[i].url,
+			Database:       bulk_load.Runner.DbName,
+			BackingOffChan: l.configs[i].backingOffChan,
+			BackingOffDone: l.configs[i].backingOffDone,
+		}, l.consistency)
+	}
 }
 
 func (l *InfluxBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
@@ -607,8 +620,8 @@ func (l *InfluxBulkLoad) createDb2(daemonUrl, dbName string) (string, error) {
 	}
 	bucket := bucketType{
 		Name: dbName,
-		Organization: l.dbOrganization,
-		OrgID: l.dbOrgId,
+		Organization: l.organization,
+		OrgID: l.orgId,
 	}
 	bucketBytes, err := json.Marshal(bucket)
 	if err != nil {
