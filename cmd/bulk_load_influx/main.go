@@ -14,7 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
+	neturl "net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -268,8 +268,11 @@ func (l *InfluxBulkLoad) PrepareProcess(i int) {
 		backingOffChan: make(chan bool, 100),
 		backingOffDone: make(chan struct{}),
 	}
+	var url string
+	var c *HTTPWriterConfig
+
 	if l.useApiV2 {
-		l.configs[i].writer = NewHTTPWriter2(HTTPWriterConfig{
+		c = &HTTPWriterConfig{
 			DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
 			Host:           l.configs[i].url,
 			Database:       bulk_load.Runner.DbName,
@@ -278,16 +281,19 @@ func (l *InfluxBulkLoad) PrepareProcess(i int) {
 			OrgId:          l.orgId,
 			BucketId:       l.bucketId,
 			AuthToken:      l.authToken,
-		}, l.consistency)
+		}
+		url = c.Host + "/api/v2/write?org=" + c.OrgId + "&bucket=" + c.BucketId + "&precision=ns&consistency=" + l.consistency
 	} else {
-		l.configs[i].writer = NewHTTPWriter(HTTPWriterConfig{
+		c = &HTTPWriterConfig{
 			DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
 			Host:           l.configs[i].url,
 			Database:       bulk_load.Runner.DbName,
 			BackingOffChan: l.configs[i].backingOffChan,
 			BackingOffDone: l.configs[i].backingOffDone,
-		}, l.consistency)
+		}
+		url = c.Host + "/write?consistency=" + l.consistency + "&db=" + neturl.QueryEscape(c.Database)
 	}
+	l.configs[i].writer = NewHTTPWriter(*c, url)
 }
 
 func (l *InfluxBulkLoad) RunProcess(i int, waitGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
@@ -580,7 +586,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 }
 
 func (l *InfluxBulkLoad) createDb(daemonUrl, dbName string) (string, error) {
-	u, err := url.Parse(daemonUrl)
+	u, err := neturl.Parse(daemonUrl)
 	if err != nil {
 		return "", err
 	}

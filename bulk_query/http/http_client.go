@@ -51,6 +51,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 
 	// populate a request with data from the Query:
 	req, err := http.NewRequest(string(q.Method), string(uri), bytes.NewBuffer(q.Body)) // TODO performance
+	if opts.ContentType != "" {
+		req.Header.Add("Content-Type", opts.ContentType)
+	}
 	if opts.Authorization != "" {
 		req.Header.Add("Authorization", opts.Authorization)
 	}

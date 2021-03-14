@@ -41,6 +41,7 @@ type InfluxQueryBenchmarker struct {
 	queryPool sync.Pool
 	queryChan chan []*http.Query
 
+	useApiV2  bool
 	authToken string // InfluxDB v2
 	bucketId  string // InfluxDB v2
 	orgId     string // InfluxDB v2
@@ -103,6 +104,7 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		if b.orgId == "" {
 			log.Fatalf("organization '%s' not found", b.organization)
 		}
+		b.useApiV2 = true
 	}
 }
 
@@ -213,6 +215,9 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	opts := &http.HTTPClientDoOptions{
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
+	}
+	if b.useApiV2 {
+		opts.ContentType = "application/vnd.flux"
 	}
 	if b.orgId != "" {
 		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId))

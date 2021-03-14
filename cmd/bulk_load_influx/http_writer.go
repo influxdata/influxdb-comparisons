@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net/url"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -57,26 +56,14 @@ type HTTPWriter struct {
 }
 
 // NewHTTPWriter returns a new HTTPWriter from the supplied HTTPWriterConfig.
-func NewHTTPWriter(c HTTPWriterConfig, consistency string) *HTTPWriter {
+func NewHTTPWriter(c HTTPWriterConfig, url string) *HTTPWriter {
 	return &HTTPWriter{
 		client: fasthttp.Client{
 			Name: "bulk_load_influx",
 			MaxIdleConnDuration: DefaultIdleConnectionTimeout,
 		},
 		c:   c,
-		url: []byte(c.Host + "/write?consistency=" + consistency + "&db=" + url.QueryEscape(c.Database)),
-	}
-}
-
-// NewHTTPWriter2 returns a new HTTPWriter from the supplied HTTPWriterConfig. (InfluxDB v2)
-func NewHTTPWriter2(c HTTPWriterConfig, consistency string) *HTTPWriter {
-	return &HTTPWriter{
-		client: fasthttp.Client{
-			Name: "bulk_load_influx",
-			MaxIdleConnDuration: DefaultIdleConnectionTimeout,
-		},
-		c:   c,
-		url: []byte(c.Host + "/api/v2/write?org=" + c.OrgId + "&bucket=" + c.BucketId + "&precision=ns&consistency=" + consistency),
+		url: []byte(url),
 	}
 }
 
