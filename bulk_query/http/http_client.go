@@ -54,6 +54,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	if opts.Authorization != "" {
 		req.Header.Add("Authorization", opts.Authorization)
 	}
+	if opts.AuthToken != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("Token %s", opts.AuthToken))
+	}
 
 	start := time.Now()
 	resp, err := w.client.Do(req)
