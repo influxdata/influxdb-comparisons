@@ -7,24 +7,26 @@ package main
 
 import (
 	"encoding/gob"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_query"
-	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
-	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
 	"log"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
+	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
 // Program option vars:
 type InfluxQueryBenchmarker struct {
 	csvDaemonUrls string
 	daemonUrls    []string
+	dbOrganization         string // InfluxDB v2
+	dbCredentialFile       string // InfluxDB v2
 
 	dialTimeout        time.Duration
 	readTimeout        time.Duration
@@ -35,6 +37,10 @@ type InfluxQueryBenchmarker struct {
 
 	queryPool sync.Pool
 	queryChan chan []*http.Query
+
+	authToken string // InfluxDB v2
+	dbId      string // InfluxDB v2
+	dbOrgId   string // InfluxDB v2
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -59,6 +65,8 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
+	flag.StringVar(&b.dbOrganization, "organization", "", "Organization name (InfluxDB v2).")
+	flag.StringVar(&b.dbCredentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
@@ -86,7 +94,6 @@ func (b *InfluxQueryBenchmarker) Prepare() {
 				Method:           make([]byte, 0, 1024),
 				Path:             make([]byte, 0, 1024),
 				Body:             make([]byte, 0, 1024),
-				Language:         "",
 			}
 		},
 	}
@@ -185,11 +192,11 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
-	if dbOrgId != "" {
-		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", dbOrgId))
+	if b.dbOrgId != "" {
+		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.dbOrgId))
 	}
-	if authToken != "" {
-		opts.AuthToken = authToken
+	if b.authToken != "" {
+		opts.AuthToken = b.authToken
 	}
 	var queriesSeen int64
 	for queries := range b.queryChan {

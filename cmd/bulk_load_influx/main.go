@@ -1,5 +1,4 @@
 // bulk_load_influx loads an InfluxDB daemon with data from stdin.
-// bulk_load_influx loads an InfluxDB daemon with data from stdin.
 //
 // The caller is responsible for assuring that the database is empty before
 // bulk load.
@@ -11,7 +10,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/valyala/fasthttp"
@@ -43,6 +42,8 @@ type InfluxBulkLoad struct {
 	useGzip           bool
 	consistency       string
 	clientIndex       int
+	dbOrganization    string // InfluxDB v2
+	dbCredentialFile  string // InfluxDB v2
 	//runtime vars
 	bufPool               sync.Pool
 	batchChan             chan batch
@@ -57,6 +58,10 @@ type InfluxBulkLoad struct {
 	valuesRead            int64
 	itemsRead             int64
 	bytesRead             int64
+	useApiV2              bool
+	authToken             string // InfluxDB v2
+	dbId                  string // InfluxDB v2
+	dbOrgId               string // InfluxDB v2
 }
 
 var consistencyChoices = map[string]struct{}{
@@ -107,6 +112,8 @@ func (l *InfluxBulkLoad) Init() {
 	flag.BoolVar(&l.useGzip, "gzip", true, "Whether to gzip encode requests (default true).")
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
+	flag.StringVar(&l.dbOrganization, "organization", "", "Organization name (InfluxDB v2).")
+	flag.StringVar(&l.dbCredentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
 }
 
 func (l *InfluxBulkLoad) Validate() {
@@ -143,39 +150,72 @@ func (l *InfluxBulkLoad) Validate() {
 		l.backoffTimeOut = bulk_load.Runner.TimeLimit
 	}
 
-	if dbOrganization != "" || dbCredentialFile != "" {
-		if dbOrganization == "" {
+	if l.dbOrganization != "" || l.dbCredentialFile != "" {
+		if l.dbOrganization == "" {
 			log.Fatalf("organization must be set for InfluxDB v2")
 		}
-		if dbCredentialFile == "" {
+		if l.dbCredentialFile == "" {
 			log.Fatalf("credentials-file must be set for InfluxDB v2")
 		}
-		useApiV2 = true
+		l.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
 	}
 }
 
 func (l *InfluxBulkLoad) CreateDb() {
+	listDatabasesFn := l.listDatabases
+	createDbFn := l.createDb
+
+	// use proper functions for 1.x vs 2.x
+	if l.dbCredentialFile != "" {
+		authTokenBytes, err := ioutil.ReadFile(l.dbCredentialFile)
+		if err != nil {
+			log.Fatalf("error reading credentials file: %v", err)
+		}
+		l.authToken = string(authTokenBytes)
+	}
+	if l.dbOrganization != "" {
+		organizations, err := l.listOrgs2(l.daemonUrls[0], l.dbOrganization)
+		if err != nil {
+			log.Fatalf("error listing organizations: %v", err)
+		}
+		l.dbOrgId, _ = organizations[l.dbOrganization]
+		if l.dbOrgId == "" {
+			log.Fatalf("organization '%s' not found", l.dbOrganization)
+		}
+		listDatabasesFn = l.listDatabases2
+		createDbFn = l.createDb2
+	}
+
 	// this also test db connection
-	existingDatabases, err := listDatabases(l.daemonUrls[0])
+	existingDatabases, err := listDatabasesFn(l.daemonUrls[0])
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	id, dbExist := existingDatabases[bulk_load.Runner.DbName]
+	if l.useApiV2 {
+		l.dbId = id
+	}
+
 	if len(existingDatabases) > 0 {
-		if bulk_load.Runner.DoAbortOnExist {
-			log.Fatalf("There are databases already in the data store. If you know what you are doing, run the command:\ncurl 'http://localhost:8086/query?q=drop%%20database%%20%s'\n", existingDatabases[0])
+		if dbExist && bulk_load.Runner.DoAbortOnExist {
+			log.Fatalf("There are databases already in the data store. If you know what you are doing, run the command:\ncurl 'http://localhost:8086/query?q=drop%%20database%%20%s'\n", bulk_load.Runner.DbName)
 		} else {
 			log.Printf("Info: there are databases already in the data store.")
 		}
 	}
 
 	if len(existingDatabases) == 0 {
-		err = createDb(l.daemonUrls[0], bulk_load.Runner.DbName, l.replicationFactor, l.consistency)
+		id, err = createDbFn(l.daemonUrls[0], bulk_load.Runner.DbName)
 		if err != nil {
 			log.Fatal(err)
 		}
 		time.Sleep(1000 * time.Millisecond)
+
+		if l.useApiV2 {
+			l.dbId = id
+		}
 	}
 
 }
@@ -528,7 +568,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 	return totalBackoffSecs
 }
 
-func createDb(daemonUrl, dbname string, replicationFactor int, consistency string) error {
+func (l *InfluxBulkLoad) createDb(daemonUrl, dbName string) (string, error) {
 	u, err := url.Parse(daemonUrl)
 	if err != nil {
 		return "", err
@@ -537,13 +577,13 @@ func createDb(daemonUrl, dbname string, replicationFactor int, consistency strin
 	// serialize params the right way:
 	u.Path = "query"
 	v := u.Query()
-	v.Set("consistency", consistency)
-	v.Set("q", fmt.Sprintf("CREATE DATABASE %s WITH REPLICATION %d", dbname, replicationFactor))
+	v.Set("consistency", l.consistency)
+	v.Set("q", fmt.Sprintf("CREATE DATABASE %s WITH REPLICATION %d", dbName, l.replicationFactor))
 	u.RawQuery = v.Encode()
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return "" ,err
+		return "", err
 	}
 
 	client := &http.Client{}
@@ -551,17 +591,16 @@ func createDb(daemonUrl, dbname string, replicationFactor int, consistency strin
 	if err != nil {
 		return "", err
 	}
-
 	defer resp.Body.Close()
 	// does the body need to be read into the void?
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
+		return "", fmt.Errorf("createDb returned status code: %v", resp.StatusCode)
 	}
 	return "", nil
 }
 
-func createDb2(daemonUrl, dbname string, replicationFactor int) (string, error) {
+func (l *InfluxBulkLoad) createDb2(daemonUrl, dbName string) (string, error) {
 	type bucketType struct {
 		ID string `json:"id,omitempty"`
 		Name string `json:"name"`
@@ -570,47 +609,47 @@ func createDb2(daemonUrl, dbname string, replicationFactor int) (string, error) 
 	}
 	bucket := bucketType{
 		Name: dbName,
-		Organization: dbOrganization,
-		OrgID: dbOrgId,
+		Organization: l.dbOrganization,
+		OrgID: l.dbOrgId,
 	}
 	bucketBytes, err := json.Marshal(bucket)
 	if err != nil {
-		return "", fmt.Errorf("createDb marshal error: %s", err.Error())
+		return "", fmt.Errorf("createDb2 marshal error: %s", err.Error())
 	}
 
 	u := fmt.Sprintf("%s/api/v2/buckets", daemonUrl)
 	req, err := http.NewRequest("POST", u, bytes.NewReader(bucketBytes))
 	if err != nil {
-		return "", fmt.Errorf("createDb newRequest error: %s", err.Error())
+		return "", fmt.Errorf("createDb2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("createDb POST error: %s", err.Error())
+		return "", fmt.Errorf("createDb2 POST error: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
-		return "", fmt.Errorf("createDb POST status code: %v", resp.StatusCode)
+		return "", fmt.Errorf("createDb2 POST status code: %v", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("createDb readAll error: %s", err.Error())
+		return "", fmt.Errorf("createDb2 readAll error: %s", err.Error())
 	}
 
 	err = json.Unmarshal(body, &bucket)
 	if err != nil {
-		return "", fmt.Errorf("createDb unmarshal error: %s", err.Error())
+		return "", fmt.Errorf("createDb2 unmarshal error: %s", err.Error())
 	}
 
 	return bucket.ID, nil
 }
 
 // listDatabases lists the existing databases in InfluxDB.
-func listDatabases(daemonUrl string) (map[string]string, error) {
+func (l *InfluxBulkLoad) listDatabases(daemonUrl string) (map[string]string, error) {
 	u := fmt.Sprintf("%s/query?q=show%%20databases", daemonUrl)
 	resp, err := http.Get(u)
 	if err != nil {
@@ -643,36 +682,36 @@ func listDatabases(daemonUrl string) (map[string]string, error) {
 		return nil, fmt.Errorf("listDatabases unmarshal error: %s", err.Error())
 	}
 
-	var ret []string
+	ret := make(map[string]string)
 	for _, nestedName := range listing.Results[0].Series[0].Values {
 		ret[nestedName[0]] = ""
 	}
 	return ret, nil
 }
 
-// listDatabases2 lists the existing databases in InfluxDB v2.
-func listDatabases2(daemonUrl string) (map[string]string, error) {
+// listDatabases2 lists the existing databases in InfluxDB v2
+func (l *InfluxBulkLoad) listDatabases2(daemonUrl string) (map[string]string, error) {
 	u := fmt.Sprintf("%s/api/v2/buckets", daemonUrl)
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("listDatabases newRequest error: %s", err.Error())
+		return nil, fmt.Errorf("listDatabases2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("listDatabases GET error: %s", err.Error())
+		return nil, fmt.Errorf("listDatabases2 GET error: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("listDatabases GET status code: %v", resp.StatusCode)
+		return nil, fmt.Errorf("listDatabases2 GET status code: %v", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("listDatabases readAll error: %s", err.Error())
+		return nil, fmt.Errorf("listDatabases2 readAll error: %s", err.Error())
 	}
 
 	// Do ad-hoc parsing to find existing database names:
@@ -688,7 +727,7 @@ func listDatabases2(daemonUrl string) (map[string]string, error) {
 	var listing listingType
 	err = json.Unmarshal(body, &listing)
 	if err != nil {
-		return nil, fmt.Errorf("listDatabases unmarshal error: %s", err.Error())
+		return nil, fmt.Errorf("listDatabases2 unmarshal error: %s", err.Error())
 	}
 
 	ret := make(map[string]string)
@@ -698,29 +737,29 @@ func listDatabases2(daemonUrl string) (map[string]string, error) {
 	return ret, nil
 }
 
-// listOrgs2 lists the organizations in InfluxDB v2.
-func listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
+// listOrgs2 lists the organizations in InfluxDB v2
+func (l *InfluxBulkLoad) listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
 	u := fmt.Sprintf("%s/api/v2/orgs", daemonUrl)
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("listOrgs newRequest error: %s", err.Error())
+		return nil, fmt.Errorf("listOrgs2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("listOrgs GET error: %s", err.Error())
+		return nil, fmt.Errorf("listOrgs2 GET error: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("listOrgs GET status code: %v", resp.StatusCode)
+		return nil, fmt.Errorf("listOrgs2 GET status code: %v", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("listOrgs readAll error: %s", err.Error())
+		return nil, fmt.Errorf("listOrgs2 readAll error: %s", err.Error())
 	}
 
 	type listingType struct {
@@ -728,10 +767,16 @@ func listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
 			Id string
 			Name string
 		}
-		if name == "telegraf" {
-			continue
-		}
-		ret = append(ret, name)
+	}
+	var listing listingType
+	err = json.Unmarshal(body, &listing)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs unmarshal error: %s", err.Error())
+	}
+
+	ret := make(map[string]string)
+	for _, org := range listing.Orgs {
+		ret[org.Name] = org.Id
 	}
 	return ret, nil
 }
