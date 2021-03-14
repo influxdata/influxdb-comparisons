@@ -218,6 +218,7 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	}
 	if b.useApiV2 {
 		opts.ContentType = "application/vnd.flux"
+		opts.Accept = "application/csv"
 	}
 	if b.orgId != "" {
 		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId))

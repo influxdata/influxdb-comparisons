@@ -22,6 +22,7 @@ type HTTPClientDoOptions struct {
 	PrettyPrintResponses bool
 	Path                 []byte
 	AuthToken            string
+	Accept               string
 }
 
 // HTTPClient interface.

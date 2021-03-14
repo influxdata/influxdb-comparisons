@@ -54,6 +54,9 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 	if opts.ContentType != "" {
 		req.Header.Add("Content-Type", opts.ContentType)
 	}
+	if opts.Accept != "" {
+		req.Header.Add("Accept", opts.Accept)
+	}
 	if opts.Authorization != "" {
 		req.Header.Add("Authorization", opts.Authorization)
 	}
