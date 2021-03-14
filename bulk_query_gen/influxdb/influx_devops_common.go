@@ -92,7 +92,7 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 			//`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
 			`|> group() `+
 			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
-			//`|> keep(columns:["_time", "_value"]) `+
+			`|> drop(columns:["_start", "_stop"]) `+
 			//`|> yield()`,
 			``,
 			d.DatabaseName,
