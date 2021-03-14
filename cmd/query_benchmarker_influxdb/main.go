@@ -7,11 +7,14 @@ package main
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	nethttp "net/http"
 	"strings"
 	"sync"
 	"time"
@@ -25,8 +28,8 @@ import (
 type InfluxQueryBenchmarker struct {
 	csvDaemonUrls    string
 	daemonUrls       []string
-	dbOrganization   string // InfluxDB v2
-	dbCredentialFile string // InfluxDB v2
+	organization     string // InfluxDB v2
+	credentialFile   string // InfluxDB v2
 
 	dialTimeout        time.Duration
 	readTimeout        time.Duration
@@ -39,8 +42,8 @@ type InfluxQueryBenchmarker struct {
 	queryChan chan []*http.Query
 
 	authToken string // InfluxDB v2
-	dbId      string // InfluxDB v2
-	dbOrgId   string // InfluxDB v2
+	bucketId  string // InfluxDB v2
+	orgId     string // InfluxDB v2
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -65,8 +68,8 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
-	flag.StringVar(&b.dbOrganization, "organization", "", "Organization name (InfluxDB v2).")
-	flag.StringVar(&b.dbCredentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
+	flag.StringVar(&b.organization, "organization", "", "Organization name (InfluxDB v2).")
+	flag.StringVar(&b.credentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
@@ -81,6 +84,25 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		http.UseFastHttp = b.httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
+	}
+
+	// InfluxDB 2.x
+	if b.credentialFile != "" {
+		authTokenBytes, err := ioutil.ReadFile(b.credentialFile)
+		if err != nil {
+			log.Fatalf("error reading credentials file: %v", err)
+		}
+		b.authToken = string(authTokenBytes)
+	}
+	if b.organization != "" {
+		organizations, err := b.listOrgs2(b.daemonUrls[0], b.organization)
+		if err != nil {
+			log.Fatalf("error listing organizations: %v", err)
+		}
+		b.orgId, _ = organizations[b.organization]
+		if b.orgId == "" {
+			log.Fatalf("organization '%s' not found", b.organization)
+		}
 	}
 }
 
@@ -192,8 +214,8 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
-	if b.dbOrgId != "" {
-		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.dbOrgId))
+	if b.orgId != "" {
+		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId))
 	}
 	if b.authToken != "" {
 		opts.AuthToken = b.authToken
@@ -270,4 +292,47 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 	}
 
 	return nil
+}
+
+func (l *InfluxQueryBenchmarker) listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
+	u := fmt.Sprintf("%s/api/v2/orgs", daemonUrl)
+	req, err := nethttp.NewRequest(nethttp.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 newRequest error: %s", err.Error())
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
+
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 GET error: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != nethttp.StatusOK {
+		return nil, fmt.Errorf("listOrgs2 GET status code: %v", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 readAll error: %s", err.Error())
+	}
+
+	type listingType struct {
+		Orgs []struct {
+			Id string
+			Name string
+		}
+	}
+	var listing listingType
+	err = json.Unmarshal(body, &listing)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs unmarshal error: %s", err.Error())
+	}
+
+	ret := make(map[string]string)
+	for _, org := range listing.Orgs {
+		ret[org.Name] = org.Id
+	}
+	return ret, nil
 }
