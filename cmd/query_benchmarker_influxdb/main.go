@@ -23,10 +23,10 @@ import (
 
 // Program option vars:
 type InfluxQueryBenchmarker struct {
-	csvDaemonUrls string
-	daemonUrls    []string
-	dbOrganization         string // InfluxDB v2
-	dbCredentialFile       string // InfluxDB v2
+	csvDaemonUrls    string
+	daemonUrls       []string
+	dbOrganization   string // InfluxDB v2
+	dbCredentialFile string // InfluxDB v2
 
 	dialTimeout        time.Duration
 	readTimeout        time.Duration

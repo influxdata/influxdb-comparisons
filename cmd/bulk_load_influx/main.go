@@ -15,16 +15,16 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
 	"github.com/valyala/fasthttp"
-	"strconv"
 )
 
 // TODO AP: Maybe useless
@@ -193,31 +193,29 @@ func (l *InfluxBulkLoad) CreateDb() {
 		log.Fatal(err)
 	}
 
-	id, dbExist := existingDatabases[bulk_load.Runner.DbName]
-	if l.useApiV2 {
-		l.dbId = id
-	}
-
 	if len(existingDatabases) > 0 {
-		if dbExist && bulk_load.Runner.DoAbortOnExist {
+		if bulk_load.Runner.DoAbortOnExist {
 			log.Fatalf("There are databases already in the data store. If you know what you are doing, run the command:\ncurl 'http://localhost:8086/query?q=drop%%20database%%20%s'\n", bulk_load.Runner.DbName)
 		} else {
-			log.Printf("Info: there are databases already in the data store.")
+			log.Print("There are databases already in the data store.")
 		}
 	}
 
-	if len(existingDatabases) == 0 {
+	var id string
+	id, ok := existingDatabases[bulk_load.Runner.DbName]
+	if ok {
+		log.Printf("database %s [%s] already exists", bulk_load.Runner.DbName, id)
+	} else {
 		id, err = createDbFn(l.daemonUrls[0], bulk_load.Runner.DbName)
 		if err != nil {
 			log.Fatal(err)
 		}
 		time.Sleep(1000 * time.Millisecond)
-
-		if l.useApiV2 {
-			l.dbId = id
-		}
+		log.Printf("database %s [%s] created", bulk_load.Runner.DbName, id)
 	}
-
+	if l.useApiV2 {
+		l.dbId = id
+	}
 }
 
 func (l *InfluxBulkLoad) GetBatchProcessor() bulk_load.BatchProcessor {
