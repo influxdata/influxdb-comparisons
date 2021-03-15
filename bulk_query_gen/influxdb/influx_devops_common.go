@@ -91,6 +91,7 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
 			`|> group() `+
 			`|> aggregateWindow(every: 1m, fn: max) `+
+			`|> keep(columns: ["_time", "_field", "_value"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
@@ -117,7 +118,6 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") `+
 			`|> group(columns: ["hostname"]) `+
 			`|> aggregateWindow(every: 1h, fn: mean) `+
-			`|> keep(columns: ["_time", "_field", "_value", hostname"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString())
