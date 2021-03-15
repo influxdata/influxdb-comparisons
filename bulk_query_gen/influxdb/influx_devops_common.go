@@ -116,7 +116,8 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 			`|> range(start:%s, stop:%s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") `+
 			`|> group(columns: ["hostname"]) `+
-			`|> aggregateWindow(every: 1h, fn: mean) `+
+			`|> mean() `+
+//			`|> aggregateWindow(every: 1h, fn: mean) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString())
