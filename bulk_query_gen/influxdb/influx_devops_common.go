@@ -86,12 +86,11 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT max(usage_user) from cpu where (%s) and time >= '%s' and time < '%s' group by time(1m)", combinedHostnameClause, interval.StartString(), interval.EndString())
 	} else { // Flux
-		query = fmt.Sprintf(`from(bucket:"%s") `+
-			`|> range(start:%s, stop:%s) `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
 			`|> group() `+
 			`|> aggregateWindow(every: 1m, fn: max) `+
-			`|> keep(columns: ["_time", "_field", "_value"]) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
@@ -113,8 +112,8 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT mean(usage_user) from cpu where time >= '%s' and time < '%s' group by time(1h),hostname", interval.StartString(), interval.EndString())
 	} else {
-		query = fmt.Sprintf(`from(bucket:"%s") `+
-			`|> range(start:%s, stop:%s) `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") `+
 			`|> group(columns: ["hostname"]) `+
 			`|> aggregateWindow(every: 1h, fn: mean) `+
