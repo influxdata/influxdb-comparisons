@@ -42,7 +42,6 @@ type InfluxQueryBenchmarker struct {
 	queryChan chan []*http.Query
 
 	useApiV2  bool
-	authToken string // InfluxDB v2
 	bucketId  string // InfluxDB v2
 	orgId     string // InfluxDB v2
 }
@@ -87,8 +86,13 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
 	}
 
-	// handle InfluxDB 2.x options
-	if b.organization != "" {
+	if b.organization != "" || b.token != "" {
+		if b.organization == "" {
+			log.Fatal("organization must be specified for InfluxDB 2.x")
+		}
+		if b.token == "" {
+			log.Fatal("token must be specified for InfluxDB 2.x")
+		}
 		organizations, err := b.listOrgs2(b.daemonUrls[0], b.organization)
 		if err != nil {
 			log.Fatalf("error listing organizations: %v", err)
@@ -96,14 +100,6 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		b.orgId, _ = organizations[b.organization]
 		if b.orgId == "" {
 			log.Fatalf("organization '%s' not found", b.organization)
-		}
-	}
-	if b.organization != "" || b.token != "" {
-		if b.organization == "" {
-			log.Fatal("organization must be specified for InfluxDB 2.x")
-		}
-		if b.token == "" {
-			log.Fatal("token must be specified for InfluxDB 2.x")
 		}
 		b.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
@@ -221,7 +217,7 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	if b.useApiV2 {
 		opts.ContentType = "application/vnd.flux"
 		opts.Accept = "application/csv"
-		opts.AuthToken = b.authToken
+		opts.AuthToken = b.token
 		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId)) // query path is empty for 2.x in generated queries
 	}
 	var queriesSeen int64
@@ -304,7 +300,7 @@ func (l *InfluxQueryBenchmarker) listOrgs2(daemonUrl string, orgName string) (ma
 	if err != nil {
 		return nil, fmt.Errorf("listOrgs2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.token))
 
 	resp, err := nethttp.DefaultClient.Do(req)
 	if err != nil {

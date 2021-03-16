@@ -149,8 +149,13 @@ func (l *InfluxBulkLoad) Validate() {
 		l.backoffTimeOut = bulk_load.Runner.TimeLimit
 	}
 
-	// handle InfluxDB 2.x options
-	if l.organization != "" {
+	if l.organization != "" || l.token != "" {
+		if l.organization == "" {
+			log.Fatal("organization must be specified for InfluxDB v2")
+		}
+		if l.token == "" {
+			log.Fatal("token must be specified for InfluxDB v2")
+		}
 		organizations, err := l.listOrgs2(l.daemonUrls[0], l.organization)
 		if err != nil {
 			log.Fatalf("error listing organizations: %v", err)
@@ -158,14 +163,6 @@ func (l *InfluxBulkLoad) Validate() {
 		l.orgId, _ = organizations[l.organization]
 		if l.orgId == "" {
 			log.Fatalf("organization '%s' not found", l.organization)
-		}
-	}
-	if l.organization != "" || l.token != "" {
-		if l.organization == "" {
-			log.Fatal("organization must be specified for InfluxDB v2")
-		}
-		if l.token == "" {
-			log.Fatal("token must be specified for InfluxDB v2")
 		}
 		l.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
