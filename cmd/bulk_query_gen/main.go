@@ -110,79 +110,79 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 	common.UseCaseDashboard: {
 		DashboardAll: {
 			"influx-flux-http": influxdb.NewFluxDashboardAll,
-			"influx-http": 		influxdb.NewInfluxQLDashboardAll,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardAll,
 		},
 		DashboardCpuNum: {
 			"influx-flux-http": influxdb.NewFluxDashboardCpuNum,
-			"influx-http": 		influxdb.NewInfluxQLDashboardCpuNum,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardCpuNum,
 		},
 		DashboardAvailability: {
 			"influx-flux-http": influxdb.NewFluxDashboardAvailability,
-			"influx-http": 		influxdb.NewInfluxQLDashboardAvailability,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardAvailability,
 		},
 		DashboardCpuUtilization: {
 			"influx-flux-http": influxdb.NewFluxDashboardCpuUtilization,
-			"influx-http": 		influxdb.NewInfluxQLDashboardCpuUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardCpuUtilization,
 		},
 		DashboardDiskAllocated: {
 			"influx-flux-http": influxdb.NewFluxDashboardDiskAllocated,
-			"influx-http": 		influxdb.NewInfluxQLDashboardDiskAllocated,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskAllocated,
 		},
 		DashboardDiskUsage: {
 			"influx-flux-http": influxdb.NewFluxDashboardDiskUsage,
-			"influx-http": 		influxdb.NewInfluxQLDashboardDiskUsage,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskUsage,
 		},
 		DashboardDiskUtilization: {
 			"influx-flux-http": influxdb.NewFluxDashboardDiskUtilization,
-			"influx-http": 		influxdb.NewInfluxQLDashboardDiskUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskUtilization,
 		},
 		DashboardHttpRequestDuration: {
 			"influx-flux-http": influxdb.NewFluxDashboardHttpRequestDuration,
-			"influx-http": 		influxdb.NewInfluxQLDashboardHttpRequestDuration,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardHttpRequestDuration,
 		},
 		DashboardHttpRequests: {
 			"influx-flux-http": influxdb.NewFluxDashboardHttpRequests,
-			"influx-http": 		influxdb.NewInfluxQLDashboardHttpRequests,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardHttpRequests,
 		},
 		DashboardKapaCpu: {
 			"influx-flux-http": influxdb.NewFluxDashboardKapaCpu,
-			"influx-http": 		influxdb.NewInfluxQLDashboardKapaCpu,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaCpu,
 		},
 		DashboardKapaLoad: {
 			"influx-flux-http": influxdb.NewFluxDashboardKapaLoad,
-			"influx-http": 		influxdb.NewInfluxQLDashboardKapaLoad,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaLoad,
 		},
 		DashboardKapaRam: {
 			"influx-flux-http": influxdb.NewFluxDashboardKapaRam,
-			"influx-http": 		influxdb.NewInfluxQLDashboardKapaRam,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaRam,
 		},
 		DashboardMemoryTotal: {
 			"influx-flux-http": influxdb.NewFluxDashboardMemoryTotal,
-			"influx-http": 		influxdb.NewInfluxQLDashboardMemoryTotal,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardMemoryTotal,
 		},
 		DashboardMemoryUtilization: {
 			"influx-flux-http": influxdb.NewFluxDashboardMemoryUtilization,
-			"influx-http": 		influxdb.NewInfluxQLDashboardMemoryUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardMemoryUtilization,
 		},
 		DashboardNginxRequests: {
 			"influx-flux-http": influxdb.NewFluxDashboardNginxRequests,
-			"influx-http": 		influxdb.NewInfluxQLDashboardNginxRequests,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardNginxRequests,
 		},
 		DashboardQueueBytes: {
 			"influx-flux-http": influxdb.NewFluxDashboardQueueBytes,
-			"influx-http": 		influxdb.NewInfluxQLDashboardQueueBytes,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardQueueBytes,
 		},
 		DashboardRedisMemoryUtilization: {
 			"influx-flux-http": influxdb.NewFluxDashboardRedisMemoryUtilization,
-			"influx-http": 		influxdb.NewInfluxQLDashboardRedisMemoryUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardRedisMemoryUtilization,
 		},
 		DashboardSystemLoad: {
 			"influx-flux-http": influxdb.NewFluxDashboardSystemLoad,
-			"influx-http": 		influxdb.NewInfluxQLDashboardSystemLoad,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardSystemLoad,
 		},
 		DashboardThroughput: {
 			"influx-flux-http": influxdb.NewFluxDashboardThroughput,
-			"influx-http": 		influxdb.NewInfluxQLDashboardThroughput,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardThroughput,
 		},
 	},
 }
