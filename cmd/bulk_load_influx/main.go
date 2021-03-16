@@ -43,7 +43,7 @@ type InfluxBulkLoad struct {
 	consistency       string
 	clientIndex       int
 	organization      string // InfluxDB v2
-	credentialFile    string // InfluxDB v2
+	token             string // InfluxDB v2
 	//runtime vars
 	bufPool               sync.Pool
 	batchChan             chan batch
@@ -59,7 +59,6 @@ type InfluxBulkLoad struct {
 	itemsRead             int64
 	bytesRead             int64
 	useApiV2              bool
-	authToken             string // InfluxDB v2
 	bucketId              string // InfluxDB v2
 	orgId                 string // InfluxDB v2
 }
@@ -113,7 +112,7 @@ func (l *InfluxBulkLoad) Init() {
 	flag.IntVar(&l.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.IntVar(&l.ingestRateLimit, "ingest-rate-limit", -1, "Ingest rate limit in values/s (-1 = no limit).")
 	flag.StringVar(&l.organization, "organization", "", "Organization name (InfluxDB v2).")
-	flag.StringVar(&l.credentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
+	flag.StringVar(&l.token, "token", "", "Authentication token (InfluxDB v2).")
 }
 
 func (l *InfluxBulkLoad) Validate() {
@@ -150,12 +149,23 @@ func (l *InfluxBulkLoad) Validate() {
 		l.backoffTimeOut = bulk_load.Runner.TimeLimit
 	}
 
-	if l.organization != "" || l.credentialFile != "" {
-		if l.organization == "" {
-			log.Fatalf("organization must be set for InfluxDB v2")
+	// handle InfluxDB 2.x options
+	if l.organization != "" {
+		organizations, err := l.listOrgs2(l.daemonUrls[0], l.organization)
+		if err != nil {
+			log.Fatalf("error listing organizations: %v", err)
 		}
-		if l.credentialFile == "" {
-			log.Fatalf("credentials-file must be set for InfluxDB v2")
+		l.orgId, _ = organizations[l.organization]
+		if l.orgId == "" {
+			log.Fatalf("organization '%s' not found", l.organization)
+		}
+	}
+	if l.organization != "" || l.token != "" {
+		if l.organization == "" {
+			log.Fatal("organization must be specified for InfluxDB v2")
+		}
+		if l.token == "" {
+			log.Fatal("token must be specified for InfluxDB v2")
 		}
 		l.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
@@ -166,23 +176,7 @@ func (l *InfluxBulkLoad) CreateDb() {
 	listDatabasesFn := l.listDatabases
 	createDbFn := l.createDb
 
-	// use proper functions per version
-	if l.credentialFile != "" {
-		authTokenBytes, err := ioutil.ReadFile(l.credentialFile)
-		if err != nil {
-			log.Fatalf("error reading credentials file: %v", err)
-		}
-		l.authToken = string(authTokenBytes)
-	}
-	if l.organization != "" {
-		organizations, err := l.listOrgs2(l.daemonUrls[0], l.organization)
-		if err != nil {
-			log.Fatalf("error listing organizations: %v", err)
-		}
-		l.orgId, _ = organizations[l.organization]
-		if l.orgId == "" {
-			log.Fatalf("organization '%s' not found", l.organization)
-		}
+	if l.useApiV2 {
 		listDatabasesFn = l.listDatabases2
 		createDbFn = l.createDb2
 	}
@@ -213,6 +207,7 @@ func (l *InfluxBulkLoad) CreateDb() {
 		time.Sleep(1000 * time.Millisecond)
 		log.Printf("Database %s [%s] created", bulk_load.Runner.DbName, id)
 	}
+
 	if l.useApiV2 {
 		l.bucketId = id
 	}
@@ -280,7 +275,7 @@ func (l *InfluxBulkLoad) PrepareProcess(i int) {
 			BackingOffDone: l.configs[i].backingOffDone,
 			OrgId:          l.orgId,
 			BucketId:       l.bucketId,
-			AuthToken:      l.authToken,
+			AuthToken:      l.token,
 		}
 		url = c.Host + "/api/v2/write?org=" + c.OrgId + "&bucket=" + c.BucketId + "&precision=ns&consistency=" + l.consistency
 	} else {
@@ -639,7 +634,7 @@ func (l *InfluxBulkLoad) createDb2(daemonUrl, dbName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("createDb2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -713,7 +708,7 @@ func (l *InfluxBulkLoad) listDatabases2(daemonUrl string) (map[string]string, er
 	if err != nil {
 		return nil, fmt.Errorf("listDatabases2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -761,7 +756,7 @@ func (l *InfluxBulkLoad) listOrgs2(daemonUrl string, orgName string) (map[string
 	if err != nil {
 		return nil, fmt.Errorf("listOrgs2 newRequest error: %s", err.Error())
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.authToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -29,7 +29,7 @@ type InfluxQueryBenchmarker struct {
 	csvDaemonUrls    string
 	daemonUrls       []string
 	organization     string // InfluxDB v2
-	credentialFile   string // InfluxDB v2
+	token            string // InfluxDB v2
 
 	dialTimeout        time.Duration
 	readTimeout        time.Duration
@@ -70,7 +70,7 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.StringVar(&b.organization, "organization", "", "Organization name (InfluxDB v2).")
-	flag.StringVar(&b.credentialFile, "credentials-file", "", "Credentials file (InfluxDB v2).")
+	flag.StringVar(&b.token, "token", "", "Authentication token (InfluxDB v2).")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
@@ -87,14 +87,7 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
 	}
 
-	// InfluxDB 2.x
-	if b.credentialFile != "" {
-		authTokenBytes, err := ioutil.ReadFile(b.credentialFile)
-		if err != nil {
-			log.Fatalf("error reading credentials file: %v", err)
-		}
-		b.authToken = string(authTokenBytes)
-	}
+	// handle InfluxDB 2.x options
 	if b.organization != "" {
 		organizations, err := b.listOrgs2(b.daemonUrls[0], b.organization)
 		if err != nil {
@@ -103,6 +96,14 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		b.orgId, _ = organizations[b.organization]
 		if b.orgId == "" {
 			log.Fatalf("organization '%s' not found", b.organization)
+		}
+	}
+	if b.organization != "" || b.token != "" {
+		if b.organization == "" {
+			log.Fatal("organization must be specified for InfluxDB 2.x")
+		}
+		if b.token == "" {
+			log.Fatal("token must be specified for InfluxDB 2.x")
 		}
 		b.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
