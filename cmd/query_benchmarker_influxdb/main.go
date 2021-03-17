@@ -7,23 +7,29 @@ package main
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_query"
-	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
-	"github.com/influxdata/influxdb-comparisons/util/report"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	nethttp "net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
+	"github.com/influxdata/influxdb-comparisons/bulk_query/http"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
 // Program option vars:
 type InfluxQueryBenchmarker struct {
-	csvDaemonUrls string
-	daemonUrls    []string
+	csvDaemonUrls    string
+	daemonUrls       []string
+	organization     string // InfluxDB v2
+	token            string // InfluxDB v2
 
 	dialTimeout        time.Duration
 	readTimeout        time.Duration
@@ -34,6 +40,10 @@ type InfluxQueryBenchmarker struct {
 
 	queryPool sync.Pool
 	queryChan chan []*http.Query
+
+	useApiV2  bool
+	bucketId  string // InfluxDB v2
+	orgId     string // InfluxDB v2
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -58,6 +68,8 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.DurationVar(&b.writeTimeout, "read-timeout", time.Second*300, "TCP read timeout.")
 	flag.StringVar(&b.httpClientType, "http-client-type", "fast", "HTTP client type {fast, default}")
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
+	flag.StringVar(&b.organization, "organization", "", "Organization name (InfluxDB v2).")
+	flag.StringVar(&b.token, "token", "", "Authentication token (InfluxDB v2).")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
@@ -72,6 +84,25 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		http.UseFastHttp = b.httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
+	}
+
+	if b.organization != "" || b.token != "" {
+		if b.organization == "" {
+			log.Fatal("organization must be specified for InfluxDB 2.x")
+		}
+		if b.token == "" {
+			log.Fatal("token must be specified for InfluxDB 2.x")
+		}
+		organizations, err := b.listOrgs2(b.daemonUrls[0], b.organization)
+		if err != nil {
+			log.Fatalf("error listing organizations: %v", err)
+		}
+		b.orgId, _ = organizations[b.organization]
+		if b.orgId == "" {
+			log.Fatalf("organization '%s' not found", b.organization)
+		}
+		b.useApiV2 = true
+		log.Print("Using InfluxDB API version 2")
 	}
 }
 
@@ -183,6 +214,12 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		Debug:                bulk_query.Benchmarker.Debug(),
 		PrettyPrintResponses: bulk_query.Benchmarker.PrettyPrintResponses(),
 	}
+	if b.useApiV2 {
+		opts.ContentType = "application/vnd.flux"
+		opts.Accept = "application/csv"
+		opts.AuthToken = b.token
+		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId)) // query path is empty for 2.x in generated queries
+	}
 	var queriesSeen int64
 	for queries := range b.queryChan {
 		if len(queries) == 1 {
@@ -236,6 +273,9 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 			doneCh <- 1
 		}
 	}()
+	if b.useApiV2 {
+		q.Path = opts.Path
+	}
 	lagMillis, err := w.Do(q, opts)
 	stat := statPool.Get().(*bulk_query.Stat)
 	stat.Init(q.HumanLabel, lagMillis)
@@ -252,4 +292,47 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 	}
 
 	return nil
+}
+
+func (l *InfluxQueryBenchmarker) listOrgs2(daemonUrl string, orgName string) (map[string]string, error) {
+	u := fmt.Sprintf("%s/api/v2/orgs", daemonUrl)
+	req, err := nethttp.NewRequest(nethttp.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 newRequest error: %s", err.Error())
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Token %s", l.token))
+
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 GET error: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != nethttp.StatusOK {
+		return nil, fmt.Errorf("listOrgs2 GET status code: %v", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs2 readAll error: %s", err.Error())
+	}
+
+	type listingType struct {
+		Orgs []struct {
+			Id string
+			Name string
+		}
+	}
+	var listing listingType
+	err = json.Unmarshal(body, &listing)
+	if err != nil {
+		return nil, fmt.Errorf("listOrgs unmarshal error: %s", err.Error())
+	}
+
+	ret := make(map[string]string)
+	for _, org := range listing.Orgs {
+		ret[org.Name] = org.Id
+	}
+	return ret, nil
 }

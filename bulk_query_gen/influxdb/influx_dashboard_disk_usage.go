@@ -30,7 +30,20 @@ func (d *InfluxDashboardDiskUsage) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT last("used_percent") AS "mean_used_percent" FROM "telegraf"."default"."disk" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: and host =~ /.data./
-	query = fmt.Sprintf("SELECT last(\"used_percent\") AS \"mean_used_percent\" FROM disk WHERE cluster_id = '%s' and %s and hostname =~ /data/", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT last(\"used_percent\") AS \"mean_used_percent\" FROM disk WHERE cluster_id = '%s' and %s and hostname =~ /data/", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else {
+		query = fmt.Sprintf(`from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "used_percent" and r._cluster_id == "%s" and r.hostname =~ /data/) `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
+			`|> last() `+
+			`|> keep(columns:["_time", "_value"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Disk Usage (GB), rand cluster, %s", d.language.String(), interval.Duration())
 

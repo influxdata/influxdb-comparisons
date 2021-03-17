@@ -30,7 +30,23 @@ func (d *InfluxDashboardAvailability) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT (sum("service_up") / count("service_up"))*100 AS "up_time" FROM "watcher"."autogen"."ping" WHERE cluster_id = :Cluster_Id: and time > :dashboardTime: FILL(linear)
-	query = fmt.Sprintf("SELECT (sum(\"service_up\") / count(\"service_up\"))*100 AS \"up_time\" FROM status WHERE cluster_id = '%s' and %s FILL(linear)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT (sum(\"service_up\") / count(\"service_up\"))*100 AS \"up_time\" FROM status WHERE cluster_id = '%s' and %s FILL(linear)", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else { // TODO fill(linear) how??
+		query = fmt.Sprintf(`data = from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "status" and r._field == "service_up" and r._cluster_id == "%s") `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"])`+"\n"+
+			`sum = data |> sum()`+"\n"+
+			`count = data |> count()`+"\n"+
+			`join(tables:{sum:sum,count:count},on:["_time"]) `+
+			`|> map(fn: (r) => ({_time:r._start_sum,_value:(float(v:r._value_sum) / float(v:r._value_count) * 100.0))) `+
+			`|> keep(columns:["_time", "_value"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Availability (Percent), rand cluster in %s", d.language.String(), interval.Duration())
 

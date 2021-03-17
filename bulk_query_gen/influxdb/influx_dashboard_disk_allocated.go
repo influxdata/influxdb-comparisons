@@ -30,7 +30,22 @@ func (d *InfluxDashboardDiskAllocated) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT last("max") from (SELECT max("total")/1073741824 FROM "telegraf"."default"."disk" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: and host =~ /.data./ GROUP BY time(120s))
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM disk WHERE cluster_id = '%s' and %s and hostname =~ /data/ group by time(120s))", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"total\")/1073741824 FROM disk WHERE cluster_id = '%s' and %s and hostname =~ /data/ group by time(120s))", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else {
+		query = fmt.Sprintf(`from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "disk" and r._field == "total" and r._cluster_id == "%s" and r.hostname =~ /data/) `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
+			`|> aggregateWindow(every: 120s, fn: max, createEmpty: false) `+
+			`|> map(fn: (r) => ({_time:r._time, _value:r._value / 1073741824})) `+
+			`|> last() `+
+			`|> keep(columns:["_time", "_value"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) Disk Allocated (GB), rand cluster, %s by 120s", d.language.String(), interval.Duration())
 

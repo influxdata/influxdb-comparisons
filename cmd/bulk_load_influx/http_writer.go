@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net/url"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -33,6 +32,15 @@ type HTTPWriterConfig struct {
 	// Name of the target database into which points will be written.
 	Database string
 
+	// Id of the target bucket into which points will be written. (InfluxDB v2)
+	BucketId string
+
+	// Id of the organization to which bucket belongs. (InfluxDB v2)
+	OrgId string
+
+	// Authorization token.(InfluxDB v2)
+	AuthToken string
+
 	BackingOffChan chan bool
 	BackingOffDone chan struct{}
 
@@ -43,21 +51,19 @@ type HTTPWriterConfig struct {
 // HTTPWriter is a Writer that writes to an InfluxDB HTTP server.
 type HTTPWriter struct {
 	client fasthttp.Client
-
 	c   HTTPWriterConfig
 	url []byte
 }
 
 // NewHTTPWriter returns a new HTTPWriter from the supplied HTTPWriterConfig.
-func NewHTTPWriter(c HTTPWriterConfig, consistency string) *HTTPWriter {
+func NewHTTPWriter(c HTTPWriterConfig, url string) *HTTPWriter {
 	return &HTTPWriter{
 		client: fasthttp.Client{
 			Name: "bulk_load_influx",
 			MaxIdleConnDuration: DefaultIdleConnectionTimeout,
 		},
-
 		c:   c,
-		url: []byte(c.Host + "/write?consistency=" + consistency + "&db=" + url.QueryEscape(c.Database)),
+		url: []byte(url),
 	}
 }
 
@@ -76,6 +82,9 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 	req.Header.SetRequestURIBytes(w.url)
 	if isGzip {
 		req.Header.Add("Content-Encoding", "gzip")
+	}
+	if w.c.AuthToken != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("Token %s", w.c.AuthToken))
 	}
 	req.SetBody(body)
 

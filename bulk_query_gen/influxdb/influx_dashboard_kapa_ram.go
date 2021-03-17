@@ -30,7 +30,17 @@ func (d *InfluxDashboardKapaRam) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT "used_percent" FROM "telegraf"."autogen"."mem" WHERE time > :dashboardTime: AND "host"='kapacitor'
-	query = fmt.Sprintf("SELECT \"used_percent\" FROM mem WHERE  hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT \"used_percent\" FROM mem WHERE  hostname='kapacitor_1' and %s", d.GetTimeConstraint(interval))
+	} else {
+		query = fmt.Sprintf(`from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "mem" and r._field == "used_percent" and r.hostname == "kapacitor_1") `+
+			`|> keep(columns:["_time", "_value"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) kapa mem used in %s", d.language.String(), interval.Duration())
 

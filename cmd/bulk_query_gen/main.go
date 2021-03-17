@@ -109,30 +109,81 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 	},
 	common.UseCaseDashboard: {
 		DashboardAll: {
-			"influx-http": influxdb.NewInfluxQLDashboardAll,
+			"influx-flux-http": influxdb.NewFluxDashboardAll,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardAll,
 		},
 		DashboardCpuNum: {
-			"influx-http": influxdb.NewInfluxQLDashboardCpuNum,
+			"influx-flux-http": influxdb.NewFluxDashboardCpuNum,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardCpuNum,
 		},
 		DashboardAvailability: {
-			"influx-http": influxdb.NewInfluxQLDashboardAvailability,
+			"influx-flux-http": influxdb.NewFluxDashboardAvailability,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardAvailability,
 		},
-		DashboardCpuUtilization:         {"influx-http": influxdb.NewInfluxQLDashboardCpuUtilization},
-		DashboardDiskAllocated:          {"influx-http": influxdb.NewInfluxQLDashboardDiskAllocated},
-		DashboardDiskUsage:              {"influx-http": influxdb.NewInfluxQLDashboardDiskUsage},
-		DashboardDiskUtilization:        {"influx-http": influxdb.NewInfluxQLDashboardDiskUtilization},
-		DashboardHttpRequestDuration:    {"influx-http": influxdb.NewInfluxQLDashboardHttpRequestDuration},
-		DashboardHttpRequests:           {"influx-http": influxdb.NewInfluxQLDashboardHttpRequests},
-		DashboardKapaCpu:                {"influx-http": influxdb.NewInfluxQLDashboardKapaCpu},
-		DashboardKapaLoad:               {"influx-http": influxdb.NewInfluxQLDashboardKapaLoad},
-		DashboardKapaRam:                {"influx-http": influxdb.NewInfluxQLDashboardKapaRam},
-		DashboardMemoryTotal:            {"influx-http": influxdb.NewInfluxQLDashboardMemoryTotal},
-		DashboardMemoryUtilization:      {"influx-http": influxdb.NewInfluxQLDashboardMemoryUtilization},
-		DashboardNginxRequests:          {"influx-http": influxdb.NewInfluxQLDashboardNginxRequests},
-		DashboardQueueBytes:             {"influx-http": influxdb.NewInfluxQLDashboardQueueBytes},
-		DashboardRedisMemoryUtilization: {"influx-http": influxdb.NewInfluxQLDashboardRedisMemoryUtilization},
-		DashboardSystemLoad:             {"influx-http": influxdb.NewInfluxQLDashboardSystemLoad},
-		DashboardThroughput:             {"influx-http": influxdb.NewInfluxQLDashboardThroughput},
+		DashboardCpuUtilization: {
+			"influx-flux-http": influxdb.NewFluxDashboardCpuUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardCpuUtilization,
+		},
+		DashboardDiskAllocated: {
+			"influx-flux-http": influxdb.NewFluxDashboardDiskAllocated,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskAllocated,
+		},
+		DashboardDiskUsage: {
+			"influx-flux-http": influxdb.NewFluxDashboardDiskUsage,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskUsage,
+		},
+		DashboardDiskUtilization: {
+			"influx-flux-http": influxdb.NewFluxDashboardDiskUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardDiskUtilization,
+		},
+		DashboardHttpRequestDuration: {
+			"influx-flux-http": influxdb.NewFluxDashboardHttpRequestDuration,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardHttpRequestDuration,
+		},
+		DashboardHttpRequests: {
+			"influx-flux-http": influxdb.NewFluxDashboardHttpRequests,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardHttpRequests,
+		},
+		DashboardKapaCpu: {
+			"influx-flux-http": influxdb.NewFluxDashboardKapaCpu,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaCpu,
+		},
+		DashboardKapaLoad: {
+			"influx-flux-http": influxdb.NewFluxDashboardKapaLoad,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaLoad,
+		},
+		DashboardKapaRam: {
+			"influx-flux-http": influxdb.NewFluxDashboardKapaRam,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardKapaRam,
+		},
+		DashboardMemoryTotal: {
+			"influx-flux-http": influxdb.NewFluxDashboardMemoryTotal,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardMemoryTotal,
+		},
+		DashboardMemoryUtilization: {
+			"influx-flux-http": influxdb.NewFluxDashboardMemoryUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardMemoryUtilization,
+		},
+		DashboardNginxRequests: {
+			"influx-flux-http": influxdb.NewFluxDashboardNginxRequests,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardNginxRequests,
+		},
+		DashboardQueueBytes: {
+			"influx-flux-http": influxdb.NewFluxDashboardQueueBytes,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardQueueBytes,
+		},
+		DashboardRedisMemoryUtilization: {
+			"influx-flux-http": influxdb.NewFluxDashboardRedisMemoryUtilization,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardRedisMemoryUtilization,
+		},
+		DashboardSystemLoad: {
+			"influx-flux-http": influxdb.NewFluxDashboardSystemLoad,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardSystemLoad,
+		},
+		DashboardThroughput: {
+			"influx-flux-http": influxdb.NewFluxDashboardThroughput,
+			"influx-http": 	    influxdb.NewInfluxQLDashboardThroughput,
+		},
 	},
 }
 
@@ -183,7 +234,7 @@ func init() {
 	}
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for mongo format 'simpleArrays'; leave empty for previous behaviour)")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for MongoDB format 'simpleArrays'; leave empty for previous behaviour)")
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 

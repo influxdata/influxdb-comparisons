@@ -30,7 +30,21 @@ func (d *InfluxDashboardCpuNum) Dispatch(i int) bulkQuerygen.Query {
 
 	var query string
 	//SELECT last("max") from (SELECT max("n_cpus") FROM "telegraf"."default"."system" WHERE time > :dashboardTime: and cluster_id = :Cluster_Id: GROUP BY time(1m))
-	query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and %s group by time(1m))", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	if d.language == InfluxQL {
+		query = fmt.Sprintf("SELECT last(\"max\") from (SELECT max(\"n_cpus\") FROM system WHERE cluster_id = '%s' and %s group by time(1m))", d.GetRandomClusterId(), d.GetTimeConstraint(interval))
+	} else {
+		query = fmt.Sprintf(`from(bucket:"%s") `+
+			`|> range(start:%s, stop:%s) `+
+			`|> filter(fn:(r) => r._measurement == "system" and r._field == "n_cpus" and r._cluster_id == "%s") `+
+			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
+			`|> aggregateWindow(every: 1m, fn: max, createEmpty: false) `+
+			`|> last() `+
+			`|> keep(columns:["_time", "_value"]) `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(), interval.EndString(),
+			d.GetRandomClusterId())
+	}
 
 	humanLabel := fmt.Sprintf("InfluxDB (%s) CPU (Number), rand cluster, %s by 1m", d.language.String(), interval.Duration())
 

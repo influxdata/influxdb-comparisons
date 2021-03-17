@@ -86,12 +86,11 @@ func (d *InfluxDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhos
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT max(usage_user) from cpu where (%s) and time >= '%s' and time < '%s' group by time(1m)", combinedHostnameClause, interval.StartString(), interval.EndString())
 	} else { // Flux
-		query = fmt.Sprintf(`from(db:"%s") `+
-			`|> range(start:%s, stop:%s) `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user" and (%s)) `+
-			`|> keep(columns:["_start", "_stop", "_time", "_value"]) `+
-			`|> window(period:1m) `+
-			`|> max() `+
+			`|> group() `+
+			`|> aggregateWindow(every: 1m, fn: max) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
@@ -113,14 +112,11 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 	if d.language == InfluxQL {
 		query = fmt.Sprintf("SELECT mean(usage_user) from cpu where time >= '%s' and time < '%s' group by time(1h),hostname", interval.StartString(), interval.EndString())
 	} else {
-		query = fmt.Sprintf(`from(db:"%s") `+
-			`|> range(start:%s, stop:%s) `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn:(r) => r._measurement == "cpu" and r._field == "usage_user") `+
-			`|> keep(columns:["_start", "_stop", "hostname", "_value", "_time"]) `+
-			`|> window(every:1h) `+
-			`|> mean() `+
-			`|> group(by:["hostname"]) `+
-			`|> keep(columns:["_start", "hostname", "_value"]) `+
+			`|> group(columns: ["hostname"]) `+
+			`|> aggregateWindow(every: 1h, fn: mean) `+
 			`|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString())
@@ -130,19 +126,3 @@ func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi bulkQuerygen.
 	q := qi.(*bulkQuerygen.HTTPQuery)
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
-
-//func (d *InfluxDevops) MeanCPUUsageDayByHourAllHostsGroupbyHost(qi Query, _ int) {
-//	interval := d.AllInterval.RandWindow(24*time.Hour)
-//
-//	v := url.Values{}
-//	v.Set("db", d.DatabaseName)
-//	v.Set("q", fmt.Sprintf("SELECT count(usage_user) from cpu where time >= '%s' and time < '%s' group by time(1h)", interval.StartString(), interval.EndString()))
-//
-//	humanLabel := "Influx mean cpu, all hosts, rand 1day by 1hour"
-//	q := qi.(*bulkQuerygen.HTTPQuery)
-//	q.HumanLabel = []byte(humanLabel)
-//	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, interval.StartString()))
-//	q.Method = []byte("GET")
-//	q.Path = []byte(fmt.Sprintf("/query?%s", v.Encode()))
-//	q.Body = nil
-//}

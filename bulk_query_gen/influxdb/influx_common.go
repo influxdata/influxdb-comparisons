@@ -38,20 +38,18 @@ func newInfluxCommon(lang Language, dbName string, interval bulkQuerygen.TimeInt
 func (d *InfluxCommon) getHttpQuery(humanLabel, intervalStart, query string, q *bulkQuerygen.HTTPQuery) {
 	q.HumanLabel = []byte(humanLabel)
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s", humanLabel, intervalStart))
+	q.Language = d.language.String()
 
-	getValues := url.Values{}
 	if d.language == InfluxQL {
+		getValues := url.Values{}
 		getValues.Set("db", d.DatabaseName)
 		getValues.Set("q", query)
 		q.Method = []byte("GET")
 		q.Path = []byte(fmt.Sprintf("/query?%s", getValues.Encode()))
 		q.Body = nil
 	} else {
-		postValues := url.Values{}
-		postValues.Set("query", query)
-		getValues.Set("organization", "my-org")
 		q.Method = []byte("POST")
-		q.Path = []byte(fmt.Sprintf("/query?%s", getValues.Encode()))
-		q.Body = []byte(postValues.Encode())
+		//q.Path will be set in query_benchmarker_influxdb
+		q.Body = []byte(query)
 	}
 }

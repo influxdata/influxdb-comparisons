@@ -20,6 +20,9 @@ type HTTPClientDoOptions struct {
 	Authorization        string
 	Debug                int
 	PrettyPrintResponses bool
+	Path                 []byte
+	AuthToken            string
+	Accept               string
 }
 
 // HTTPClient interface.

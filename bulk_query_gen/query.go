@@ -23,6 +23,7 @@ var HTTPQueryPool sync.Pool = sync.Pool{
 			Method:           []byte{},
 			Path:             []byte{},
 			Body:             []byte{},
+			Language:         "",
 			StartTimestamp:   0,
 			EndTimestamp:     0,
 		}
@@ -37,6 +38,7 @@ type HTTPQuery struct {
 	Method           []byte
 	Path             []byte
 	Body             []byte
+	Language         string
 	StartTimestamp   int64
 	EndTimestamp     int64
 }
@@ -63,6 +65,7 @@ func (q *HTTPQuery) Release() {
 	q.Method = q.Method[:0]
 	q.Path = q.Path[:0]
 	q.Body = q.Body[:0]
+	q.Language = ""
 	q.StartTimestamp = 0
 	q.EndTimestamp = 0
 
