@@ -184,11 +184,16 @@ func (l *InfluxBulkLoad) CreateDb() {
 		log.Fatal(err)
 	}
 
-	if len(existingDatabases) > 0 {
+	if _, ok := existingDatabases["_internal"]; (ok == true && len(existingDatabases) > 1) || (ok == false && len(existingDatabases) > 0) {
+		var dbs []string
+		for key, _ := range existingDatabases {
+			dbs = append(dbs, key)
+		}
+		dbs_string := strings.Join(dbs, ", ")
 		if bulk_load.Runner.DoAbortOnExist {
-			log.Fatalf("There are databases already in the data store. If you know what you are doing, run the command:\ncurl 'http://localhost:8086/query?q=drop%%20database%%20%s'\n", bulk_load.Runner.DbName)
+			log.Fatalf("The following databases already exist in the data store: %s. If you know what you are doing, run the command:\ncurl 'http://localhost:8086/query?q=drop%%20database%%20%s'\n", dbs_string, bulk_load.Runner.DbName)
 		} else {
-			log.Print("There are databases already in the data store.")
+			log.Printf("The following databases already exist in the data store: %s", dbs_string)
 		}
 	}
 
@@ -611,15 +616,15 @@ func (l *InfluxBulkLoad) createDb(daemonUrl, dbName string) (string, error) {
 
 func (l *InfluxBulkLoad) createDb2(daemonUrl, dbName string) (string, error) {
 	type bucketType struct {
-		ID string `json:"id,omitempty"`
-		Name string `json:"name"`
+		ID           string `json:"id,omitempty"`
+		Name         string `json:"name"`
 		Organization string `json:"organization"`
-		OrgID string `json:"orgID"`
+		OrgID        string `json:"orgID"`
 	}
 	bucket := bucketType{
-		Name: dbName,
+		Name:         dbName,
 		Organization: l.organization,
-		OrgID: l.orgId,
+		OrgID:        l.orgId,
 	}
 	bucketBytes, err := json.Marshal(bucket)
 	if err != nil {
@@ -678,6 +683,7 @@ func (l *InfluxBulkLoad) listDatabases(daemonUrl string) (map[string]string, err
 
 	// Do ad-hoc parsing to find existing database names:
 	// {"results":[{"series":[{"name":"databases","columns":["name"],"values":[["_internal"],["benchmark_db"]]}]}]}%
+	// {"results":[{"statement_id":0,"series":[{"name":"databases","columns":["name"],"values":[["_internal"],["benchmark_db"]]}]}]} for 1.8.4
 	type listingType struct {
 		Results []struct {
 			Series []struct {
@@ -727,10 +733,10 @@ func (l *InfluxBulkLoad) listDatabases2(daemonUrl string) (map[string]string, er
 	// {"buckets":[{"name:test_db","id":"1","organization":"test_org","organizationID":"2"},...]}%
 	type listingType struct {
 		Buckets []struct {
-			Id string
+			Id           string
 			Organization string
-			OrgID string
-			Name string
+			OrgID        string
+			Name         string
 		}
 	}
 	var listing listingType
@@ -773,7 +779,7 @@ func (l *InfluxBulkLoad) listOrgs2(daemonUrl string, orgName string) (map[string
 
 	type listingType struct {
 		Orgs []struct {
-			Id string
+			Id   string
 			Name string
 		}
 	}
