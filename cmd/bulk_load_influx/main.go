@@ -184,7 +184,8 @@ func (l *InfluxBulkLoad) CreateDb() {
 		log.Fatal(err)
 	}
 
-	if _, ok := existingDatabases["_internal"]; (ok == true && len(existingDatabases) > 1) || (ok == false && len(existingDatabases) > 0) {
+	delete(existingDatabases, "_internal")
+	if len(existingDatabases) > 0 {
 		var dbs []string
 		for key, _ := range existingDatabases {
 			dbs = append(dbs, key)
