@@ -1,6 +1,7 @@
 package bulk_load
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/pkg/profile"
@@ -66,6 +67,7 @@ type LoadRunner struct {
 	trendSamples           int
 	movingAverageInterval  time.Duration
 	file                   string
+	DoJson                 bool
 
 	backingOffChans       []chan bool
 	backingOffDones       []chan struct{}
@@ -87,6 +89,7 @@ type LoadRunner struct {
 	movingAverageStat     *TimedStatGroup
 	scanFinished          bool
 	sourceReader          *os.File
+	Json                  map[string]interface{}
 }
 
 var Runner = &LoadRunner{}
@@ -96,7 +99,7 @@ type statsMap map[string]*StatGroup
 func (r *LoadRunner) notifyHandler(arg int) (int, error) {
 	var e error
 	if arg == 0 {
-		fmt.Println("Received external finish request")
+		log.Println("Received external finish request")
 		r.SetPrematureEnd("External notification")
 		r.syncChanDone <- 1
 	} else {
@@ -132,6 +135,7 @@ func (r *LoadRunner) Init(defaultBatchSize int) {
 	flag.BoolVar(&r.reportTelemetry, "report-telemetry", false, "Turn on/off reporting telemetry")
 	flag.IntVar(&r.notificationListenPort, "notification-port", -1, "Listen port for remote notification messages. Used to remotely finish benchmark. -1 to disable feature")
 	flag.StringVar(&r.file, "file", "", "Input file")
+	flag.BoolVar(&r.DoJson, "json", true, "Output results in JSON")
 }
 
 func (r *LoadRunner) SetPrematureEnd(reason string) {
@@ -144,6 +148,10 @@ func (r *LoadRunner) HasEndedPrematurely() bool {
 }
 
 func (r *LoadRunner) Validate() {
+
+	if r.DoJson {
+		r.Json = make(map[string]interface{})
+	}
 
 	if r.trendSamples <= 0 {
 		r.trendSamples = int(r.movingAverageInterval.Seconds())
@@ -165,15 +173,15 @@ func (r *LoadRunner) Validate() {
 	}
 
 	if r.reportHost != "" {
-		fmt.Printf("results report destination: %v\n", r.reportHost)
-		fmt.Printf("results report database: %v\n", r.reportDatabase)
+		log.Printf("results report destination: %v\n", r.reportHost)
+		log.Printf("results report database: %v\n", r.reportDatabase)
 
 		var err error
 		r.reportHostname, err = os.Hostname()
 		if err != nil {
 			log.Fatalf("os.Hostname() error: %s", err.Error())
 		}
-		fmt.Printf("hostname for results report: %v\n", r.reportHostname)
+		log.Printf("hostname for results report: %v\n", r.reportHostname)
 
 		if r.reportTagsCSV != "" {
 			pairs := strings.Split(r.reportTagsCSV, ",")
@@ -183,7 +191,8 @@ func (r *LoadRunner) Validate() {
 				r.reportTags = append(r.reportTags, tagpair)
 			}
 		}
-		fmt.Printf("results report tags: %v\n", r.reportTags)
+		log.Printf("results report tags: %v\n", r.reportTags)
+
 	}
 	if (r.reportBucketId != "" && (r.reportOrgId == "" || r.reportAuthToken == "")) ||
 		(r.reportOrgId != "" && (r.reportBucketId == "" || r.reportAuthToken == "")) ||
@@ -194,12 +203,28 @@ func (r *LoadRunner) Validate() {
 		r.reportDatabase = r.reportBucketId
 	}
 
+	if r.DoJson {
+		r.Json["results_report_destination"] = r.reportHost
+		r.Json["results_report_database"] = r.reportDatabase
+		r.Json["results_report_hostname"] = r.reportHostname
+		r.Json["results_report_tags"] = r.reportTags
+	}
+
 }
 
 func printInfo() {
-	fmt.Printf("SysInfo:\n")
-	fmt.Printf("  Current GOMAXPROCS: %d\n", runtime.GOMAXPROCS(-1))
-	fmt.Printf("  Num CPUs: %d\n", runtime.NumCPU())
+	maxProcs := runtime.GOMAXPROCS(-1)
+	log.Printf("SysInfo:\n")
+	log.Printf("  Current GOMAXPROCS: %d\n", maxProcs)
+	log.Printf("  Num CPUs: %d\n", runtime.NumCPU())
+
+	if Runner.DoJson {
+		sysInfo := make(map[string]int)
+		sysInfo["GOMAXPROCS"] = maxProcs
+		sysInfo["num_cpus"] = runtime.NumCPU()
+
+		Runner.Json["sys_info"] = sysInfo
+	}
 }
 
 func (r *LoadRunner) Run(load BulkLoad) int {
@@ -272,7 +297,7 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 		go func(w int) {
 			err := batchProcessor.RunProcess(w, &workersGroup, r.telemetryChanPoints, r.reportTags)
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Println(err.Error())
 				once.Do(func() {
 					r.endedPrematurely = true
 					r.prematureEndReason = "Worker error"
@@ -290,7 +315,11 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 			batchProcessor.AfterRunProcess(w)
 		}(i)
 	}
-	fmt.Printf("Started load with %d workers\n", r.Workers)
+	log.Printf("Started load with %d workers\n", r.Workers)
+
+	if r.DoJson {
+		r.Json["num_workers"] = r.Workers
+	}
 
 	if r.progressInterval >= 0 {
 		go func() {
@@ -300,7 +329,7 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 
 				//absoluteMillis := end.Add(-progressInterval).UnixNano() / 1e6
 				absoluteMillis := start.UTC().UnixNano() / 1e6
-				fmt.Printf("[interval_progress_items] %dms, %d\n", absoluteMillis, n)
+				log.Printf("[interval_progress_items] %dms, %d\n", absoluteMillis, n)
 				start = end
 			}
 		}()
@@ -336,10 +365,27 @@ func (r *LoadRunner) Run(load BulkLoad) int {
 		<-r.telemetryChanDone
 	}
 	if r.endedPrematurely {
-		fmt.Printf("load finished prematurely: %s\n", r.prematureEndReason)
+		log.Printf("load finished prematurely: %s\n", r.prematureEndReason)
+
+		if r.DoJson {
+			r.Json["ended_prematurely"] = true
+			r.Json["ended_prematurely_reason"] = r.prematureEndReason
+		}
 	}
 
-	fmt.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, took.Seconds(), r.Workers, itemsRate, valuesRate, bytesRate/(1<<20))
+	loadTime := took.Seconds()
+	convertedBytesRate := bytesRate / (1 << 20)
+	log.Printf("loaded %d items in %fsec with %d workers (mean point rate %f/sec, mean value rate %f/s, %.2fMB/sec from stdin)\n", itemsRead, loadTime, r.Workers, itemsRate, valuesRate, convertedBytesRate)
+
+	if r.DoJson {
+		r.Json["num_items_loaded"] = itemsRead
+		r.Json["load_seconds"] = loadTime
+		// already added workers above
+		r.Json["mean_point_rate"] = itemsRate
+		r.Json["mean_value_rate"] = valuesRate
+		r.Json["byte_rate_MB_per_sec"] = convertedBytesRate
+		r.printJson()
+	}
 
 	if r.reportHost != "" {
 		//append db specific tags to custom tags
@@ -442,13 +488,26 @@ func (r *LoadRunner) processStats(telemetrySink chan *report.Point) {
 
 	}
 
-	// the final stats output goes to stdout:
-	_, err := fmt.Printf("run complete after %d batches:\n", i)
-	if err != nil {
-		log.Fatal(err)
+	log.Printf("run complete after %d batches:\n", i)
+	if r.DoJson {
+		r.Json["num_batches"] = i
 	}
-	r.fprintStats(os.Stdout, r.statMapping)
+
+	if r.DoJson {
+		r.fprintStats(os.Stderr, r.statMapping)
+	} else {
+		r.fprintStats(os.Stdout, r.statMapping)
+	}
 	r.statGroup.Done()
+}
+
+func (r *LoadRunner) printJson() {
+	r.Json["stats"] = r.statMapping
+	b, err := json.Marshal(r.Json)
+	if err != nil {
+		log.Println("error:", err)
+	}
+	os.Stdout.Write(b)
 }
 
 // fprintStats pretty-prints stats to the given writer.

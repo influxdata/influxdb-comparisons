@@ -124,7 +124,11 @@ func (l *InfluxBulkLoad) Validate() {
 	if len(l.daemonUrls) == 0 {
 		log.Fatal("missing 'urls' flag")
 	}
-	fmt.Printf("daemon URLs: %v\n", l.daemonUrls)
+	log.Printf("daemon URLs: %v\n", l.daemonUrls)
+
+	if bulk_load.Runner.DoJson == true {
+		bulk_load.Runner.Json["daemon_urls"] = l.daemonUrls
+	}
 
 	if l.ingestRateLimit > 0 {
 		l.ingestionRateGran = (float64(l.ingestRateLimit) / float64(bulk_load.Runner.Workers)) / (float64(1000) / float64(RateControlGranularity))
@@ -578,7 +582,7 @@ func processBackoffMessages(workerId int, src chan bool, dst chan struct{}) floa
 			start = time.Now()
 		}
 	}
-	fmt.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
+	log.Printf("[worker %d] backoffs took a total of %fsec of runtime\n", workerId, totalBackoffSecs)
 	dst <- struct{}{}
 	return totalBackoffSecs
 }
