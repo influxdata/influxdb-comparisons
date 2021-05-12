@@ -2,6 +2,7 @@ package bulk_load
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -177,7 +178,7 @@ func (ls *TrendStat) Add(y float64) {
 }
 
 func NewTrendStat(size int, skipFirst bool) *TrendStat {
-	fmt.Printf("Trend statistics using %d samples\n", size)
+	log.Printf("Trend statistics using %d samples\n", size)
 	instance := TrendStat{
 		size:      size,
 		slope:     0,
