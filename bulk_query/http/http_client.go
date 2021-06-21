@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,10 +28,10 @@ func NewDefaultHTTPClient(host string, debug int, dialTimeout time.Duration, rea
 				Dial: (&net.Dialer{
 					Timeout: dialTimeout,
 				}).Dial,
-				MaxIdleConns: 0, // unlimited
+				MaxIdleConns:        0,   // unlimited
 				MaxIdleConnsPerHost: 100, // 0 would fallback to DefaultMaxIdleConnsPerHost ie. 2
-				MaxConnsPerHost: 0, // unlimited
-				IdleConnTimeout: idleConnectionTimeout,
+				MaxConnsPerHost:     0,   // unlimited
+				IdleConnTimeout:     idleConnectionTimeout,
 			},
 		},
 		HTTPClientCommon: HTTPClientCommon{
@@ -78,7 +79,7 @@ func (w *DefaultHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64
 
 	if (err != nil || resp.StatusCode != http.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
-		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
+		log.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
 
 	// Check that the status code was 200 OK:

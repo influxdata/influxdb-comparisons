@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/valyala/fasthttp"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -29,8 +30,8 @@ func NewFastHTTPClient(host string, debug int, dialTimeout time.Duration, readTi
 				return fasthttp.DialTimeout(addr, dialTimeout)
 			},
 			MaxIdleConnDuration: idleConnectionTimeout,
-			ReadTimeout: readTimeout,
-			WriteTimeout: writeTimeout,
+			ReadTimeout:         readTimeout,
+			WriteTimeout:        writeTimeout,
 		},
 		HTTPClientCommon: HTTPClientCommon{
 			Host:       []byte(host),
@@ -78,7 +79,7 @@ func (w *FastHTTPClient) Do(q *Query, opts *HTTPClientDoOptions) (lag float64, e
 
 	if (err != nil || resp.StatusCode() != fasthttp.StatusOK) && opts.Debug == 5 {
 		values, _ := url.ParseQuery(string(uri))
-		fmt.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
+		log.Printf("debug: url: %s, path %s, parsed url - %s\n", string(uri), q.Path, values)
 	}
 
 	// Check that the status code was 200 OK:
