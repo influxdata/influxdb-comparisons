@@ -26,24 +26,24 @@ import (
 
 // Program option vars:
 type InfluxQueryBenchmarker struct {
-	csvDaemonUrls    string
-	daemonUrls       []string
-	organization     string // InfluxDB v2
-	token            string // InfluxDB v2
+	csvDaemonUrls string
+	daemonUrls    []string
+	organization  string // InfluxDB v2
+	token         string // InfluxDB v2
 
-	dialTimeout        time.Duration
-	readTimeout        time.Duration
-	writeTimeout       time.Duration
-	httpClientType     string
-	clientIndex        int
-	scanFinished       bool
+	dialTimeout    time.Duration
+	readTimeout    time.Duration
+	writeTimeout   time.Duration
+	httpClientType string
+	clientIndex    int
+	scanFinished   bool
 
 	queryPool sync.Pool
 	queryChan chan []*http.Query
 
-	useApiV2  bool
-	bucketId  string // InfluxDB v2
-	orgId     string // InfluxDB v2
+	useApiV2 bool
+	bucketId string // InfluxDB v2
+	orgId    string // InfluxDB v2
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -77,10 +77,10 @@ func (b *InfluxQueryBenchmarker) Validate() {
 	if len(b.daemonUrls) == 0 {
 		log.Fatal("missing 'urls' flag")
 	}
-	fmt.Printf("daemon URLs: %v\n", b.daemonUrls)
+	log.Printf("daemon URLs: %v\n", b.daemonUrls)
 
 	if b.httpClientType == "fast" || b.httpClientType == "default" {
-		fmt.Printf("Using HTTP client: %v\n", b.httpClientType)
+		log.Printf("Using HTTP client: %v\n", b.httpClientType)
 		http.UseFastHttp = b.httpClientType == "fast"
 	} else {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
@@ -320,7 +320,7 @@ func (l *InfluxQueryBenchmarker) listOrgs2(daemonUrl string, orgName string) (ma
 
 	type listingType struct {
 		Orgs []struct {
-			Id string
+			Id   string
 			Name string
 		}
 	}

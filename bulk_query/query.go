@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
@@ -63,23 +64,27 @@ type QueryBenchmarker struct {
 	movingAverageInterval  time.Duration
 	reportTelemetry        bool
 	file                   string
+	doJson                 bool
 	//runtime vars
-	statMapping       StatsMap
-	statChan          chan *Stat
-	statPool          sync.Pool
-	statGroup         sync.WaitGroup
-	telemetrySrcAddr  string
-	telemetryTags     [][2]string
-	reportTags        [][2]string
-	reportHostname    string
-	batchSize         int
-	movingAverageStat *TimedStatGroup
-	isBurnIn          bool
-	sourceReader      *os.File
-	scanClose         chan int
-	scanCloseMutex    *sync.Mutex
+	statMapping        StatsMap
+	statChan           chan *Stat
+	statPool           sync.Pool
+	statGroup          sync.WaitGroup
+	telemetrySrcAddr   string
+	telemetryTags      [][2]string
+	reportTags         [][2]string
+	reportHostname     string
+	batchSize          int
+	movingAverageStat  *TimedStatGroup
+	isBurnIn           bool
+	sourceReader       *os.File
+	scanClose          chan int
+	scanCloseMutex     *sync.Mutex
 	notificationServer *http.Server
-	sigtermReceived   bool
+	sigtermReceived    bool
+	json               map[string]interface{}
+	totalQueries       int
+	wallTook           time.Duration
 }
 
 const (
@@ -147,9 +152,12 @@ func (q *QueryBenchmarker) Init() {
 	flag.IntVar(&q.trendSamples, "rt-trend-samples", -1, "Number of avg response time samples used for linear regression (-1: number of samples equals increase-interval in seconds)")
 	flag.DurationVar(&q.movingAverageInterval, "moving-average-interval", time.Second*30, "Interval of measuring mean response time on which moving average  is calculated.")
 	flag.StringVar(&q.file, "file", "", "Input file")
+	flag.BoolVar(&q.doJson, "json", true, "Output results in JSON")
 }
 
 func (q *QueryBenchmarker) Validate() {
+	q.json = make(map[string]interface{})
+
 	if q.workers < 1 {
 		log.Fatalf("invalid number of workers: %d\n", q.workers)
 	}
@@ -157,33 +165,33 @@ func (q *QueryBenchmarker) Validate() {
 	q.batchSize = 1
 	if q.useCase == Dashboard {
 		q.batchSize = q.queriesBatch
-		fmt.Printf("Dashboard simulation: %d batch, %s interval\n", q.batchSize, q.waitInterval)
+		log.Printf("Dashboard simulation: %d batch, %s interval\n", q.batchSize, q.waitInterval)
 	}
 	if q.gradualWorkersIncrease {
-		fmt.Printf("Gradual workers increasing in %s interval\n", q.increaseInterval)
+		log.Printf("Gradual workers increasing in %s interval\n", q.increaseInterval)
 		if q.gradualWorkersMax > 0 {
-			fmt.Printf("Maximum number of gradual workers is %d\n", q.gradualWorkersMax)
+			log.Printf("Maximum number of gradual workers is %d\n", q.gradualWorkersMax)
 		}
 	}
 
 	if q.testDuration.Nanoseconds() > 0 {
-		fmt.Printf("Test will be run for %s\n", q.testDuration)
+		log.Printf("Test will be run for %s\n", q.testDuration)
 	}
 
 	if q.responseTimeLimit.Nanoseconds() > 0 {
-		fmt.Printf("Response time limit set to %s\n", q.responseTimeLimit)
+		log.Printf("Response time limit set to %s\n", q.responseTimeLimit)
 	}
 
 	if q.reportHost != "" {
-		fmt.Printf("results report destination: %v\n", q.reportHost)
-		fmt.Printf("results report database: %v\n", q.reportDatabase)
+		log.Printf("results report destination: %v\n", q.reportHost)
+		log.Printf("results report database: %v\n", q.reportDatabase)
 
 		var err error
 		q.reportHostname, err = os.Hostname()
 		if err != nil {
 			log.Fatalf("os.Hostname() error: %s", err.Error())
 		}
-		fmt.Printf("hostname for results report: %v\n", q.reportHostname)
+		log.Printf("hostname for results report: %v\n", q.reportHostname)
 
 		if q.reportTagsCSV != "" {
 			pairs := strings.Split(q.reportTagsCSV, ",")
@@ -193,7 +201,7 @@ func (q *QueryBenchmarker) Validate() {
 				q.reportTags = append(q.reportTags, tagpair)
 			}
 		}
-		fmt.Printf("results report tags: %v\n", q.reportTags)
+		log.Printf("results report tags: %v\n", q.reportTags)
 	}
 
 	if q.reportTelemetry && q.reportHost == "" {
@@ -216,10 +224,16 @@ func (q *QueryBenchmarker) Validate() {
 	}
 
 	if q.notificationHostPort != "" {
-		fmt.Printf("notification target: %v\n", q.notificationHostPort)
+		log.Printf("notification target: %v\n", q.notificationHostPort)
+		if q.doJson {
+			q.json["notification_target"] = q.notificationHostPort
+		}
 	}
 	if q.notificationGroup != "" {
-		fmt.Printf("notification group: %v\n", q.notificationGroup)
+		log.Printf("notification group: %v\n", q.notificationGroup)
+		if q.doJson {
+			q.json["notification_group"] = q.notificationGroup
+		}
 	}
 	if q.notificationListenPort > 0 { // copied from bulk_load_influx/main.go
 		notif := new(bulk_load.NotifyReceiver)
@@ -234,6 +248,7 @@ func (q *QueryBenchmarker) Validate() {
 		q.notificationServer = &http.Server{}
 		go q.notificationServer.Serve(l)
 	}
+
 }
 
 func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
@@ -252,13 +267,13 @@ func (q *QueryBenchmarker) RunBenchmark(bulkQuery BulkQuery) {
 		q.movingAverageInterval = q.increaseInterval
 	}
 	q.movingAverageStat = NewTimedStatGroup(q.movingAverageInterval, q.trendSamples)
-	fmt.Println("Reading queries to buffer ")
+	log.Println("Reading queries to buffer ")
 	input := bufio.NewReaderSize(q.sourceReader, 1<<20)
 	queriesData, err := ioutil.ReadAll(input)
 	if err != nil {
 		log.Fatalf("Error reading queries: %s", err)
 	}
-	fmt.Println("Reading queries done")
+	log.Println("Reading queries done")
 
 	qr := bytes.NewReader(queriesData)
 	// Make data and control channels:
@@ -347,7 +362,6 @@ loop:
 			if q.gradualWorkersIncrease && !q.isBurnIn {
 				if q.gradualWorkersMax <= 0 || q.workers <= q.gradualWorkersMax {
 					for i := 0; i < workersIncreaseStep; i++ {
-						//fmt.Printf("Adding worker %d\n", workers)
 						workersGroup.Add(1)
 						processor.PrepareProcess(q.workers)
 						go processor.RunProcess(q.workers, &workersGroup, q.statPool, q.statChan)
@@ -441,33 +455,32 @@ waitLoop:
 
 	wallEnd := time.Now()
 	wallTook := wallEnd.Sub(wallStart)
-	_, err = fmt.Printf("wall clock time: %fsec\n", float64(wallTook.Nanoseconds())/1e9)
-	if err != nil {
-		log.Fatal(err)
-	}
+	q.wallTook = wallTook
+	fprintStats(os.Stderr, q)
+	log.Printf("wall clock time: %fsec\n", float64(wallTook.Nanoseconds())/1e9)
 
 	if q.reportTelemetry {
-		fmt.Println("shutting down telemetry...")
+		log.Println("shutting down telemetry...")
 		close(telemetryChanPoints)
 		<-telemetryChanDone
-		fmt.Println("done shutting down telemetry.")
+		log.Println("done shutting down telemetry.")
 	}
 
 	if q.notificationServer != nil {
-		fmt.Println("shutting down notification listener...")
+		log.Println("shutting down notification listener...")
 		q.notificationServer.Shutdown(context.Background())
-		fmt.Println("done shutting down notification listener.")
+		log.Println("done shutting down notification listener.")
 	}
 
 	if q.notificationHostPort != "" {
-		fmt.Printf("notify target %s...\n", q.notificationHostPort)
+		log.Printf("notify target %s...\n", q.notificationHostPort)
 		q.notify(q.notificationHostPort)
 	}
 
 	if q.notificationGroup != "" && !q.sigtermReceived {
 		siblings := strings.Split(q.notificationGroup, ",")
 		for _, sibling := range siblings {
-			fmt.Printf("notify sibling %s...\n", sibling)
+			log.Printf("notify sibling %s...\n", sibling)
 			q.notify(sibling)
 		}
 	}
@@ -556,10 +569,7 @@ func (q *QueryBenchmarker) processStats(telemetrySink chan *report.Point) {
 			q.statPool.Put(stat)
 			continue
 		} else if i == q.burnIn && q.burnIn > 0 {
-			_, err := fmt.Fprintf(os.Stderr, "burn-in complete after %d queries with %d workers\n", q.burnIn, q.workers)
-			if err != nil {
-				log.Fatal(err)
-			}
+			log.Printf("burn-in complete after %d queries with %d workers\n", q.burnIn, q.workers)
 		}
 
 		if _, ok := q.statMapping[string(stat.Label)]; !ok {
@@ -597,33 +607,23 @@ func (q *QueryBenchmarker) processStats(telemetrySink chan *report.Point) {
 		}
 		// print stats to stderr (if printInterval is greater than zero):
 		if q.printInterval > 0 && i > 0 && i%q.printInterval == 0 && (int64(i) < q.limit || q.limit < 0) {
-			_, err := fmt.Fprintf(os.Stderr, "%s: after %d queries with %d workers:\n", time.Now().String(), i-q.burnIn, q.workers)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fprintStats(os.Stderr, q.statMapping)
-			_, err = fmt.Fprintf(os.Stderr, "\n")
-			if err != nil {
-				log.Fatal(err)
-			}
+			log.Printf("%s: after %d queries with %d workers:\n", time.Now().String(), i-q.burnIn, q.workers)
+			fprintStats(os.Stderr, q)
+			log.Printf("\n")
 		}
 
 	}
 
-	// the final stats output goes to stdout:
-	_, err := fmt.Printf("run complete after %d queries with %d workers:\n", i-q.burnIn, q.workers)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fprintStats(os.Stdout, q.statMapping)
+	log.Printf("run complete after %d queries with %d workers:\n", i-q.burnIn, q.workers)
+	q.totalQueries = int(i)
 	q.statGroup.Done()
 }
 
 // fprintStats pretty-prints stats to the given writer.
-func fprintStats(w io.Writer, statGroups StatsMap) {
+func fprintStats(w io.Writer, q *QueryBenchmarker) {
 	maxKeyLength := 0
-	keys := make([]string, 0, len(statGroups))
-	for k := range statGroups {
+	keys := make([]string, 0, len(q.statMapping))
+	for k := range q.statMapping {
 		if len(k) > maxKeyLength {
 			maxKeyLength = len(k)
 		}
@@ -631,7 +631,7 @@ func fprintStats(w io.Writer, statGroups StatsMap) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		v := statGroups[k]
+		v := q.statMapping[k]
 		minRate := 1e3 / v.Min
 		meanRate := 1e3 / v.Mean
 		maxRate := 1e3 / v.Max
@@ -639,10 +639,39 @@ func fprintStats(w io.Writer, statGroups StatsMap) {
 		for len(paddedKey) < maxKeyLength {
 			paddedKey += " "
 		}
-		_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
-		if err != nil {
-			log.Fatal(err)
+		kStats := make(map[string]interface{})
+		kStats["min"] = v.Min
+		kStats["minRate"] = minRate
+		kStats["mean"] = v.Mean
+		kStats["meanRate"] = meanRate
+		kStats["max"] = v.Max
+		kStats["maxRate"] = maxRate
+		kStats["count"] = v.Count
+		kStats["sum"] = v.Sum / 1e3
+		q.json[k] = kStats
+		if !q.doJson {
+			_, err := fmt.Fprintf(w, "%s : min: %8.2fms (%7.2f/sec), mean: %8.2fms (%7.2f/sec), max: %7.2fms (%6.2f/sec), count: %8d, sum: %5.1fsec \n", paddedKey, v.Min, minRate, v.Mean, meanRate, v.Max, maxRate, v.Count, v.Sum/1e3)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
+	}
+	q.json["totalQueries"] = q.totalQueries
+	q.json["wallClockTime"] = q.wallTook.Seconds()
+	q.json["queryRate"] = float64(q.totalQueries) / float64(q.wallTook.Seconds())
+	q.json["workers"] = q.workers
+	q.json["batchSize"] = q.batchSize
+	if q.doJson {
+		for k, v := range q.json {
+			if _, err := json.Marshal(v); err != nil {
+				q.json[k] = ""
+			}
+		}
+		b, err := json.Marshal(q.json)
+		if err != nil {
+			log.Println("error:", err)
+		}
+		os.Stdout.Write(b)
 	}
 }
 

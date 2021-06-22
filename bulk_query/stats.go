@@ -2,6 +2,7 @@ package bulk_query
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -9,15 +10,14 @@ import (
 
 // Stat represents one statistical measurement.
 type Stat struct {
-	Label []byte
-	Value float64
+	Label    []byte
+	Value    float64
 	IsActual bool
 }
 
-
 // Init safely initializes a stat while minimizing heap allocations.
 func (s *Stat) Init(label []byte, value float64) {
-	s.InitWithActual(label,value, true)
+	s.InitWithActual(label, value, true)
 }
 
 func (s *Stat) InitWithActual(label []byte, value float64, isActual bool) {
@@ -194,7 +194,7 @@ func (ls *TrendStat) Add(y float64) {
 }
 
 func NewTrendStat(size int, skipFirst bool) *TrendStat {
-	fmt.Printf("Trend statistics using %d samples\n", size)
+	log.Printf("Trend statistics using %d samples\n", size)
 	instance := TrendStat{
 		size:      size,
 		slope:     0,
