@@ -222,6 +222,12 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 	}
 	var queriesSeen int64
 	for queries := range b.queryChan {
+		// enable flux queries with 1.x
+		if !b.useApiV2 && strings.Contains(fmt.Sprintf("%s", queries[0].HumanLabel), "Flux") {
+			opts.ContentType = "application/vnd.flux"
+			opts.Accept = "application/csv"
+			opts.Path = []byte("/api/v2/query")
+		}
 		if len(queries) == 1 {
 			if err := b.processSingleQuery(w, queries[0], opts, nil, nil, statPool, statChan); err != nil {
 				log.Fatal(err)
@@ -273,7 +279,7 @@ func (b *InfluxQueryBenchmarker) processSingleQuery(w http.HTTPClient, q *http.Q
 			doneCh <- 1
 		}
 	}()
-	if b.useApiV2 {
+	if b.useApiV2 || strings.Contains(fmt.Sprintf("%s", q.HumanLabel), "Flux") {
 		q.Path = opts.Path
 	}
 	lagMillis, err := w.Do(q, opts)
