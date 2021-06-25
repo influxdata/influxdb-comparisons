@@ -36,8 +36,8 @@ The intended usage of the DevOps data generator is to create distinct datasets t
 
 Each simulated host is initialized with a RAM size and a set of stateful probability distributions (Gaussian random walks with clamping), corresponding to nine statistics as reported by Telegraf. Here are the Telegraf collectors for CPU and memory:
 
-https://github.com/influxdata/telegraf/blob/master/plugins/inputs/system/cpu.go
-https://github.com/influxdata/telegraf/blob/master/plugins/inputs/system/memory.go
+https://github.com/influxdata/telegraf/blob/master/plugins/inputs/cpu/cpu.go
+https://github.com/influxdata/telegraf/blob/master/plugins/inputs/mem/memory.go
 
 For example, here is a graph of the simulated CPU usage through time for 10 hosts, when using the data generator:
 
