@@ -28,12 +28,14 @@ func (ti *TimeInterval) Duration() time.Duration {
 func (ti *TimeInterval) RandWindow(window time.Duration) TimeInterval {
 	lower := ti.Start.UnixNano()
 	upper := ti.End.Add(-window).UnixNano()
-
-	if upper <= lower {
+	if upper < lower {
 		panic("logic error: bad time bounds")
 	}
 
-	start := lower + rand.Int63n(upper-lower)
+	start := lower
+	if upper != lower {
+		start += rand.Int63n(upper - lower)
+	}
 	end := start + window.Nanoseconds()
 
 	x := NewTimeInterval(time.Unix(0, start), time.Unix(0, end))
