@@ -67,6 +67,9 @@ func (b *OpenTsdbQueryBenchmarker) Prepare() {
 			}
 		},
 	}
+
+	// Make data and control channels:
+	b.queryChan = make(chan *Query)
 }
 
 func (b *OpenTsdbQueryBenchmarker) GetProcessor() bulk_query.Processor {
