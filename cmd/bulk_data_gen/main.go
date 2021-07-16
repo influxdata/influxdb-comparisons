@@ -29,6 +29,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/sparse"
 )
 
 // Output data format choices:
@@ -210,6 +211,14 @@ func main() {
 			SmartHomeOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
+	case common.UseCaseChoices[3]:
+		cfg := &sparse.SparseSimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			ScaleFactor: scaleVar,
+		}
+		sim = cfg.ToSimulator()
 	default:
 		panic("unreachable")
 	}
@@ -252,7 +261,7 @@ func main() {
 		n++
 		// in the default case this is always true
 		if currentInterleavedGroup == interleavedGenerationGroupID {
-			//println("printing")
+			// println("printing")
 			err := serializer.SerializePoint(out, point)
 			if err != nil {
 				log.Fatal(err)
