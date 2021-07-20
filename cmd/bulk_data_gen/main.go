@@ -29,6 +29,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
+	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/metaqueries"
 )
 
 // Output data format choices:
@@ -208,6 +209,14 @@ func main() {
 
 			SmartHomeCount:  scaleVar,
 			SmartHomeOffset: scaleVarOffset,
+		}
+		sim = cfg.ToSimulator()
+	case common.UseCaseChoices[3]:
+		cfg := &metaqueries.MetaquerySimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			ScaleFactor: int(scaleVar),
 		}
 		sim = cfg.ToSimulator()
 	default:
