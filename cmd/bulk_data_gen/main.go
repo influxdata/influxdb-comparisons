@@ -261,7 +261,7 @@ func main() {
 		n++
 		// in the default case this is always true
 		if currentInterleavedGroup == interleavedGenerationGroupID {
-			// println("printing")
+			//println("printing")
 			err := serializer.SerializePoint(out, point)
 			if err != nil {
 				log.Fatal(err)

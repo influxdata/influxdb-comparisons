@@ -8,6 +8,8 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
+// letters are used for generating the pseudo-random tag values used in this
+// dataset. Currently only the first 10 letters are used.
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var (
@@ -40,7 +42,9 @@ func (d *MetaquerySimulatorConfig) ToSimulator() *MetaquerySimulator {
 		timestampEnd:   d.End,
 	}
 
-	// make the tag values to use
+	// Tag values are generated and stored in memory for later use. The number of
+	// tag values is equal to the scaleFactor. The same list of tag values is used
+	// for both the "X" and "Y" tag keys.
 	for i := 0; i < d.ScaleFactor; i++ {
 		seed := rand.Perm(10)
 		thisVal := make([]byte, 10)
@@ -52,16 +56,17 @@ func (d *MetaquerySimulatorConfig) ToSimulator() *MetaquerySimulator {
 		dg.TagList[i] = thisVal
 	}
 
+	// The stepTime is the interval between generated points. This will result in
+	// the generated data being spread evenly across the provided time range.
 	dg.stepTime = time.Duration(int64(dg.timestampEnd.Sub(dg.timestampStart)) / dg.maxPoints)
 
 	return dg
 }
 
 type MetaquerySimulator struct {
-	madePoints    int64
-	maxPoints     int64
-	madeValues    int64
-	skippedPoints int64
+	madePoints int64
+	maxPoints  int64
+	madeValues int64
 
 	axis    int
 	TagList map[int][]byte
@@ -69,7 +74,7 @@ type MetaquerySimulator struct {
 	timestampNow   time.Time
 	timestampStart time.Time
 	timestampEnd   time.Time
-	stepTime       time.Duration // basically the difference in all the points
+	stepTime       time.Duration
 }
 
 func (g *MetaquerySimulator) SeenPoints() int64 {
@@ -85,7 +90,7 @@ func (g *MetaquerySimulator) Total() int64 {
 }
 
 func (g *MetaquerySimulator) Finished() bool {
-	return (g.madePoints + g.skippedPoints) >= g.maxPoints
+	return g.madePoints >= g.maxPoints
 }
 
 // Next advances a Point to the next state in the generator.
@@ -93,17 +98,18 @@ func (g *MetaquerySimulator) Next(p *common.Point) {
 	p.SetMeasurementName(measKey)
 	p.SetTimestamp(&g.timestampNow)
 
+	// Tag values are populated based on a pseudo-random selection from the list
+	// of created tags. On a sufficiently large dataset, this will result in each
+	// tag appearing roughly the same amount of times throughout the generated
+	// data, evenly distributed over the time range.
 	xIdx := rand.Intn(g.axis)
 	yIdx := rand.Intn(g.axis)
-
-	// Populate tags
 	p.AppendTag(TagKeys[0], g.TagList[xIdx])
 	p.AppendTag(TagKeys[1], g.TagList[yIdx])
 
-	// Populate measurement
 	p.AppendField(valKey, rand.Float64())
 
 	g.madePoints++
-	g.madeValues += int64(len(p.FieldValues))
+	g.madeValues++
 	g.timestampNow = g.timestampNow.Add(g.stepTime)
 }

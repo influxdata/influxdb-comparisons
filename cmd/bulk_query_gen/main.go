@@ -309,6 +309,7 @@ func init() {
 		log.Fatal("\"timestamp-end\" must be grater than \"timestamp-start\"")
 	}
 
+	// The grouping interval is not applicable for the metaquery benchmarks.
 	if queryType != MetaqueryStandard {
 		if duration.Nanoseconds()/time.Hour.Nanoseconds() < int64(hourGroupInterval) {
 			log.Fatal("Time interval must be greater than the grouping interval")
@@ -421,7 +422,7 @@ func main() {
 
 	// Print stats:
 	keys := []string{}
-	for k := range stats {
+	for k, _ := range stats {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
