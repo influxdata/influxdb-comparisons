@@ -5,6 +5,6 @@ type Metaquery interface {
 	Dispatch(int) Query
 }
 
-func MetaqueryDispatchAll(d Metaquery, iteration int, q Query, scaleVar int) {
+func MetaqueryDispatchAll(d Metaquery, q Query) {
 	d.StandardMetaquery(q)
 }

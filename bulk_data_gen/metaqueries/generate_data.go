@@ -5,12 +5,9 @@ import (
 
 	"math/rand"
 
+	"github.com/google/uuid"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
-
-// letters are used for generating the pseudo-random tag values used in this
-// dataset. Currently only the first 10 letters are used.
-const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var (
 	TagKeys = [][]byte{
@@ -46,14 +43,11 @@ func (d *MetaquerySimulatorConfig) ToSimulator() *MetaquerySimulator {
 	// tag values is equal to the scaleFactor. The same list of tag values is used
 	// for both the "X" and "Y" tag keys.
 	for i := 0; i < d.ScaleFactor; i++ {
-		seed := rand.Perm(10)
-		thisVal := make([]byte, 10)
-
-		for idx, v := range seed {
-			thisVal[idx] = letters[v]
+		v, err := uuid.New().MarshalText()
+		if err != nil {
+			panic(err)
 		}
-
-		dg.TagList[i] = thisVal
+		dg.TagList[i] = []byte(v)
 	}
 
 	// The stepTime is the interval between generated points. This will result in
@@ -63,6 +57,7 @@ func (d *MetaquerySimulatorConfig) ToSimulator() *MetaquerySimulator {
 	return dg
 }
 
+// MetaquerySimulator fullfills the Simulator interface.
 type MetaquerySimulator struct {
 	madePoints int64
 	maxPoints  int64

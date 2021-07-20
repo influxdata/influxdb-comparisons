@@ -24,7 +24,7 @@ func NewInfluxMetaqueryCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfi
 
 func (d *InfluxMetaquery) Dispatch(i int) bulkQuerygen.Query {
 	q := bulkQuerygen.NewHTTPQuery() // from pool
-	bulkQuerygen.MetaqueryDispatchAll(d, i, q, d.ScaleVar)
+	bulkQuerygen.MetaqueryDispatchAll(d, q)
 	return q
 }
 
