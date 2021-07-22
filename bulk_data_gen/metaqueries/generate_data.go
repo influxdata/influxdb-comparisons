@@ -1,11 +1,11 @@
 package metaqueries
 
 import (
+	"fmt"
 	"time"
 
 	"math/rand"
 
-	"github.com/google/uuid"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 )
 
@@ -17,6 +17,8 @@ var (
 	valKey  = []byte("val")
 	measKey = []byte("example_measurement")
 )
+
+const TagSig = "Tag-%d"
 
 type MetaquerySimulatorConfig struct {
 	Start time.Time
@@ -43,11 +45,7 @@ func (d *MetaquerySimulatorConfig) ToSimulator() *MetaquerySimulator {
 	// tag values is equal to the scaleFactor. The same list of tag values is used
 	// for both the "X" and "Y" tag keys.
 	for i := 0; i < d.ScaleFactor; i++ {
-		v, err := uuid.New().MarshalText()
-		if err != nil {
-			panic(err)
-		}
-		dg.TagList[i] = []byte(v)
+		dg.TagList[i] = []byte(fmt.Sprintf(TagSig, i))
 	}
 
 	// The stepTime is the interval between generated points. This will result in

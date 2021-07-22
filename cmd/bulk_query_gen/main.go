@@ -50,7 +50,8 @@ const (
 	DashboardRedisMemoryUtilization = "redis-memory-utilization"
 	DashboardSystemLoad             = "system-load"
 	DashboardThroughput             = "throughput"
-	MetaqueryStandard               = "metaquery-standard"
+	MetaqueryTagValues              = "tag-values"
+	MetaqueryFieldKeys              = "field-keys"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -188,9 +189,13 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		},
 	},
 	common.UseCaseMetaquery: {
-		MetaqueryStandard: {
-			"influx-flux-http": influxdb.NewFluxMetaqueryStandard,
-			"influx-http":      influxdb.NewInfluxQLMetaqueryStandard,
+		MetaqueryTagValues: {
+			"influx-flux-http": influxdb.NewFluxMetaqueryTagValues,
+			"influx-http":      influxdb.NewInfluxQLMetaqueryTagValues,
+		},
+		MetaqueryFieldKeys: {
+			"influx-flux-http": influxdb.NewFluxMetaqueryFieldKeys,
+			"influx-http":      influxdb.NewInfluxQLMetaqueryFieldKeys,
 		},
 	},
 }
@@ -310,7 +315,7 @@ func init() {
 	}
 
 	// The grouping interval is not applicable for the metaquery benchmarks.
-	if queryType != MetaqueryStandard {
+	if useCase != common.UseCaseMetaquery {
 		if duration.Nanoseconds()/time.Hour.Nanoseconds() < int64(hourGroupInterval) {
 			log.Fatal("Time interval must be greater than the grouping interval")
 		}
