@@ -39,10 +39,9 @@ func (d *InfluxMetaquery) Dispatch(i int) bulkQuerygen.Query {
 func (d *InfluxMetaquery) MetaqueryTagValues(qi bulkQuerygen.Query) {
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf(`SHOW TAG VALUES ON "%s" FROM "example_measurement" WITH KEY = "X"`, d.DatabaseName)
+		query = `SHOW TAG VALUES FROM "example_measurement" WITH KEY = "X" LIMIT 200`
 	} else {
-		query = fmt.Sprintf(`import "regexp"`+
-			`from(bucket: "%s") `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn: (r) => (r["_measurement"] == "example_measurement"))`+
 			`|> keep(columns: ["X"])`+
@@ -66,10 +65,9 @@ func (d *InfluxMetaquery) MetaqueryTagValues(qi bulkQuerygen.Query) {
 func (d *InfluxMetaquery) MetaqueryFieldKeys(qi bulkQuerygen.Query) {
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf(`SHOW FIELD KEYS ON "%s" FROM "example_measurement"`, d.DatabaseName)
+		query = `SHOW FIELD KEYS FROM "example_measurement" LIMIT 200`
 	} else {
-		query = fmt.Sprintf(`import "regexp"`+
-			`from(bucket: "%s") `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn: (r) => (r["_measurement"] == "example_measurement"))`+
 			`|> keep(columns: ["_field"])`+

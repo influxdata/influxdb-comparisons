@@ -7,7 +7,7 @@ import (
 )
 
 // InfluxMetaqueryFieldKeys produces metaqueries that will return a list of all
-// tag values for a specific tag key name.
+// field keys associated with a measurement.
 type InfluxMetaqueryFieldKeys struct {
 	InfluxMetaquery
 }
