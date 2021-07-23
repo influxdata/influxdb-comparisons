@@ -4,6 +4,7 @@ import (
 	"fmt"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,8 +21,12 @@ func newInfluxDevopsCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, 
 		panic("need influx database name")
 	}
 
+	version, err := strconv.Atoi(dbConfig["influxVersion"])
+	if err != nil {
+		panic("invalid influx version")
+	}
 	return &InfluxDevops{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar, version),
 	}
 }
 

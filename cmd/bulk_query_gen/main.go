@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
@@ -202,6 +203,8 @@ var (
 	format         string
 	documentFormat string
 
+	version int
+
 	scaleVar   int
 	queryCount int
 
@@ -246,6 +249,8 @@ func init() {
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
+	flag.IntVar(&version, "version", 1, "InfluxDB major version to target (must be 1 or 2); ignore for non-InfluxDB.")
+
 	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scale-var used for data generation).")
 	flag.IntVar(&queryCount, "queries", 1000, "Number of queries to generate.")
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database to use (ignored for ElasticSearch).")
@@ -263,6 +268,10 @@ func init() {
 	flag.UintVar(&interleavedGenerationGroups, "interleaved-generation-groups", 1, "The number of round-robin serialization groups. Use this to scale up data generation to multiple processes.")
 
 	flag.Parse()
+
+	if version < 1 || version > 2 {
+		log.Fatal("Only InfluxDB major versions 1 or 2 is supported")
+	}
 
 	if queryType == DevOpsEightHostsOneHour && scaleVar < 8 {
 		log.Fatal("\"scale-var\" must be greater than the hosts grouping number")
@@ -365,6 +374,7 @@ func main() {
 
 	dbConfig := bulkQueryGen.DatabaseConfig{
 		bulkQueryGen.DatabaseName: dbName,
+		"influxVersion":           strconv.Itoa(version),
 	}
 
 	// Make the query generator:

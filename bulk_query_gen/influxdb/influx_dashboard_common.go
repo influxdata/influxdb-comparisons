@@ -5,6 +5,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/dashboard"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"strconv"
 	"time"
 )
 
@@ -24,8 +25,12 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 	if clustersCount == 0 {
 		clustersCount = 1
 	}
+	version, err := strconv.Atoi(dbConfig["influxVersion"])
+	if err != nil {
+		panic("invalid influx version")
+	}
 	return &InfluxDashboard{
-		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
+		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar, version),
 		ClustersCount: clustersCount,
 		TimeWindow:    bulkQuerygen.TimeWindow{interval.Start, duration},
 	}
@@ -57,7 +62,7 @@ func (d *InfluxDashboard) GetTimeConstraint(interval *bulkQuerygen.TimeInterval)
 	case "last":
 		s = fmt.Sprintf("time >= now() - %dh and time < now() - %dh", int64(2*interval.Duration().Hours()), int64(interval.Duration().Hours()))
 	case "recent":
-		s = fmt.Sprintf("time >= now() - %dh and time < now() - %dh", int64(interval.Duration().Hours() + 24), int64(24))
+		s = fmt.Sprintf("time >= now() - %dh and time < now() - %dh", int64(interval.Duration().Hours()+24), int64(24))
 	}
 	return s
 }

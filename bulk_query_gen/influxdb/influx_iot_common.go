@@ -5,6 +5,7 @@ import (
 	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,8 +21,12 @@ func NewInfluxIotCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, que
 		panic("need influx database name")
 	}
 
+	version, err := strconv.Atoi(dbConfig["influxVersion"])
+	if err != nil {
+		panic("invalid influx version")
+	}
 	return &InfluxIot{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar, version),
 	}
 }
 
