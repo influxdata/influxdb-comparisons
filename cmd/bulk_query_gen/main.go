@@ -198,6 +198,36 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLMetaqueryFieldKeys,
 		},
 	},
+	common.UseCaseWindowAggregate: {
+		string(influxdb.Count): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateCount,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateCount,
+		},
+		string(influxdb.Sum): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateSum,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateSum,
+		},
+		string(influxdb.Mean): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateMean,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateMean,
+		},
+		string(influxdb.Min): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateMin,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateMin,
+		},
+		string(influxdb.Max): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateMax,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateMax,
+		},
+		string(influxdb.First): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateFirst,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateFirst,
+		},
+		string(influxdb.Last): {
+			"influx-flux-http": influxdb.NewFluxWindowAggregateLast,
+			"influx-http":      influxdb.NewInfluxQLWindowAggregateLast,
+		},
+	},
 }
 
 // Program option vars:
