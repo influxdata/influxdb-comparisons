@@ -52,6 +52,7 @@ const (
 	DashboardThroughput             = "throughput"
 	MetaqueryTagValues              = "tag-values"
 	MetaqueryFieldKeys              = "field-keys"
+	MetaqueryAggregateKeep          = "aggregate-keep"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -196,6 +197,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		MetaqueryFieldKeys: {
 			"influx-flux-http": influxdb.NewFluxMetaqueryFieldKeys,
 			"influx-http":      influxdb.NewInfluxQLMetaqueryFieldKeys,
+		},
+		MetaqueryAggregateKeep: {
+			"influx-flux-http": influxdb.NewFluxMetaqueryAggregateKeep,
+			"influx-http":      influxdb.NewInfluxQLMetaqueryAggregateKeep,
 		},
 	},
 }
