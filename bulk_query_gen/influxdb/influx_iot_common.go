@@ -78,19 +78,19 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHo
 }
 
 func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query) {
-	interval := d.AllInterval.RandWindow(5 * time.Minute)
+	interval := d.AllInterval.RandWindow(7 * 24 * time.Hour)
 
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf(`SELECT mean("co2_level") as "mean_value" FROM "air_quality_room" WHERE time > %s AND time < %s AND "room_id"='4' GROUP BY time(5m) FILL(null)`,
+		query = fmt.Sprintf(`SELECT mean("co2_level") as "mean_value" FROM "air_quality_room" WHERE time > '%s' AND time < '%s' AND "room_id"='4' GROUP BY time(5m) FILL(null)`,
 			interval.StartString(),
 			interval.EndString())
 	} else {
-		query = fmt.Sprintf(`from(bucket: %s) `+
+		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
-			`|> filter(fn: (r) => r._measurement == "co2_level")`+
+			`|> filter(fn: (r) => r._measurement == "co2_level" and r._field == "air_quality_room")`+
 			`|> filter(fn: (r) => r.room_id == 4)`+
-			`|> keep(columns: "_time", "_value")`+
+			`|> keep(columns: ["_time", "_value"])`+
 			`|> aggregateWindow(every: 5m, fn: mean)`,
 			d.DatabaseName,
 			interval.StartString(),
@@ -99,5 +99,5 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query) {
 
 	humanLabel := fmt.Sprintf(`InfluxDB (%s) aggregate/keep`, d.language)
 	q := qi.(*bulkQuerygen.HTTPQuery)
-	d.getHttpQuery(humanLabel, "n/a", query, q)
+	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
