@@ -31,6 +31,7 @@ const (
 	DevOpsEightHostsOneHour         = "8-host-1-hr"
 	DevOpsGroupBy                   = "groupby"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
+	IotAggregateKeep                = "aggregate-keep"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -52,7 +53,6 @@ const (
 	DashboardThroughput             = "throughput"
 	MetaqueryTagValues              = "tag-values"
 	MetaqueryFieldKeys              = "field-keys"
-	MetaqueryAggregateKeep          = "aggregate-keep"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -109,6 +109,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"timescaledb":      timescaledb.NewTimescaleIotSingleHost,
 			"cassandra":        cassandra.NewCassandraIotSingleHost,
 			"mongo":            mongodb.NewMongoIotSingleHost,
+		},
+		IotAggregateKeep: {
+			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
+			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
 		},
 	},
 	common.UseCaseDashboard: {
@@ -197,10 +201,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		MetaqueryFieldKeys: {
 			"influx-flux-http": influxdb.NewFluxMetaqueryFieldKeys,
 			"influx-http":      influxdb.NewInfluxQLMetaqueryFieldKeys,
-		},
-		MetaqueryAggregateKeep: {
-			"influx-flux-http": influxdb.NewFluxMetaqueryAggregateKeep,
-			"influx-http":      influxdb.NewInfluxQLMetaqueryAggregateKeep,
 		},
 	},
 }
