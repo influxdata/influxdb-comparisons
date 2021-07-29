@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// InfluxIotAggregateKeep produces metaqueries that will test performance
+// InfluxIotAggregateKeep produces queries that will test performance
 // on Flux statements aggregate and keep
 type InfluxIotAggregateKeep struct {
 	InfluxIot
