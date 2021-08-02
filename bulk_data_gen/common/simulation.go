@@ -3,16 +3,17 @@ package common
 import "time"
 
 const (
-	DefaultDateTimeStart = "2018-01-01T00:00:00Z"
-	DefaultDateTimeEnd   = "2018-01-02T00:00:00Z"
-	UseCaseDevOps        = "devops"
-	UseCaseIot           = "iot"
-	UseCaseDashboard     = "dashboard"
-	UseCaseMetaquery     = "metaquery"
+	DefaultDateTimeStart   = "2018-01-01T00:00:00Z"
+	DefaultDateTimeEnd     = "2018-01-02T00:00:00Z"
+	UseCaseDevOps          = "devops"
+	UseCaseIot             = "iot"
+	UseCaseDashboard       = "dashboard"
+	UseCaseMetaquery       = "metaquery"
+	UseCaseWindowAggregate = "window-agg"
 )
 
 // Use case choices:
-var UseCaseChoices = []string{UseCaseDevOps, UseCaseIot, UseCaseDashboard, UseCaseMetaquery}
+var UseCaseChoices = []string{UseCaseDevOps, UseCaseIot, UseCaseDashboard, UseCaseMetaquery, UseCaseWindowAggregate}
 
 // Simulator simulates a use case.
 type Simulator interface {
