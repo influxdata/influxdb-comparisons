@@ -206,6 +206,8 @@ func main() {
 		fallthrough
 	case common.UseCaseChoices[5]: // group-agg
 		fallthrough
+	case common.UseCaseChoices[6]: // bare-agg:
+		fallthrough
 	case common.UseCaseChoices[1]:
 		cfg := &iot.IotSimulatorConfig{
 			Start: timestampStart,

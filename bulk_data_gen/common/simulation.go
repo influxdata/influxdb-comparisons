@@ -11,6 +11,7 @@ const (
 	UseCaseMetaquery       = "metaquery"
 	UseCaseWindowAggregate = "window-agg"
 	UseCaseGroupAggregate  = "group-agg"
+	UseCaseBareAggregate   = "bare-agg"
 )
 
 // Use case choices:
@@ -21,6 +22,7 @@ var UseCaseChoices = []string{
 	UseCaseMetaquery,
 	UseCaseWindowAggregate,
 	UseCaseGroupAggregate,
+	UseCaseBareAggregate,
 }
 
 // Simulator simulates a use case.

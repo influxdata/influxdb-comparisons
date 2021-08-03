@@ -258,6 +258,36 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLGroupAggregateMax,
 		},
 	},
+	common.UseCaseBareAggregate: {
+		string(influxdb.Count): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateCount,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateCount,
+		},
+		string(influxdb.Sum): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateSum,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateSum,
+		},
+		string(influxdb.Mean): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateMean,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateMean,
+		},
+		string(influxdb.First): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateFirst,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateFirst,
+		},
+		string(influxdb.Last): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateLast,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateLast,
+		},
+		string(influxdb.Min): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateMin,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateMin,
+		},
+		string(influxdb.Max): {
+			"influx-flux-http": influxdb.NewFluxBareAggregateMax,
+			"influx-http":      influxdb.NewInfluxQLBareAggregateMax,
+		},
+	},
 }
 
 // Program option vars:
