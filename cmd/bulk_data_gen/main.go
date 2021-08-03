@@ -202,7 +202,9 @@ func main() {
 			HostOffset: scaleVarOffset,
 		}
 		sim = cfg.ToSimulator()
-	case common.UseCaseChoices[4]:
+	case common.UseCaseChoices[4]: // window-agg
+		fallthrough
+	case common.UseCaseChoices[5]: // group-agg
 		fallthrough
 	case common.UseCaseChoices[1]:
 		cfg := &iot.IotSimulatorConfig{

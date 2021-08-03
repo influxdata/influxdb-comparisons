@@ -7,18 +7,6 @@ import (
 	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 )
 
-type Aggregate string
-
-const (
-	Count Aggregate = "count"
-	Sum   Aggregate = "sum"
-	Mean  Aggregate = "mean"
-	Min   Aggregate = "min"
-	Max   Aggregate = "max"
-	First Aggregate = "first"
-	Last  Aggregate = "last"
-)
-
 type InfluxWindowAggregateQuery struct {
 	InfluxCommon
 	aggregate Aggregate

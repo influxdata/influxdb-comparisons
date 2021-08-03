@@ -2,8 +2,9 @@ package influxdb
 
 import (
 	"fmt"
-	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"net/url"
+
+	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 )
 
 type Language bool
@@ -20,6 +21,18 @@ func (lang Language) String() string {
 		return "Flux"
 	}
 }
+
+type Aggregate string
+
+const (
+	Count Aggregate = "count"
+	Sum   Aggregate = "sum"
+	Mean  Aggregate = "mean"
+	Min   Aggregate = "min"
+	Max   Aggregate = "max"
+	First Aggregate = "first"
+	Last  Aggregate = "last"
+)
 
 type InfluxCommon struct {
 	bulkQuerygen.CommonParams

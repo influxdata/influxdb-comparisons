@@ -10,10 +10,18 @@ const (
 	UseCaseDashboard       = "dashboard"
 	UseCaseMetaquery       = "metaquery"
 	UseCaseWindowAggregate = "window-agg"
+	UseCaseGroupAggregate  = "group-agg"
 )
 
 // Use case choices:
-var UseCaseChoices = []string{UseCaseDevOps, UseCaseIot, UseCaseDashboard, UseCaseMetaquery, UseCaseWindowAggregate}
+var UseCaseChoices = []string{
+	UseCaseDevOps,
+	UseCaseIot,
+	UseCaseDashboard,
+	UseCaseMetaquery,
+	UseCaseWindowAggregate,
+	UseCaseGroupAggregate,
+}
 
 // Simulator simulates a use case.
 type Simulator interface {
