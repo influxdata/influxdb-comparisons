@@ -108,7 +108,7 @@ func (b *InfluxQueryBenchmarker) Validate() {
 	}
 
 	if b.useCompatibilityApi && b.token == "" {
-		log.Fatal("organization must be specified when using compatibility API")
+		log.Fatal("token must be provided when using compatibility API")
 	}
 }
 
