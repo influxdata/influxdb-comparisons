@@ -41,9 +41,10 @@ type InfluxQueryBenchmarker struct {
 	queryPool sync.Pool
 	queryChan chan []*http.Query
 
-	useApiV2 bool
-	bucketId string // InfluxDB v2
-	orgId    string // InfluxDB v2
+	useApiV2            bool
+	useCompatibilityApi bool
+	bucketId            string // InfluxDB v2
+	orgId               string // InfluxDB v2
 }
 
 var querier = &InfluxQueryBenchmarker{}
@@ -70,6 +71,7 @@ func (b *InfluxQueryBenchmarker) Init() {
 	flag.IntVar(&b.clientIndex, "client-index", 0, "Index of a client host running this tool. Used to distribute load")
 	flag.StringVar(&b.organization, "organization", "", "Organization name (InfluxDB v2).")
 	flag.StringVar(&b.token, "token", "", "Authentication token (InfluxDB v2).")
+	flag.BoolVar(&b.useCompatibilityApi, "use-compatibility", false, "Use compatibility /query API - for running InfluxQL with InfluxDB 2.x")
 }
 
 func (b *InfluxQueryBenchmarker) Validate() {
@@ -86,7 +88,7 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		log.Fatalf("Unsupported HTPP client type: %v", b.httpClientType)
 	}
 
-	if b.organization != "" || b.token != "" {
+	if !b.useCompatibilityApi && (b.organization != "" || b.token != "") {
 		if b.organization == "" {
 			log.Fatal("organization must be specified for InfluxDB 2.x")
 		}
@@ -103,6 +105,10 @@ func (b *InfluxQueryBenchmarker) Validate() {
 		}
 		b.useApiV2 = true
 		log.Print("Using InfluxDB API version 2")
+	}
+
+	if b.useCompatibilityApi && b.token == "" {
+		log.Fatal("organization must be specified when using compatibility API")
 	}
 }
 
@@ -220,6 +226,11 @@ func (b *InfluxQueryBenchmarker) processQueries(w http.HTTPClient, workersGroup 
 		opts.AuthToken = b.token
 		opts.Path = []byte(fmt.Sprintf("/api/v2/query?orgID=%s", b.orgId)) // query path is empty for 2.x in generated queries
 	}
+	// enable InfluxQL queries with 2.x
+	if b.useCompatibilityApi {
+		opts.AuthToken = b.token
+	}
+
 	var queriesSeen int64
 	for queries := range b.queryChan {
 		// enable flux queries with 1.x
