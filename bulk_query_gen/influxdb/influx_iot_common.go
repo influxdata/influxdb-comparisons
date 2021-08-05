@@ -88,7 +88,7 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query) {
 	} else {
 		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
-			`|> filter(fn: (r) => r._measurement == "co2_level" and r._field == "air_quality_room")`+
+			`|> filter(fn: (r) => r._measurement == "air_quality_room" and r._field == "co2_level")`+
 			`|> filter(fn: (r) => r.room_id == 4)`+
 			`|> keep(columns: ["_time", "_value"])`+
 			`|> aggregateWindow(every: 5m, fn: mean)`,
