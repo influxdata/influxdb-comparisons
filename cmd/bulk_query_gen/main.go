@@ -31,6 +31,7 @@ const (
 	DevOpsEightHostsOneHour         = "8-host-1-hr"
 	DevOpsGroupBy                   = "groupby"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
+	IotAggregateKeep                = "aggregate-keep"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -108,6 +109,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"timescaledb":      timescaledb.NewTimescaleIotSingleHost,
 			"cassandra":        cassandra.NewCassandraIotSingleHost,
 			"mongo":            mongodb.NewMongoIotSingleHost,
+		},
+		IotAggregateKeep: {
+			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
+			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
 		},
 	},
 	common.UseCaseDashboard: {
