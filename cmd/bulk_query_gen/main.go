@@ -32,6 +32,7 @@ const (
 	DevOpsGroupBy                   = "groupby"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	IotAggregateKeep                = "aggregate-keep"
+	IotLightLevelEightHours         = "light-level-8-hr"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -113,6 +114,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		IotAggregateKeep: {
 			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
 			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
+		},
+		IotLightLevelEightHours: {
+			"influx-flux-http": influxdb.NewFluxIotLightLevel,
+			"influx-http":      influxdb.NewInfluxqlIotLightLevel,
 		},
 	},
 	common.UseCaseDashboard: {
