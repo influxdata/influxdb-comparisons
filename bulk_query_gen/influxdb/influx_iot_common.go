@@ -2,11 +2,12 @@ package influxdb
 
 import (
 	"fmt"
-	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
-	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"math/rand"
 	"strings"
 	"time"
+
+	bulkDataGenIot "github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
+	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 )
 
 // InfluxIot produces Influx-specific queries for all the devops query types.
@@ -100,4 +101,26 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query) {
 	humanLabel := fmt.Sprintf(`InfluxDB (%s) aggregate/keep`, d.language)
 	q := qi.(*bulkQuerygen.HTTPQuery)
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
+}
+
+func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
+	interval := d.AllInterval.RandWindow(8 * time.Hour)
+
+	var query string
+	if d.language == InfluxQL {
+		query = fmt.Sprintf(`SELECT level FROM light_level_room WHERE time > '%s' AND time < '%s' GROUP BY *`, interval.StartString(), interval.EndString())
+	} else {
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
+			`|> filter(fn: (r) => r["_measurement"] == "light_level_room" and r["_field"] == "level") `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(),
+			interval.EndString(),
+		)
+	}
+
+	humanLabel := fmt.Sprintf(`InfluxDB (%s) field keys`, d.language)
+	q := qi.(*bulkQuerygen.HTTPQuery)
+	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
