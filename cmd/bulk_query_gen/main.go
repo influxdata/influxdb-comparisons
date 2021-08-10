@@ -33,6 +33,7 @@ const (
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	IotAggregateKeep                = "aggregate-keep"
 	IotLightLevelEightHours         = "light-level-8-hr"
+	IotSortedPivot                  = "sorted-pivot"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -118,6 +119,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		IotLightLevelEightHours: {
 			"influx-flux-http": influxdb.NewFluxIotLightLevel,
 			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
+		},
+		IotSortedPivot: {
+			"influx-flux-http": influxdb.NewFluxIotSortedPivot,
+			"influx-http":      influxdb.NewInfluxQLIotSortedPivot,
 		},
 	},
 	common.UseCaseDashboard: {
