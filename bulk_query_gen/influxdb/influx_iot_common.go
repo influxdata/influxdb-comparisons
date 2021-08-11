@@ -120,7 +120,7 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 		)
 	}
 
-	humanLabel := fmt.Sprintf(`InfluxDB (%s) field keys`, d.language)
+	humanLabel := fmt.Sprintf(`InfluxDB (%s) 8 hrs Room Light Level (Raw Data)`, d.language)
 	q := qi.(*bulkQuerygen.HTTPQuery)
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }

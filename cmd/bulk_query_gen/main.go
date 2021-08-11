@@ -117,7 +117,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		},
 		IotLightLevelEightHours: {
 			"influx-flux-http": influxdb.NewFluxIotLightLevel,
-			"influx-http":      influxdb.NewInfluxqlIotLightLevel,
+			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
 		},
 	},
 	common.UseCaseDashboard: {
