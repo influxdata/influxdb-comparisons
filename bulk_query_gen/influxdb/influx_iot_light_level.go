@@ -10,7 +10,7 @@ type InfluxIotLightLevel struct {
 	InfluxIot
 }
 
-func NewInfluxqlIotLightLevel(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
+func NewInfluxQLIotLightLevel(dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, queryInterval time.Duration, scaleVar int) bulkQuerygen.QueryGenerator {
 	underlying := NewInfluxIotCommon(InfluxQL, dbConfig, queriesFullRange, queryInterval, scaleVar).(*InfluxIot)
 	return &InfluxIotLightLevel{
 		InfluxIot: *underlying,
