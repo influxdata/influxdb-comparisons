@@ -108,7 +108,7 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf(`SELECT level FROM light_level_room WHERE time > '%s' AND time < '%s' GROUP BY *`, interval.StartString(), interval.EndString())
+		query = fmt.Sprintf(`SELECT level FROM light_level_room WHERE time > '%s' AND time < '%s'`, interval.StartString(), interval.EndString())
 	} else {
 		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
