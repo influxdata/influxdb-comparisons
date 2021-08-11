@@ -78,8 +78,8 @@ func (d *InfluxIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHo
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
-func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query) {
-	interval := d.AllInterval.RandWindow(7 * 24 * time.Hour)
+func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query, timeRange time.Duration) {
+	interval := d.AllInterval.RandWindow(timeRange)
 
 	var query string
 	if d.language == InfluxQL {
