@@ -128,7 +128,7 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 func (d *InfluxIot) IotSortedPivot(qi bulkQuerygen.Query) {
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf(`SELECT * WHERE time > '%s' AND time < '%s'`,
+		query = fmt.Sprintf(`SELECT * FROM air_quality_room WHERE time > '%s' AND time < '%s'`,
 			d.AllInterval.StartString(),
 			d.AllInterval.EndString())
 	} else {
