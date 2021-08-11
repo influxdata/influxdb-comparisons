@@ -134,8 +134,8 @@ func (d *InfluxIot) IotSortedPivot(qi bulkQuerygen.Query) {
 	} else {
 		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
-			`|> filter(fn: (r) => r._measurememt == "air_quality_room") `+
-			`|> pivot(rowKey:["_time"], columnKey:["_field"], valueKey:["_value"])`,
+			`|> filter(fn: (r) => r._measurement == "air_quality_room") `+
+			`|> pivot(rowKey:["_time"], columnKey:["_field"], valueKey:"_value")`,
 			d.DatabaseName,
 			d.AllInterval.StartString(),
 			d.AllInterval.EndString())
