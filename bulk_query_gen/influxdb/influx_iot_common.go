@@ -125,23 +125,24 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
 
-func (d *InfluxIot) IotSortedPivot(qi bulkQuerygen.Query) {
+func (d *InfluxIot) IotSortedPivot(qi bulkQuerygen.Query, timeInterval time.Duration) {
+	interval := d.AllInterval.RandWindow(timeInterval)
 	var query string
 	if d.language == InfluxQL {
 		query = fmt.Sprintf(`SELECT * FROM air_quality_room WHERE time > '%s' AND time < '%s'`,
-			d.AllInterval.StartString(),
-			d.AllInterval.EndString())
+			interval.StartString(),
+			interval.EndString())
 	} else {
 		query = fmt.Sprintf(`from(bucket: "%s") `+
 			`|> range(start: %s, stop: %s) `+
 			`|> filter(fn: (r) => r._measurement == "air_quality_room") `+
-			`|> pivot(rowKey:["_time"], columnKey:["_field"], valueKey:"_value")`,
+			`|> pivot(rowKey:["_time"], columnKey:["_field"], valueColumn:"_value")`,
 			d.DatabaseName,
-			d.AllInterval.StartString(),
-			d.AllInterval.EndString())
+			interval.StartString(),
+			interval.EndString())
 	}
 
 	humanLabel := fmt.Sprintf(`InfluxDB (%s) Sorted Pivot`, d.language)
 	q := qi.(*bulkQuerygen.HTTPQuery)
-	d.getHttpQuery(humanLabel, d.AllInterval.StartString(), query, q)
+	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
