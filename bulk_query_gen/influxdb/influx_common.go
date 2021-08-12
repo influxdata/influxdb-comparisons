@@ -34,6 +34,13 @@ const (
 	Last  Aggregate = "last"
 )
 
+type Cardinality string
+
+const (
+	HighCardinality Cardinality = "high-card"
+	LowCardinality  Cardinality = "low-card"
+)
+
 type InfluxCommon struct {
 	bulkQuerygen.CommonParams
 	language     Language

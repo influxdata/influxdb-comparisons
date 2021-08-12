@@ -298,6 +298,40 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLBareAggregateMax,
 		},
 	},
+	common.UseCaseGroupWindowTranspose: {
+		fmt.Sprintf("%s-%s", influxdb.Count, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeCount,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeCount,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Count, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeCountCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeCountCardinality,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Sum, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeSum,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeSum,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Sum, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeSumCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeSumCardinality,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Min, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMin,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMin,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Min, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMinCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMinCardinality,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Max, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMax,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMax,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Max, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMaxCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMaxCardinality,
+		},
+	},
 }
 
 // Program option vars:
