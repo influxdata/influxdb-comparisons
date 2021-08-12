@@ -37,6 +37,8 @@ func (d *InfluxGroupWindowTransposeQuery) Dispatch(i int) bulkQuerygen.Query {
 	return q
 }
 
+// GroupWindowTransposeQuery generates a query based on the IoT data generator,
+// which represents a relatively low amount of cardinality.
 func (d *InfluxGroupWindowTransposeQuery) GroupWindowTransposeQuery(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(time.Hour * 6)
 
@@ -46,11 +48,11 @@ func (d *InfluxGroupWindowTransposeQuery) GroupWindowTransposeQuery(qi bulkQuery
 			d.aggregate, interval.StartString(), interval.EndString(), d.interval)
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s")
-            |> range(start:%s, stop:%s)
-            |> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature")
-						|> group(columns:["home_id"])
-            |> aggregateWindow(every:%s, fn:%s)
-            |> yield()`,
+				|> range(start:%s, stop:%s)
+				|> filter(fn:(r) => r._measurement == "air_condition_room" and r._field == "temperature")
+				|> group(columns:["home_id"])
+				|> aggregateWindow(every:%s, fn:%s)
+				|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
 			d.interval, d.aggregate)
@@ -61,6 +63,8 @@ func (d *InfluxGroupWindowTransposeQuery) GroupWindowTransposeQuery(qi bulkQuery
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
+// GroupWindowTransposeCardinalityQuery generates a query based on the Metaquery
+// data generator, which is much higher in cardinality.
 func (d *InfluxGroupWindowTransposeQuery) GroupWindowTransposeCardinalityQuery(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(time.Hour * 12)
 
@@ -70,11 +74,11 @@ func (d *InfluxGroupWindowTransposeQuery) GroupWindowTransposeCardinalityQuery(q
 			d.aggregate, interval.StartString(), interval.EndString(), d.interval)
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s")
-            |> range(start:%s, stop:%s)
-            |> filter(fn:(r) => r._measurement == "example_measurement" and r._field == "val")
-						|> group(columns:["X"])
-            |> aggregateWindow(every:%s, fn:%s)
-            |> yield()`,
+				|> range(start:%s, stop:%s)
+				|> filter(fn:(r) => r._measurement == "example_measurement" and r._field == "val")
+				|> group(columns:["X"])
+				|> aggregateWindow(every:%s, fn:%s)
+				|> yield()`,
 			d.DatabaseName,
 			interval.StartString(), interval.EndString(),
 			d.interval, d.aggregate)
