@@ -315,6 +315,30 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeSumCardinality,
 			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeSumCardinality,
 		},
+		fmt.Sprintf("%s-%s", influxdb.Mean, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMean,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMean,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Mean, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMeanCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMeanCardinality,
+		},
+		fmt.Sprintf("%s-%s", influxdb.First, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeFirst,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeFirst,
+		},
+		fmt.Sprintf("%s-%s", influxdb.First, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeFirstCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeFirstCardinality,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Last, influxdb.LowCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeLast,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeLast,
+		},
+		fmt.Sprintf("%s-%s", influxdb.Last, influxdb.HighCardinality): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeLastCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeLastCardinality,
+		},
 		fmt.Sprintf("%s-%s", influxdb.Min, influxdb.LowCardinality): {
 			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMin,
 			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMin,
