@@ -35,6 +35,9 @@ const (
 	IotLightLevelEightHours         = "light-level-8-hr"
 	IotBatteryLevels                = "battery-levels"
 	IotSortedPivot                  = "sorted-pivot"
+	IotFastQuery                    = "fast-query"
+	IotMultiMeasurementOr           = "multi-measurement-or"
+	IotStandAloneFilter             = "standalone-filter"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
 	DashboardCpuNum                 = "cpu-num"
@@ -113,6 +116,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"cassandra":        cassandra.NewCassandraIotSingleHost,
 			"mongo":            mongodb.NewMongoIotSingleHost,
 		},
+		IotFastQuery: { // alias for IotOneHomeTwelveHours
+			"influx-flux-http": influxdb.NewFluxIotSingleHost,
+			"influx-http":      influxdb.NewInfluxQLIotSingleHost,
+		},
 		IotAggregateKeep: {
 			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
 			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
@@ -121,7 +128,15 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxIotLightLevel,
 			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
 		},
+		IotStandAloneFilter: { // alias for IotLightLevelEightHours
+			"influx-flux-http": influxdb.NewFluxIotLightLevel,
+			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
+		},
 		IotBatteryLevels: {
+			"influx-flux-http": influxdb.NewFluxIotBatteryLevels,
+			"influx-http":      influxdb.NewInfluxQLIotBatteryLevels,
+		},
+		IotMultiMeasurementOr: { // alias for IotBatteryLevels
 			"influx-flux-http": influxdb.NewFluxIotBatteryLevels,
 			"influx-http":      influxdb.NewInfluxQLIotBatteryLevels,
 		},
