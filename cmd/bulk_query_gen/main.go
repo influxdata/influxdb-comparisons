@@ -35,7 +35,7 @@ const (
 	IotLightLevelEightHours         = "light-level-8-hr"
 	IotBatteryLevels                = "battery-levels"
 	IotSortedPivot                  = "sorted-pivot"
-	IotFastQuery                    = "fast-query"
+	IotFastQuerySmallData           = "fast-query-small-data"
 	IotMultiMeasurementOr           = "multi-measurement-or"
 	IotStandAloneFilter             = "standalone-filter"
 	DashboardAll                    = "dashboard-all"
