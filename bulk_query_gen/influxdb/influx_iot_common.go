@@ -125,7 +125,7 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
 
-func (d *InfluxIot) BatteryLevels(qi bulkQuerygen.Query, queryInterval time.Duration) {
+func (d *InfluxIot) MultiMeasurementOr(qi bulkQuerygen.Query, queryInterval time.Duration) {
 	interval := d.AllInterval.RandWindow(queryInterval)
 
 	var query string
