@@ -103,7 +103,7 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query, timeRange time.Durat
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
-func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
+func (d *InfluxIot) StandAloneFilter(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(8 * time.Hour)
 
 	var query string
@@ -125,7 +125,7 @@ func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
 
-func (d *InfluxIot) BatteryLevels(qi bulkQuerygen.Query, queryInterval time.Duration) {
+func (d *InfluxIot) MultiMeasurementOr(qi bulkQuerygen.Query, queryInterval time.Duration) {
 	interval := d.AllInterval.RandWindow(queryInterval)
 
 	var query string

@@ -32,8 +32,6 @@ const (
 	DevOpsGroupBy                   = "groupby"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	IotAggregateKeep                = "aggregate-keep"
-	IotLightLevelEightHours         = "light-level-8-hr"
-	IotBatteryLevels                = "battery-levels"
 	IotSortedPivot                  = "sorted-pivot"
 	IotFastQuerySmallData           = "fast-query-small-data"
 	IotMultiMeasurementOr           = "multi-measurement-or"
@@ -124,21 +122,13 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
 			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
 		},
-		IotLightLevelEightHours: {
-			"influx-flux-http": influxdb.NewFluxIotLightLevel,
-			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
+		IotStandAloneFilter: {
+			"influx-flux-http": influxdb.NewFluxIotStandAloneFilter,
+			"influx-http":      influxdb.NewInfluxQLIotStandAloneFilter,
 		},
-		IotStandAloneFilter: { // alias for IotLightLevelEightHours
-			"influx-flux-http": influxdb.NewFluxIotLightLevel,
-			"influx-http":      influxdb.NewInfluxQLIotLightLevel,
-		},
-		IotBatteryLevels: {
-			"influx-flux-http": influxdb.NewFluxIotBatteryLevels,
-			"influx-http":      influxdb.NewInfluxQLIotBatteryLevels,
-		},
-		IotMultiMeasurementOr: { // alias for IotBatteryLevels
-			"influx-flux-http": influxdb.NewFluxIotBatteryLevels,
-			"influx-http":      influxdb.NewInfluxQLIotBatteryLevels,
+		IotMultiMeasurementOr: {
+			"influx-flux-http": influxdb.NewFluxIotMultiMeasurementOr,
+			"influx-http":      influxdb.NewInfluxQLIotMultiMeasurementOr,
 		},
 		IotSortedPivot: {
 			"influx-flux-http": influxdb.NewFluxIotSortedPivot,
