@@ -116,7 +116,7 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"cassandra":        cassandra.NewCassandraIotSingleHost,
 			"mongo":            mongodb.NewMongoIotSingleHost,
 		},
-		IotFastQuery: { // alias for IotOneHomeTwelveHours
+		IotFastQuerySmallData: { // alias for IotOneHomeTwelveHours
 			"influx-flux-http": influxdb.NewFluxIotSingleHost,
 			"influx-http":      influxdb.NewInfluxQLIotSingleHost,
 		},
