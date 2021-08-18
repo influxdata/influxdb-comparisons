@@ -103,7 +103,7 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query, timeRange time.Durat
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
-func (d *InfluxIot) LightLevelEightHours(qi bulkQuerygen.Query) {
+func (d *InfluxIot) StandAloneFilter(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(8 * time.Hour)
 
 	var query string
