@@ -1,12 +1,13 @@
 package influxdb
 
 import (
-	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 	"time"
+
+	bulkQuerygen "github.com/influxdata/influxdb-comparisons/bulk_query_gen"
 )
 
 // InfluxIotAggregateKeep produces queries that will test performance
-// on Flux statements aggregate and keep
+// on Flux statements with keep() |> aggregateWindow()
 type InfluxIotAggregateKeep struct {
 	InfluxIot
 	interval time.Duration
