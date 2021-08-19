@@ -132,9 +132,9 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxIotStandAloneFilter,
 			"influx-http":      influxdb.NewInfluxQLIotStandAloneFilter,
 		},
-		IotMultiMeasurementOr: {
-			"influx-flux-http": influxdb.NewFluxIotMultiMeasurementOr,
-			"influx-http":      influxdb.NewInfluxQLIotMultiMeasurementOr,
+		IotMultiMeasurementOr: { // temporary alias for MultiMeasurementOr
+			"influx-flux-http": influxdb.NewFluxMultiMeasurementOr,
+			"influx-http":      influxdb.NewInfluxQLMultiMeasurementOr,
 		},
 		IotSortedPivot: {
 			"influx-flux-http": influxdb.NewFluxIotSortedPivot,
