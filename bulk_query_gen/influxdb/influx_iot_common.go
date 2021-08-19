@@ -103,6 +103,31 @@ func (d *InfluxIot) IotAggregateKeep(qi bulkQuerygen.Query, timeRange time.Durat
 	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
 }
 
+func (d *InfluxIot) IotAggregateDrop(qi bulkQuerygen.Query, timeRange time.Duration) {
+	interval := d.AllInterval.RandWindow(timeRange)
+
+	var query string
+	if d.language == InfluxQL {
+		query = fmt.Sprintf(`SELECT mean("co2_level") as "mean_value" FROM "air_quality_room" WHERE time > '%s' AND time < '%s' AND "room_id"='4' GROUP BY time(5m) FILL(null)`,
+			interval.StartString(),
+			interval.EndString())
+	} else {
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
+			`|> filter(fn: (r) => r._measurement == "air_quality_room" and r._field == "co2_level")`+
+			`|> filter(fn: (r) => r.room_id == "4")`+
+			`|> drop(columns: ["_start", "_stop", "_measurement", "_field", "home_id", "room_id", "sensor_id"])`+
+			`|> aggregateWindow(every: 5m, fn: mean)`,
+			d.DatabaseName,
+			interval.StartString(),
+			interval.EndString())
+	}
+
+	humanLabel := fmt.Sprintf(`InfluxDB (%s) aggregate/drop`, d.language)
+	q := qi.(*bulkQuerygen.HTTPQuery)
+	d.getHttpQuery(humanLabel, interval.StartString(), query, q)
+}
+
 func (d *InfluxIot) StandAloneFilter(qi bulkQuerygen.Query) {
 	interval := d.AllInterval.RandWindow(8 * time.Hour)
 

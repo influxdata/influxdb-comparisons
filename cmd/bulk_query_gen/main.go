@@ -32,6 +32,7 @@ const (
 	DevOpsGroupBy                   = "groupby"
 	IotOneHomeTwelveHours           = "1-home-12-hours"
 	IotAggregateKeep                = "aggregate-keep"
+	IotAggregateDrop                = "aggregate-drop"
 	IotSortedPivot                  = "sorted-pivot"
 	IotFastQuerySmallData           = "fast-query-small-data"
 	IotMultiMeasurementOr           = "multi-measurement-or"
@@ -121,6 +122,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		IotAggregateKeep: {
 			"influx-flux-http": influxdb.NewFluxIotAggregateKeep,
 			"influx-http":      influxdb.NewInfluxQLIotAggregateKeep,
+		},
+		IotAggregateDrop: {
+			"influx-flux-http": influxdb.NewFluxIotAggregateDrop,
+			"influx-http":      influxdb.NewInfluxQLIotAggregateDrop,
 		},
 		IotStandAloneFilter: {
 			"influx-flux-http": influxdb.NewFluxIotStandAloneFilter,
