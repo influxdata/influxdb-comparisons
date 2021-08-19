@@ -58,6 +58,7 @@ const (
 	DashboardThroughput             = "throughput"
 	MetaqueryTagValues              = "tag-values"
 	MetaqueryFieldKeys              = "field-keys"
+	MultiMeasurementOr              = "multi-measurement-or"
 )
 
 // query generator choices {use-case, query-type, format}
@@ -131,9 +132,9 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-flux-http": influxdb.NewFluxIotStandAloneFilter,
 			"influx-http":      influxdb.NewInfluxQLIotStandAloneFilter,
 		},
-		IotMultiMeasurementOr: {
-			"influx-flux-http": influxdb.NewFluxIotMultiMeasurementOr,
-			"influx-http":      influxdb.NewInfluxQLIotMultiMeasurementOr,
+		IotMultiMeasurementOr: { // temporary alias for MultiMeasurementOr
+			"influx-flux-http": influxdb.NewFluxMultiMeasurementOr,
+			"influx-http":      influxdb.NewInfluxQLMultiMeasurementOr,
 		},
 		IotSortedPivot: {
 			"influx-flux-http": influxdb.NewFluxIotSortedPivot,
@@ -374,6 +375,12 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		fmt.Sprintf("%s-%s", influxdb.Max, influxdb.HighCardinality): {
 			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMaxCardinality,
 			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMaxCardinality,
+		},
+	},
+	common.UseCaseMultiMeasurement: {
+		MultiMeasurementOr: {
+			"influx-flux-http": influxdb.NewFluxMultiMeasurementOr,
+			"influx-http":      influxdb.NewInfluxQLMultiMeasurementOr,
 		},
 	},
 }
