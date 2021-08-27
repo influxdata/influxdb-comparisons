@@ -150,6 +150,29 @@ func (d *InfluxIot) StandAloneFilter(qi bulkQuerygen.Query) {
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
 
+func (d *InfluxIot) MultiMeasurementOr(qi bulkQuerygen.Query, queryInterval time.Duration) {
+	interval := d.AllInterval.RandWindow(queryInterval)
+
+	var query string
+	if d.language == InfluxQL {
+		query = fmt.Sprintf(`SELECT battery_voltage FROM air_condition_outdoor, air_condition_room, air_quality_room, camera_detection, door_state WHERE time > '%s' AND time < '%s'`, interval.StartString(), interval.EndString())
+	} else {
+		query = fmt.Sprintf(`from(bucket: "%s") `+
+			`|> range(start: %s, stop: %s) `+
+			`|> filter(fn: (r) => r["_measurement"] == "air_condition_outdoor" or r["_measurement"] == "air_condition_room" or r["_measurement"] == "air_quality_room" or r["_measurement"] == "camera_detection" or r["_measurement"] == "door_state") `+
+			`|> filter(fn: (r) => r["_field"] == "battery_voltage") `+
+			`|> yield()`,
+			d.DatabaseName,
+			interval.StartString(),
+			interval.EndString(),
+		)
+	}
+
+	humanLabel := fmt.Sprintf(`InfluxDB (%s) Battery Voltage`, d.language)
+	q := qi.(*bulkQuerygen.HTTPQuery)
+	d.getHttpQuery(humanLabel, "n/a", query, q)
+}
+
 func (d *InfluxIot) IotSortedPivot(qi bulkQuerygen.Query, timeInterval time.Duration) {
 	interval := d.AllInterval.RandWindow(timeInterval)
 	var query string
