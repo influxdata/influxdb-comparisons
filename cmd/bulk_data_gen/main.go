@@ -30,6 +30,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/devops"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/iot"
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/metaqueries"
+	multiMeasurement "github.com/influxdata/influxdb-comparisons/bulk_data_gen/multi_measurement"
 )
 
 // Output data format choices:
@@ -219,6 +220,14 @@ func main() {
 		sim = cfg.ToSimulator()
 	case common.UseCaseChoices[3]:
 		cfg := &metaqueries.MetaquerySimulatorConfig{
+			Start: timestampStart,
+			End:   timestampEnd,
+
+			ScaleFactor: int(scaleVar),
+		}
+		sim = cfg.ToSimulator()
+	case common.UseCaseChoices[7]:
+		cfg := &multiMeasurement.MeasurementSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,
 
