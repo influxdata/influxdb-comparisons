@@ -35,7 +35,6 @@ const (
 	IotAggregateDrop                = "aggregate-drop"
 	IotSortedPivot                  = "sorted-pivot"
 	IotFastQuerySmallData           = "fast-query-small-data"
-	IotMultiMeasurementOr           = "multi-measurement-or"
 	IotStandAloneFilter             = "standalone-filter"
 	DashboardAll                    = "dashboard-all"
 	DashboardAvailability           = "availability"
@@ -131,10 +130,6 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		IotStandAloneFilter: {
 			"influx-flux-http": influxdb.NewFluxIotStandAloneFilter,
 			"influx-http":      influxdb.NewInfluxQLIotStandAloneFilter,
-		},
-		IotMultiMeasurementOr: {
-			"influx-flux-http": influxdb.NewFluxIotMultiMeasurementOr,
-			"influx-http":      influxdb.NewInfluxQLIotMultiMeasurementOr,
 		},
 		IotSortedPivot: {
 			"influx-flux-http": influxdb.NewFluxIotSortedPivot,
