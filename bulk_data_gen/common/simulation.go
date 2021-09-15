@@ -3,17 +3,19 @@ package common
 import "time"
 
 const (
-	DefaultDateTimeStart        = "2018-01-01T00:00:00Z"
-	DefaultDateTimeEnd          = "2018-01-02T00:00:00Z"
-	UseCaseDevOps               = "devops"
-	UseCaseIot                  = "iot"
-	UseCaseDashboard            = "dashboard"
-	UseCaseMetaquery            = "metaquery"
-	UseCaseWindowAggregate      = "window-agg"
-	UseCaseGroupAggregate       = "group-agg"
-	UseCaseBareAggregate        = "bare-agg"
-	UseCaseGroupWindowTranspose = "group-window-transpose"
-	UseCaseMultiMeasurement     = "multi-measurement"
+	DefaultDateTimeStart                = "2018-01-01T00:00:00Z"
+	DefaultDateTimeEnd                  = "2018-01-02T00:00:00Z"
+	UseCaseDevOps                       = "devops"
+	UseCaseIot                          = "iot"
+	UseCaseDashboard                    = "dashboard"
+	UseCaseMetaquery                    = "metaquery"
+	UseCaseWindowAggregate              = "window-agg"
+	UseCaseGroupAggregate               = "group-agg"
+	UseCaseBareAggregate                = "bare-agg"
+	UseCaseGroupWindowTranspose         = "group-window-transpose"
+	UseCaseGroupWindowTransposeHighCard = "group-window-transpose-high-card"
+	UseCaseGroupWindowTransposeLowCard  = "group-window-transpose-low-card"
+	UseCaseMultiMeasurement             = "multi-measurement"
 )
 
 // Use case choices:

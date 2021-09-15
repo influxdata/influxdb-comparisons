@@ -372,6 +372,66 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMaxCardinality,
 		},
 	},
+	common.UseCaseGroupWindowTransposeHighCard: {
+		string(influxdb.Count): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeCountCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeCountCardinality,
+		},
+		string(influxdb.Sum): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeSumCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeSumCardinality,
+		},
+		string(influxdb.Mean): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMeanCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMeanCardinality,
+		},
+		string(influxdb.First): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeFirstCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeFirstCardinality,
+		},
+		string(influxdb.Last): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeLastCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeLastCardinality,
+		},
+		string(influxdb.Min): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMinCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMinCardinality,
+		},
+		string(influxdb.Max): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMaxCardinality,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMaxCardinality,
+		},
+	},
+	common.UseCaseGroupWindowTransposeLowCard: {
+		string(influxdb.Count): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeCount,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeCount,
+		},
+		string(influxdb.Sum): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeSum,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeSum,
+		},
+		string(influxdb.Mean): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMean,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMean,
+		},
+		string(influxdb.First): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeFirst,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeFirst,
+		},
+		string(influxdb.Last): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeLast,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeLast,
+		},
+		string(influxdb.Min): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMin,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMin,
+		},
+		string(influxdb.Max): {
+			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeMax,
+			"influx-http":      influxdb.NewInfluxQLGroupWindowTransposeMax,
+		},
+	},
 	common.UseCaseMultiMeasurement: {
 		MultiMeasurementOr: {
 			"influx-flux-http": influxdb.NewFluxMultiMeasurementOr,
