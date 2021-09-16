@@ -57,6 +57,7 @@ const (
 	DashboardThroughput             = "throughput"
 	MetaqueryTagValues              = "tag-values"
 	MetaqueryFieldKeys              = "field-keys"
+	MetaqueryCardinality            = "cardinality"
 	MultiMeasurementOr              = "multi-measurement-or"
 )
 
@@ -222,6 +223,10 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 		MetaqueryFieldKeys: {
 			"influx-flux-http": influxdb.NewFluxMetaqueryFieldKeys,
 			"influx-http":      influxdb.NewInfluxQLMetaqueryFieldKeys,
+		},
+		MetaqueryCardinality: {
+			"influx-flux-http": influxdb.NewFluxMetaqueryCardinality,
+			"influx-http":      influxdb.NewInfluxQLMetaqueryCardinality,
 		},
 	},
 	common.UseCaseWindowAggregate: {
