@@ -85,3 +85,28 @@ func (d *InfluxMetaquery) MetaqueryFieldKeys(qi bulkQuerygen.Query) {
 	q := qi.(*bulkQuerygen.HTTPQuery)
 	d.getHttpQuery(humanLabel, "n/a", query, q)
 }
+
+// MetaqueryCardinality calculates the series cardinality for all data in a
+// bucket. The Flux query uses an arbitrarily large time range to ensure that
+// all shards are within that time range, in order to be comparable to InfluxQL
+// which does not use a time range for cardinality estimation.
+func (d *InfluxMetaquery) MetaqueryCardinality(qi bulkQuerygen.Query) {
+	var query string
+	if d.language == InfluxQL {
+		query = fmt.Sprintf(`SHOW SERIES EXACT CARDINALITY ON %s`, d.DatabaseName)
+	} else {
+		query = fmt.Sprintf(`import "influxdata/influxdb"
+
+		influxdb.cardinality(
+			bucket: "%s",
+			start: -100y,
+			stop: 2030-01-01T00:00:00Z,
+		)`,
+			d.DatabaseName,
+		)
+	}
+
+	humanLabel := fmt.Sprintf(`InfluxDB (%s) Series Cardinality`, d.language)
+	q := qi.(*bulkQuerygen.HTTPQuery)
+	d.getHttpQuery(humanLabel, "n/a", query, q)
+}
