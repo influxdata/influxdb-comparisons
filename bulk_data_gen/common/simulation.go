@@ -12,7 +12,6 @@ const (
 	UseCaseWindowAggregate              = "window-agg"
 	UseCaseGroupAggregate               = "group-agg"
 	UseCaseBareAggregate                = "bare-agg"
-	UseCaseGroupWindowTranspose         = "group-window-transpose"
 	UseCaseGroupWindowTransposeHighCard = "group-window-transpose-high-card"
 	UseCaseGroupWindowTransposeLowCard  = "group-window-transpose-low-card"
 	UseCaseMultiMeasurement             = "multi-measurement"
