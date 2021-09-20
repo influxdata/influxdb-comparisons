@@ -34,7 +34,7 @@ func (d *InfluxBareAggregateQuery) BareAggregateQuery(qi bulkQuerygen.Query) {
 
 	var query string
 	if d.language == InfluxQL {
-		query = fmt.Sprintf("SELECT %s(temperature) FROM air_condition_room WHERE time > '%s' AND time < '%s'",
+		query = fmt.Sprintf("SELECT %s(temperature) FROM air_condition_room WHERE time >= '%s' AND time < '%s' GROUP BY home_id,room_id,sensor_id",
 			d.aggregate, interval.StartString(), interval.EndString())
 	} else {
 		query = fmt.Sprintf(`from(bucket:"%s")
