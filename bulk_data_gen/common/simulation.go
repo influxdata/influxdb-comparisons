@@ -12,6 +12,7 @@ const (
 	UseCaseWindowAggregate              = "window-agg"
 	UseCaseGroupAggregate               = "group-agg"
 	UseCaseBareAggregate                = "bare-agg"
+	UseCaseUngroupedAggregate           = "ungrouped-agg"
 	UseCaseGroupWindowTransposeHighCard = "group-window-transpose-high-card"
 	UseCaseGroupWindowTransposeLowCard  = "group-window-transpose-low-card"
 	UseCaseMultiMeasurement             = "multi-measurement"
@@ -26,6 +27,7 @@ var UseCaseChoices = []string{
 	UseCaseWindowAggregate,
 	UseCaseGroupAggregate,
 	UseCaseBareAggregate,
+	UseCaseUngroupedAggregate,
 	UseCaseMultiMeasurement,
 }
 
