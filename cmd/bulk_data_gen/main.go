@@ -209,6 +209,8 @@ func main() {
 		fallthrough
 	case common.UseCaseChoices[6]: // bare-agg:
 		fallthrough
+	case common.UseCaseChoices[7]: // ungrouped-agg:
+		fallthrough
 	case common.UseCaseChoices[1]:
 		cfg := &iot.IotSimulatorConfig{
 			Start: timestampStart,
@@ -226,7 +228,7 @@ func main() {
 			ScaleFactor: int(scaleVar),
 		}
 		sim = cfg.ToSimulator()
-	case common.UseCaseChoices[7]:
+	case common.UseCaseChoices[8]:
 		cfg := &multiMeasurement.MeasurementSimulatorConfig{
 			Start: timestampStart,
 			End:   timestampEnd,

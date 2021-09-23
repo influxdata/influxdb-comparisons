@@ -319,6 +319,36 @@ var useCaseMatrix = map[string]map[string]map[string]bulkQueryGen.QueryGenerator
 			"influx-http":      influxdb.NewInfluxQLBareAggregateMax,
 		},
 	},
+	common.UseCaseUngroupedAggregate: {
+		string(influxdb.Count): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateCount,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateCount,
+		},
+		string(influxdb.Sum): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateSum,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateSum,
+		},
+		string(influxdb.Mean): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateMean,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateMean,
+		},
+		string(influxdb.First): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateFirst,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateFirst,
+		},
+		string(influxdb.Last): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateLast,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateLast,
+		},
+		string(influxdb.Min): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateMin,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateMin,
+		},
+		string(influxdb.Max): {
+			"influx-flux-http": influxdb.NewFluxUngroupedAggregateMax,
+			"influx-http":      influxdb.NewInfluxQLUngroupedAggregateMax,
+		},
+	},
 	common.UseCaseGroupWindowTransposeHighCard: {
 		string(influxdb.Count): {
 			"influx-flux-http": influxdb.NewFluxGroupWindowTransposeCountCardinality,
