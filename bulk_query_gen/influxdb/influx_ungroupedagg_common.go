@@ -14,7 +14,7 @@ type InfluxUngroupedAggregateQuery struct {
 
 func NewInfluxUngroupedAggregateQuery(agg Aggregate, lang Language, dbConfig bulkQuerygen.DatabaseConfig, queriesFullRange bulkQuerygen.TimeInterval, scaleVar int) bulkQuerygen.QueryGenerator {
 	if _, ok := dbConfig[bulkQuerygen.DatabaseName]; !ok {
-		panic("need influx database na`me")
+		panic("need influx database name")
 	}
 
 	return &InfluxUngroupedAggregateQuery{
