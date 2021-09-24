@@ -342,13 +342,13 @@ Executing the benchmarks requires the Go compiler and tools to be installed on y
 Running benchmarks requires installing the data and query generators along with loaders and benchmarkers for the platforms you wish to test. For example, to install and run load tests for InfluxDB, execute:
 
 ```
-go get github.com/influxdata/influxdb-comparisons/cmd/bulk_data_gen github.com/influxdata/influxdb-comparisons/cmd/bulk_load_influx
+go install github.com/influxdata/influxdb-comparisons/cmd/bulk_data_gen github.com/influxdata/influxdb-comparisons/cmd/bulk_load_influx
 ```
 
 This will download and install the latest code from GitHub (including dependencies). Check the ``cmd`` directory for additional database implementations to download and install. For query benchmarking, install the query generator and benchmark executor for your platform. E.g. for InfluxDB:
 
 ```
-go get github.com/influxdata/influxdb-comparisons/cmd/bulk_query_gen github.com/influxdata/influxdb-comparisons/cmd/query_benchmarker_influxdb
+go install github.com/influxdata/influxdb-comparisons/cmd/bulk_query_gen github.com/influxdata/influxdb-comparisons/cmd/query_benchmarker_influxdb
 ```
 
 ### Help
