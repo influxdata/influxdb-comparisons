@@ -22,8 +22,8 @@ import (
 	"strings"
 
 	"github.com/influxdata/influxdb-comparisons/util/report"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgxpool"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type TimescaleQueryBenchmarker struct {
