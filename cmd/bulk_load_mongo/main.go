@@ -2,28 +2,35 @@
 //
 // The caller is responsible for assuring that the database is empty before
 // bulk load.
+//
+// When Mongo 5.0 time series collection is used, measurement name must be
+// serialized in tags, because index on time series collection can only be applied
+// on time and meta field. Using time series implies flat format.
 package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"io"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/google/flatbuffers/go"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
+	"github.com/google/flatbuffers/go"
+	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
 	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
 	"github.com/influxdata/influxdb-comparisons/util/report"
-	"strconv"
 )
 
 // Magic database constants
@@ -51,7 +58,7 @@ type MongoBulkLoad struct {
 	bytesRead    int64
 	bufPool      *sync.Pool
 	batchPool    *sync.Pool
-	session      *mgo.Session
+	bsonDPool    *sync.Pool
 	scanFinished bool
 }
 
@@ -74,15 +81,23 @@ func main() {
 }
 
 func (l *MongoBulkLoad) Init() {
-	flag.StringVar(&l.daemonUrl, "url", "localhost:27017", "Mongo URL.")
+	flag.StringVar(&l.daemonUrl, "url", "mongodb://localhost:27017", "MongoDB URL.")
 	flag.DurationVar(&l.writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
-	flag.StringVar(&l.documentFormat, "document-format", "", "Document format specification. ('simpleArrays' is supported; leave empty for previous behaviour)")
+	flag.StringVar(&l.documentFormat, "document-format", "timeseries", "Document format flags ('key-pair', 'flat', 'timeseries' - default)")
 }
 
 func (l *MongoBulkLoad) Validate() {
-	if l.documentFormat == mongodb.SimpleArraysFormat {
-		log.Printf("Using '%s' document serialization", l.documentFormat)
+	if strings.Contains(l.documentFormat, mongodb.FlatFormat) {
+		mongodb.DocumentFormat = mongodb.FlatFormat
+	} else {
+		mongodb.DocumentFormat = mongodb.KeyPairFormat
 	}
+	mongodb.UseTimeseries = strings.Contains(l.documentFormat, mongodb.TimeseriesFormat)
+	if mongodb.UseTimeseries {
+		log.Print("Using MongoDB 5+ time series collection")
+		mongodb.DocumentFormat = mongodb.FlatFormat
+	}
+	log.Printf("Using %s point serialization", mongodb.DocumentFormat)
 }
 
 func (l *MongoBulkLoad) CreateDb() {
@@ -105,21 +120,15 @@ func (l *MongoBulkLoad) PrepareWorkers() {
 		},
 	}
 
-	for i := 0; i < bulk_load.Runner.Workers*bulk_load.Runner.BatchSize; i++ {
-		l.bufPool.Put(l.bufPool.New())
+	// bsonDPool holds bsonD instances to reduce heap churn.
+	l.bsonDPool = &sync.Pool{
+		New: func() interface{} {
+			return make(bson.D, 0)
+		},
 	}
 
-	if bulk_load.Runner.DoLoad {
-		var err error
-		l.session, err = mgo.Dial(l.daemonUrl)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		l.session.SetMode(mgo.Eventual, false)
-		l.session.SetSyncTimeout(180 * time.Second)
-		l.session.SetSocketTimeout(180 * time.Second)
-
+	for i := 0; i < bulk_load.Runner.Workers*bulk_load.Runner.BatchSize; i++ {
+		l.bufPool.Put(l.bufPool.New())
 	}
 
 	l.batchChan = make(chan *Batch, bulk_load.Runner.Workers*10)
@@ -140,9 +149,6 @@ func (l *MongoBulkLoad) SyncEnd() {
 }
 
 func (l *MongoBulkLoad) CleanUp() {
-	if l.session != nil {
-		l.session.Close()
-	}
 }
 
 func (l *MongoBulkLoad) UpdateReport(params *report.LoadReportParams) (reportTags [][2]string, extraVals []report.ExtraVal) {
@@ -182,9 +188,9 @@ func (l *MongoBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.itemsRead = 0
 	l.bytesRead = 0
 	l.valuesRead = 0
+
 	var n int
 	br := bufio.NewReaderSize(r, 32<<20)
-
 	start := time.Now()
 	batch := l.batchPool.Get().(*Batch)
 	lenBuf := make([]byte, 8)
@@ -198,7 +204,7 @@ outer:
 			break
 		}
 		// get the serialized item length (this is the framing format)
-		_, err := br.Read(lenBuf)
+		_, err := io.ReadFull(br, lenBuf)
 		if err == io.EOF {
 			break
 		}
@@ -214,18 +220,10 @@ outer:
 		}
 		itemBuf = itemBuf[:d]
 
-		// read the bytes and init the flatbuffer object
-		totRead := 0
-		for totRead < d {
-			m, err := br.Read(itemBuf[totRead:])
-			// (EOF is also fatal)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-			totRead += m
-		}
-		if totRead != len(itemBuf) {
-			panic(fmt.Sprintf("reader/writer logic error, %d != %d", n, len(itemBuf)))
+		// get the item
+		_, err = io.ReadFull(br, itemBuf)
+		if err != nil {
+			log.Fatal(err.Error())
 		}
 
 		*batch = append(*batch, itemBuf)
@@ -253,6 +251,11 @@ outer:
 		}
 	}
 
+	// send outstanding batch
+	if n > 0 {
+		l.batchChan <- batch
+	}
+
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
 	close(l.inputDone)
 	l.scanFinished = true
@@ -264,36 +267,19 @@ outer:
 func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetryPoints chan *report.Point, reportTags [][2]string) error {
 	var workerValuesRead int64
 	var rerr error
-
-	db := l.session.DB(bulk_load.Runner.DbName)
-
-	type Tag struct {
-		Key string `bson:"key"`
-		Val string `bson:"val"`
-	}
-
-	type Field struct {
-		Key string      `bson:"key"`
-		Val interface{} `bson:"val"`
-	}
-
-	type Point struct {
-		// Use `string` here even though they are really `[]byte`.
-		// This is so the mongo data is human-readable.
-		MeasurementName string        `bson:"measurement"`
-		Timestamp       int64         `bson:"timestamp_ns"`
-		Tags            []interface{} `bson:"tags"`
-		Fields          []interface{} `bson:"fields"`
-	}
-	pPool := &sync.Pool{New: func() interface{} { return &Point{} }}
-	pvs := []interface{}{}
+	var pvs []interface{}
 
 	item := &mongo_serialization.Item{}
 	destTag := &mongo_serialization.Tag{}
 	destField := &mongo_serialization.Field{}
-	collection := db.C(pointCollectionName)
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(l.daemonUrl))
+	if err != nil {
+		return err
+	}
+	db := client.Database(bulk_load.Runner.DbName)
+	collection := db.Collection(pointCollectionName)
+outer:
 	for batch := range l.batchChan {
-		bulk := collection.Bulk()
 
 		if cap(pvs) < len(*batch) {
 			pvs = make([]interface{}, len(*batch))
@@ -301,37 +287,56 @@ func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetr
 		pvs = pvs[:len(*batch)]
 
 		for i, itemBuf := range *batch {
-			// this ui could be improved on the library side:
 			n := flatbuffers.GetUOffsetT(itemBuf)
 			item.Init(itemBuf, n)
 
-			x := pPool.Get().(*Point)
-
-			x.MeasurementName = unsafeBytesToString(item.MeasurementNameBytes())
-			x.Timestamp = item.TimestampNanos()
-
-			tagLength := item.TagsLength()
-			if cap(x.Tags) < tagLength {
-				x.Tags = make([]interface{}, 0, tagLength)
+			doc := l.bsonDPool.Get().(bson.D)
+			if mongodb.UseTimeseries {
+				// timeseries implies measurement is in meta field ie. tags
+				doc = append(doc, bson.E{ Key: "timestamp", Value: time.Unix(0, item.TimestampNanos())})
+			} else {
+				doc = append(doc, bson.E{ Key: "measurement", Value: unsafeBytesToString(item.MeasurementNameBytes()) })
+				doc = append(doc, bson.E{ Key:"timestamp_ns", Value: item.TimestampNanos()})
 			}
-			x.Tags = x.Tags[:tagLength]
+
+			var tags interface{}
+			var tagsM bson.M
+			var tagsA bson.A
+			tagLength := item.TagsLength()
+			if mongodb.DocumentFormat == mongodb.FlatFormat {
+				tagsM = make(bson.M, tagLength)
+				tags = tagsM
+			} else {
+				tagsA = make(bson.A, tagLength)
+				tags = tagsA
+			}
+			if mongodb.UseTimeseries {
+				tagsM["measurement"] = unsafeBytesToString(item.MeasurementNameBytes())
+			}
 			for i := 0; i < tagLength; i++ {
 				*destTag = mongo_serialization.Tag{} // clear
 				item.Tags(destTag, i)
 				tagKey := unsafeBytesToString(destTag.KeyBytes())
 				tagValue := unsafeBytesToString(destTag.ValBytes())
-				if l.documentFormat == mongodb.SimpleArraysFormat {
-					x.Tags[i] = bson.M{tagKey: tagValue}
+				if mongodb.DocumentFormat == mongodb.FlatFormat {
+					tagsM[tagKey] = tagValue
 				} else {
-					x.Tags[i] = &Tag{Key: tagKey, Val: tagValue}
+					tagsA[i] = bson.D{{"key", tagKey }, {"val", tagValue }}
 				}
 			}
+			doc = append(doc, bson.E{ Key: "tags", Value: tags })
 
+			var fields interface{}
+			var fieldsM bson.M
+			var fieldsA bson.A
 			fieldLength := item.FieldsLength()
-			if cap(x.Fields) < fieldLength {
-				x.Fields = make([]interface{}, 0, fieldLength)
+			if mongodb.DocumentFormat == mongodb.FlatFormat {
+				fieldsM = make(bson.M, fieldLength)
+				fields = fieldsM
+			} else {
+				fieldsA = make(bson.A, fieldLength)
+				fields = fieldsA
 			}
-			x.Fields = x.Fields[:fieldLength]
 			for i := 0; i < fieldLength; i++ {
 				*destField = mongo_serialization.Field{} // clear
 				item.Fields(destField, i)
@@ -351,33 +356,35 @@ func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetr
 				default:
 					panic("logic error")
 				}
-				if l.documentFormat == mongodb.SimpleArraysFormat {
-					x.Fields[i] = bson.M{fieldKey: fieldValue}
+				if mongodb.DocumentFormat == mongodb.FlatFormat {
+					fieldsM[fieldKey] = fieldValue
 				} else {
-					x.Fields[i] = &Field{Key: fieldKey, Val: fieldValue}
+					fieldsA[i] = bson.D{{"key", fieldKey }, { "val", fieldValue }}
 				}
 			}
-			pvs[i] = x
+			doc = append(doc, bson.E{ Key: "fields", Value: fields })
+
+			pvs[i] = doc
 			workerValuesRead += int64(fieldLength)
 		}
-		bulk.Insert(pvs...)
 
 		if bulk_load.Runner.DoLoad {
-			_, err := bulk.Run()
-			if err != nil {
-				rerr = fmt.Errorf("Bulk err: %s\n", err.Error())
-				break
+			f := false
+			opts := &options.InsertManyOptions{
+				Ordered: &f,
 			}
-
+			_, err := collection.InsertMany(context.TODO(), pvs, opts)
+			if err != nil {
+				rerr = fmt.Errorf("collection InsertMany err: %s\n", err.Error())
+				break outer
+			}
 		}
 
-		// cleanup pvs
-		for _, x := range pvs {
-			p := x.(*Point)
-			p.Timestamp = 0
-			p.Tags = p.Tags[:0]
-			p.Fields = p.Fields[:0]
-			pPool.Put(p)
+		// reuse bson data
+		for _, doc := range pvs {
+			d := doc.(bson.D)
+			d = d[:0]
+			l.bsonDPool.Put(d)
 		}
 
 		// cleanup item data
@@ -387,38 +394,59 @@ func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetr
 		batch.ClearReferences()
 		l.batchPool.Put(batch)
 	}
+
 	atomic.AddInt64(&l.valuesRead, workerValuesRead)
 	workersGroup.Done()
 	return rerr
 }
 
 func mustCreateCollections(daemonUrl string, dbName string) {
-	session, err := mgo.Dial(daemonUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer session.Close()
-
-	// collection C: point data
-	// from (*mgo.Collection).Create
-	cmd := make(bson.D, 0, 4)
-	cmd = append(cmd, bson.DocElem{"create", pointCollectionName})
-
-	err = session.DB(dbName).Run(cmd, nil)
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(daemonUrl))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	collection := session.DB(dbName).C("point_data")
-	index := mgo.Index{
-		Key:        []string{"measurement", "tags", "timestamp_ns"},
-		Unique:     false, // Unique does not work on the entire array of tags!
-		DropDups:   true,
-		Background: false,
-		Sparse:     false,
+	meta := "tags"
+	var opts *options.CreateCollectionOptions
+	if mongodb.UseTimeseries {
+		opts = &options.CreateCollectionOptions{
+			TimeSeriesOptions: &options.TimeSeriesOptions{
+				TimeField: "timestamp",
+				MetaField: &meta,
+			},
+		}
 	}
-	err = collection.EnsureIndex(index)
+
+	db := client.Database(dbName)
+	err = db.CreateCollection(context.TODO(), pointCollectionName, opts)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("CreateCollection: %v", err)
+	}
+
+	var indexKeys bson.D
+	if mongodb.UseTimeseries {
+		// in the future, use text or hashed index type for tags, but with 5.0, it is not possible:
+		// - text index not supported on time-series collections
+		// - hashed indexes do not currently support array values
+		indexKeys = bson.D{{"tags", 1}, {"timestamp", 1}}
+	} else {
+		indexKeys = bson.D{{"measurement", "text"}, {"tags", "text"}, {"timestamp_ns", 1}}
+	}
+
+	f := false
+	collection := db.Collection(pointCollectionName)
+	index := mongo.IndexModel{
+		Keys: indexKeys,
+		Options: &options.IndexOptions{
+			Unique: &f, // Unique does not work on the entire array of tags!
+			//	DropDups:   true, // mgo driver option, missing in mongo driver
+			Background: &f,
+			Sparse: &f,
+		},
+	}
+
+	_, err = collection.Indexes().CreateOne(context.TODO(), index)
+	if err != nil {
+		log.Fatalf("index CreateOne: %v", err)
 	}
 }

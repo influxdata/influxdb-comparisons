@@ -3,10 +3,11 @@ package common
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/google/flatbuffers/go"
-	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
 	"io"
 	"reflect"
+
+	"github.com/google/flatbuffers/go"
+	"github.com/influxdata/influxdb-comparisons/mongo_serialization"
 )
 
 type SerializerMongo struct {

@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
@@ -464,7 +465,7 @@ func init() {
 	}
 
 	flag.StringVar(&format, "format", "influx-http", "Format to emit. (Choices are in the use case matrix.)")
-	flag.StringVar(&documentFormat, "document-format", "", "Document format specification. (for MongoDB format 'simpleArrays'; leave empty for previous behaviour)")
+	flag.StringVar(&documentFormat, "document-format", "", "Document format database-specific flags. (MongoDB: 'key-pair', 'flat', 'timeseries' - default)")
 	flag.StringVar(&useCase, "use-case", common.UseCaseChoices[0], "Use case to model. (Choices are in the use case matrix.)")
 	flag.StringVar(&queryType, "query-type", "", "Query type. (Choices are in the use case matrix.)")
 
@@ -568,11 +569,20 @@ func init() {
 	}
 
 	if format == "mongo" {
-		if documentFormat != mongodb.SimpleArraysFormat {
-			documentFormat = "default"
+		if documentFormat == "" {
+			documentFormat = "timeseries"
 		}
-		mongodb.DocumentFormat = documentFormat
-		log.Printf("Using '%s' mongo serialization", mongodb.DocumentFormat)
+		if strings.Contains(documentFormat, mongodb.FlatFormat) {
+			mongodb.DocumentFormat = mongodb.FlatFormat
+		} else {
+			mongodb.DocumentFormat = mongodb.KeyPairFormat
+		}
+		mongodb.UseTimeseries = strings.Contains(documentFormat, mongodb.TimeseriesFormat)
+		if mongodb.UseTimeseries {
+			log.Print("Using MongoDB 5+ time series collection")
+			mongodb.DocumentFormat = mongodb.FlatFormat
+		}
+		log.Printf("Using %s point serialization", mongodb.DocumentFormat)
 	}
 
 	// the default seed is the current timestamp:

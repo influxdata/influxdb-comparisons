@@ -1,7 +1,10 @@
 package mongodb
 
 const (
-	SimpleArraysFormat = "simpleArrays"
+	FlatFormat = "flat"
+	KeyPairFormat = "key-pair"
+	TimeseriesFormat = "timeseries"
 )
 
-var DocumentFormat = ""
+var DocumentFormat = FlatFormat
+var UseTimeseries = false
