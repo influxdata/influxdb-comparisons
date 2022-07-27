@@ -434,6 +434,7 @@ loop:
 		waitFinished = true
 		waitCh <- 1
 	}()
+	_ = waitFinished
 	waitTimer := time.NewTimer(time.Minute * 10)
 waitLoop:
 	for {
