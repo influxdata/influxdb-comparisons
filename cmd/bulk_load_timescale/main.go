@@ -16,8 +16,8 @@ import (
 
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgxpool"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 
 	"bytes"
 	"context"

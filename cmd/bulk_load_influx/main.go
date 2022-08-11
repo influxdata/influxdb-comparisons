@@ -24,6 +24,7 @@ import (
 	"github.com/influxdata/influxdb-comparisons/bulk_data_gen/common"
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
+	"github.com/influxdata/influxdb/models"
 	"github.com/valyala/fasthttp"
 )
 
@@ -803,13 +804,14 @@ func (l *InfluxBulkLoad) listOrgs2(daemonUrl string, orgName string) (map[string
 
 // countFields return number of fields in protocol line
 func countFields(line string) int {
-	lineParts := strings.Split(line, " ") // "measurement,tags fields timestamp"
-	if len(lineParts) != 3 {
-		log.Fatalf("invalid protocol line: '%s'", line)
+	points, err := models.ParsePointsString(line)
+	if err != nil {
+		log.Fatalln(err)
 	}
-	fieldCnt := strings.Count(lineParts[1], "=")
-	if fieldCnt == 0 {
-		log.Fatalf("invalid fields parts: '%s'", lineParts[1])
+	fields, err := points[0].Fields()
+	if err != nil {
+		log.Fatalln(err)
 	}
-	return fieldCnt
+
+	return len(fields)
 }
