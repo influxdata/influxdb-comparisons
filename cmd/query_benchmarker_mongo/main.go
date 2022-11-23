@@ -1,23 +1,28 @@
 // query_benchmarker_mongo speed tests Mongo using requests from stdin.
 //
 // It reads encoded Query objects from stdin, and makes concurrent requests
-// to the provided Mongo endpoint using mgo.
+// to the provided Mongo endpoint.
 //
 // TODO(rw): On my machine, this only decodes 700k/sec messages from stdin.
 package main
 
 import (
+	"context"
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/influxdata/influxdb-comparisons/bulk_query"
-	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
-	"github.com/influxdata/influxdb-comparisons/util/report"
-	"gopkg.in/mgo.v2"
 	"io"
 	"log"
 	"sync"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/influxdata/influxdb-comparisons/bulk_query"
+	"github.com/influxdata/influxdb-comparisons/bulk_query_gen/mongodb"
+	"github.com/influxdata/influxdb-comparisons/util/report"
 )
 
 type MongoQueryBenchmarker struct {
@@ -28,7 +33,7 @@ type MongoQueryBenchmarker struct {
 	queryPool    sync.Pool
 	queryChan    chan *Query
 	scanFinished bool
-	session      *mgo.Session
+	client       *mongo.Client
 }
 
 var querier = &MongoQueryBenchmarker{}
@@ -39,6 +44,7 @@ func init() {
 	gob.Register(mongodb.S{})
 	gob.Register(mongodb.M{})
 	gob.Register([]mongodb.M{})
+	gob.Register(time.Time{})
 
 	bulk_query.Benchmarker.Init()
 	querier.Init()
@@ -50,7 +56,7 @@ func init() {
 }
 
 func (b *MongoQueryBenchmarker) Init() {
-	flag.StringVar(&b.daemonUrl, "url", "mongodb://localhost:27017", "Daemon URL.")
+	flag.StringVar(&b.daemonUrl, "url", "mongodb://localhost:27017", "MongoDB URL.")
 	flag.BoolVar(&b.doQueries, "do-queries", true, "Whether to perform queries (useful for benchmarking the query executor.)")
 
 }
@@ -72,11 +78,10 @@ func (b *MongoQueryBenchmarker) Prepare() {
 		},
 	}
 	b.queryChan = make(chan *Query)
-	b.session, err = mgo.Dial(b.daemonUrl)
+	b.client, err = mongo.Connect(context.TODO(), options.Client().ApplyURI(b.daemonUrl))
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func (b *MongoQueryBenchmarker) GetProcessor() bulk_query.Processor {
@@ -114,9 +119,40 @@ func main() {
 // processQueries reads byte buffers from queryChan and writes them to the
 // target server, while tracking latency.
 func (b *MongoQueryBenchmarker) RunProcess(i int, workersGroup *sync.WaitGroup, statPool sync.Pool, statChan chan *bulk_query.Stat) {
-	for q := range b.queryChan {
-		lag, err := b.oneQuery(b.session, q)
+	type Handle struct {
+		collection *mongo.Collection
+		typ        string
+	}
+	handles := make(map[string]*Handle, 0)
 
+	c := func(q *Query) *Handle {
+		cn := unsafeBytesToString(q.CollectionName)
+		h, ok := handles[cn]
+		if !ok {
+			dn := unsafeBytesToString(q.DatabaseName)
+			log.Printf("get collection handle for %s/%s\n", dn, cn)
+			db := b.client.Database(dn)
+			collection := db.Collection(cn)
+			specs, err := db.ListCollectionSpecifications(context.TODO(), bson.M{ "name": cn })
+			if err != nil {
+				log.Fatalf("db ListCollectionSpecifications error: %v", err)
+			}
+			if specs == nil || len(specs) == 0 {
+				log.Fatalf("collection '%s' not found", cn)
+			}
+			log.Printf("collection type: %s\n", specs[0].Type)
+			h = &Handle{
+				collection: collection,
+				typ: specs[0].Type,
+			}
+			handles[cn] = h
+		}
+		return h
+	}
+
+	for q := range b.queryChan {
+		h := c(q)
+		lag, err := b.oneQuery(h.collection, q, h.typ, context.TODO())
 		stat := statPool.Get().(*bulk_query.Stat)
 		stat.Init(q.HumanLabel, lag)
 		statChan <- stat
@@ -167,35 +203,72 @@ loop:
 }
 
 // oneQuery executes on Query
-func (b *MongoQueryBenchmarker) oneQuery(session *mgo.Session, q *Query) (float64, error) {
+func (b *MongoQueryBenchmarker) oneQuery(collection *mongo.Collection, q *Query, typ string, ctx context.Context) (float64, error) {
 	start := time.Now().UnixNano()
 	var err error
 	if b.doQueries {
-		db := session.DB(unsafeBytesToString(q.DatabaseName))
-		//fmt.Printf("db: %#v\n", db)
-		collection := db.C(unsafeBytesToString(q.CollectionName))
-		//fmt.Printf("collection: %#v\n", collection)
-		pipe := collection.Pipe(q.BsonDoc)
-		iter := pipe.Iter()
-		type Result struct {
-			Id struct {
-				TimeBucket int64 `bson:"time_bucket"`
-			} `bson:"_id"`
-			Value float64 `bson:"agg_value"`
+		pipe := q.BsonDoc
+		cursor, err := collection.Aggregate(ctx, pipe)
+		if err != nil {
+			return 0, err
 		}
 
-		result := Result{}
-		for iter.Next(&result) {
+		var result result
+		if typ == "timeseries" {
+			result = &resultT{}
+		} else {
+			result = &resultC{}
+		}
+
+		for cursor.Next(ctx) {
+			err = cursor.Decode(result)
+			if err != nil {
+				return 0, err
+			}
 			if bulk_query.Benchmarker.PrettyPrintResponses() {
-				t := time.Unix(0, result.Id.TimeBucket).UTC()
-				fmt.Printf("ID %d: %s, %f\n", q.ID, t, result.Value)
+				fmt.Printf("ID %d: %s, %f\n", q.ID, result.time(), result.value())
 			}
 		}
 
-		err = iter.Close()
+		err = cursor.Close(ctx)
 	}
 
 	took := time.Now().UnixNano() - start
 	lag := float64(took) / 1e6 // milliseconds
 	return lag, err
+}
+
+type result interface {
+	time() time.Time
+	value() float64
+}
+
+type resultC struct {
+	Id struct {
+		TimeBucket int64 `bson:"time_bucket"`
+	} `bson:"_id"`
+	Value float64 `bson:"agg_value"`
+}
+
+func (r resultC) time() time.Time {
+	return time.Unix(0, r.Id.TimeBucket).UTC()
+}
+
+func (r resultC) value() float64 {
+	return r.Value
+}
+
+type resultT struct {
+	Id struct {
+		TimeBucket time.Time `bson:"time_bucket"`
+	} `bson:"_id"`
+	Value float64 `bson:"agg_value"`
+}
+
+func (r resultT) time() time.Time {
+	return r.Id.TimeBucket
+}
+
+func (r resultT) value() float64 {
+	return r.Value
 }

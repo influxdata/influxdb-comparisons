@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
-type S []interface{}
-type M map[string]interface{}
+type S = bson.A // []interface{}
+type M = bson.M // map[string]interface{}
 
 func init() {
 	// needed for serializing the mongo query to gob
 	gob.Register(S{})
 	gob.Register(M{})
 	gob.Register([]M{})
+	gob.Register(time.Time{})
 }
 
 // MongoQuery encodes a Mongo request. This will be serialized for use

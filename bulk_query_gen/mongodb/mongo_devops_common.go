@@ -70,71 +70,124 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 	interval := d.AllInterval.RandWindow(timeRange)
 	nn := rand.Perm(d.ScaleVar)[:nhosts]
 
-	hostnames := []string{}
+	var hostnames []string
 	for _, n := range nn {
 		hostnames = append(hostnames, fmt.Sprintf("host_%d", n))
 	}
 
-	hostnameClauses := []M{}
+	var hostnameMaps []M
 	for _, h := range hostnames {
-		if DocumentFormat == SimpleArraysFormat {
-			hostnameClauses = append(hostnameClauses, M{"hostname": h})
+		if DocumentFormat == FlatFormat {
+			// nothing to do
 		} else {
-			hostnameClauses = append(hostnameClauses, M{"key": "hostname", "val": h})
+			hostnameMaps = append(hostnameMaps, M{"key": "hostname", "val": h})
 		}
 	}
 
+	var tagClause interface{}
+	if DocumentFormat == FlatFormat {
+		tagClause = hostnames
+	} else {
+		tagClause = hostnameMaps
+	}
+
+	var tagSpec string
 	var fieldSpec, fieldPath string
 	var fieldExpr interface{}
-	if DocumentFormat == SimpleArraysFormat {
+	if DocumentFormat == FlatFormat {
+		tagSpec = "tags.hostname"
 		fieldSpec = "fields.usage_user"
 		fieldExpr = 1
 		fieldPath = "fields.usage_user"
 	} else {
+		tagSpec = "tags"
 		fieldSpec = "fields"
 		fieldExpr = M{ "$filter": M{ "input": "$fields", "as": "field", "cond": M{ "$eq": []string{ "$$field.key", "usage_user" } } } }
 		fieldPath = "fields.val"
 	}
 
-	var bucketNano = time.Minute.Nanoseconds()
-	pipelineQuery := []M{
-		{
-			"$match": M{
-				"measurement": "cpu",
-				"timestamp_ns": M{
-					"$gte": interval.StartUnixNano(),
-					"$lt":  interval.EndUnixNano(),
-				},
-				"tags": M{
-					"$in": hostnameClauses,
-				},
-			},
-		},
-		{
-			"$project": M{
-				"_id": 0,
-				"time_bucket": M{
-					"$subtract": S{
-						"$timestamp_ns",
-						M{"$mod": S{"$timestamp_ns", bucketNano}},
+	var pipelineQuery []M
+	if UseTimeseries {
+		pipelineQuery = []M{
+			{
+				"$match": M{
+					"tags.measurement": "cpu",
+					"timestamp": M{
+						"$gte": time.Unix(0, interval.StartUnixNano()),
+						"$lt":  time.Unix(0, interval.EndUnixNano()),
+					},
+					tagSpec: M{
+						"$in": tagClause,
 					},
 				},
-				fieldSpec: fieldExpr, // was value: 1
-				"measurement": 1,
 			},
-		},
-		{
-			"$unwind": "$fields",
-		},
-		{
-			"$group": M{
-				"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
-				"agg_value": M{"$max": "$"+fieldPath}, // was: $value
+			{
+				"$project": M{
+					"_id": 0,
+					"time_bucket": M{
+						"$dateTrunc": M{
+							"date": "$timestamp",
+							"unit": "minute",
+						},
+					},
+					fieldSpec:     fieldExpr, // was value: 1
+					//"measurement": 1, // why was this set?
+				},
 			},
-		},
-		{
-			"$sort": M{"_id.time_bucket": 1},
-		},
+			{
+				"$unwind": "$fields",
+			},
+			{
+				"$group": M{
+					"_id":       M{"time_bucket": "$time_bucket", "tags": "$" + tagSpec}, // was: "$tags"
+					"agg_value": M{"$max": "$" + fieldPath}, // was: $value
+				},
+			},
+			{
+				"$sort": M{"_id.time_bucket": 1},
+			},
+		}
+	} else {
+		bucketNano := time.Minute.Nanoseconds()
+		pipelineQuery = []M{
+			{
+				"$match": M{
+					"measurement": "cpu",
+					"timestamp_ns": M{
+						"$gte": interval.StartUnixNano(),
+						"$lt":  interval.EndUnixNano(),
+					},
+					tagSpec: M{
+						"$in": tagClause,
+					},
+				},
+			},
+			{
+				"$project": M{
+					"_id": 0,
+					"time_bucket": M{
+						"$subtract": S{
+							"$timestamp_ns",
+							M{"$mod": S{"$timestamp_ns", bucketNano}},
+						},
+					},
+					fieldSpec:     fieldExpr, // was value: 1
+					//"measurement": 1, // why was this set?
+				},
+			},
+			{
+				"$unwind": "$fields",
+			},
+			{
+				"$group": M{
+					"_id":       M{"time_bucket": "$time_bucket", "tags": "$" + tagSpec}, // was: "$tags"
+					"agg_value": M{"$max": "$" + fieldPath}, // was: $value
+				},
+			},
+			{
+				"$sort": M{"_id.time_bucket": 1},
+			},
+		}
 	}
 
 	humanLabel := []byte(fmt.Sprintf("Mongo max cpu, rand %4d hosts, rand %s by 1m", nhosts, timeRange))
