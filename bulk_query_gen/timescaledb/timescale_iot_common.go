@@ -35,7 +35,7 @@ func (d *TimescaleIot) Dispatch(i int) bulkQuerygen.Query {
 }
 
 func (d *TimescaleIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query) {
-	d.averageTemperatureDayByHourNHomes(q.(*SQLQuery), 1, time.Hour*6)
+	d.averageTemperatureDayByHourNHomes(q.(*SQLQuery), 1, time.Hour*12)
 }
 
 // averageTemperatureHourByMinuteNHomes populates a Query with a query that looks like:

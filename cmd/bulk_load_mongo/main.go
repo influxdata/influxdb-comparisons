@@ -2,10 +2,6 @@
 //
 // The caller is responsible for assuring that the database is empty before
 // bulk load.
-//
-// When Mongo 5.0 time series collection is used, measurement name must be
-// serialized in tags, because index on time series collection can only be applied
-// on time and meta field. Using time series implies flat format.
 package main
 
 import (
@@ -17,7 +13,6 @@ import (
 	"io"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,20 +33,14 @@ const (
 	pointCollectionName = "point_data"
 )
 
-// Batch holds byte slices that will become mongo_serialization.Item instances.
-type Batch [][]byte
-
-func (b *Batch) ClearReferences() {
-	*b = (*b)[:0]
-}
-
 type MongoBulkLoad struct {
 	// Program option vars:
 	daemonUrl      string
 	documentFormat string
+	oneCollection  bool
 	writeTimeout   time.Duration
 	// Global vars
-	batchChan    chan *Batch
+	batchChan    chan [][]byte
 	inputDone    chan struct{}
 	valuesRead   int64
 	itemsRead    int64
@@ -83,21 +72,12 @@ func main() {
 func (l *MongoBulkLoad) Init() {
 	flag.StringVar(&l.daemonUrl, "url", "mongodb://localhost:27017", "MongoDB URL.")
 	flag.DurationVar(&l.writeTimeout, "write-timeout", 10*time.Second, "Write timeout.")
-	flag.StringVar(&l.documentFormat, "document-format", "timeseries", "Document format flags ('key-pair', 'flat', 'timeseries' - default)")
+	flag.StringVar(&l.documentFormat, "document-format", mongodb.TimeseriesFormat, "Document format flags ('key-pair', 'flat', 'timeseries')")
+	flag.BoolVar(&l.oneCollection, "single-collection", false, "Whether all data should be written into one common collection.")
 }
 
 func (l *MongoBulkLoad) Validate() {
-	if strings.Contains(l.documentFormat, mongodb.FlatFormat) {
-		mongodb.DocumentFormat = mongodb.FlatFormat
-	} else {
-		mongodb.DocumentFormat = mongodb.KeyPairFormat
-	}
-	mongodb.UseTimeseries = strings.Contains(l.documentFormat, mongodb.TimeseriesFormat)
-	if mongodb.UseTimeseries {
-		log.Print("Using MongoDB 5+ time series collection")
-		mongodb.DocumentFormat = mongodb.FlatFormat
-	}
-	log.Printf("Using %s point serialization", mongodb.DocumentFormat)
+	mongodb.ParseOptions(l.documentFormat, l.oneCollection)
 }
 
 func (l *MongoBulkLoad) CreateDb() {
@@ -106,7 +86,7 @@ func (l *MongoBulkLoad) CreateDb() {
 
 func (l *MongoBulkLoad) PrepareWorkers() {
 
-	// bufPool holds []byte instances to reduce heap churn.
+	// bufPool holds *Batch instances to reduce heap churn.
 	l.bufPool = &sync.Pool{
 		New: func() interface{} {
 			return make([]byte, 0, 1024)
@@ -116,7 +96,7 @@ func (l *MongoBulkLoad) PrepareWorkers() {
 	// batchPool holds *Batch instances to reduce heap churn.
 	l.batchPool = &sync.Pool{
 		New: func() interface{} {
-			return &Batch{}
+			return make([][]byte, 0, bulk_load.Runner.BatchSize)
 		},
 	}
 
@@ -130,8 +110,14 @@ func (l *MongoBulkLoad) PrepareWorkers() {
 	for i := 0; i < bulk_load.Runner.Workers*bulk_load.Runner.BatchSize; i++ {
 		l.bufPool.Put(l.bufPool.New())
 	}
+	for i := 0; i < bulk_load.Runner.Workers*10; i++ {
+		l.batchPool.Put(l.batchPool.New())
+	}
+	for i := 0; i < bulk_load.Runner.Workers*bulk_load.Runner.BatchSize; i++ {
+		l.bsonDPool.Put(l.bsonDPool.New())
+	}
 
-	l.batchChan = make(chan *Batch, bulk_load.Runner.Workers*10)
+	l.batchChan = make(chan [][]byte, bulk_load.Runner.Workers*10)
 	l.inputDone = make(chan struct{})
 }
 
@@ -189,10 +175,19 @@ func (l *MongoBulkLoad) RunScanner(r io.Reader, syncChanDone chan int) {
 	l.bytesRead = 0
 	l.valuesRead = 0
 
-	var n int
+	item := &mongo_serialization.Item{}
+	batches := make(map[string][][]byte, 0)
+	getBatch := func(cn string) [][]byte {
+		c, ok := batches[cn]
+		if !ok {
+			c = l.batchPool.Get().([][]byte)
+			name := clone(cn) // cn is unsafe ptr
+			batches[name] = c
+		}
+		return c
+	}
 	br := bufio.NewReaderSize(r, 32<<20)
 	start := time.Now()
-	batch := l.batchPool.Get().(*Batch)
 	lenBuf := make([]byte, 8)
 	var deadline time.Time
 	if bulk_load.Runner.TimeLimit > 0 {
@@ -226,16 +221,23 @@ outer:
 			log.Fatal(err.Error())
 		}
 
-		*batch = append(*batch, itemBuf)
+		// peek into
+		offset := flatbuffers.GetUOffsetT(itemBuf)
+		item.Init(itemBuf, offset)
+
+		// append to collection batch
+		cn := unsafeBytesToString(item.MeasurementNameBytes())
+		c := getBatch(cn)
+		c = append(c, itemBuf)
+		batches[cn] = c
 
 		l.itemsRead++
-		n++
+		l.bytesRead += int64(len(itemBuf))
 
+		n := len(c)
 		if n >= bulk_load.Runner.BatchSize {
-			l.bytesRead += int64(len(itemBuf))
-			l.batchChan <- batch
-			n = 0
-			batch = l.batchPool.Get().(*Batch)
+			l.batchChan <- c
+			delete(batches, cn)
 			if bulk_load.Runner.TimeLimit > 0 && time.Now().After(deadline) {
 				bulk_load.Runner.SetPrematureEnd("Timeout elapsed")
 				break outer
@@ -251,9 +253,11 @@ outer:
 		}
 	}
 
-	// send outstanding batch
-	if n > 0 {
-		l.batchChan <- batch
+	// send outstanding batches
+	for _, c := range batches {
+		if len(c) > 0 {
+			l.batchChan <- c
+		}
 	}
 
 	// Closing inputDone signals to the application that we've read everything and can now shut down.
@@ -270,102 +274,52 @@ func (l *MongoBulkLoad) RunProcess(i int, workersGroup *sync.WaitGroup, telemetr
 	var pvs []interface{}
 
 	item := &mongo_serialization.Item{}
-	destTag := &mongo_serialization.Tag{}
-	destField := &mongo_serialization.Field{}
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(l.daemonUrl))
+	ctx := context.TODO()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(l.daemonUrl))
 	if err != nil {
 		return err
 	}
+	defer client.Disconnect(ctx)
 	db := client.Database(bulk_load.Runner.DbName)
-	collection := db.Collection(pointCollectionName)
+	collections := make(map[string]*mongo.Collection, 0)
+	getCollection := func(cn string) *mongo.Collection {
+		c, ok := collections[cn]
+		if !ok {
+			name := clone(cn) // cn is unsafe ptr
+			c = db.Collection(name)
+			collections[name] = c
+		}
+		return c
+	}
 outer:
 	for batch := range l.batchChan {
 
-		if cap(pvs) < len(*batch) {
-			pvs = make([]interface{}, len(*batch))
+		if cap(pvs) < len(batch) {
+			pvs = make([]interface{}, len(batch))
 		}
-		pvs = pvs[:len(*batch)]
+		pvs = pvs[:len(batch)]
 
-		for i, itemBuf := range *batch {
+		var cn string
+
+		for i, itemBuf := range batch {
 			n := flatbuffers.GetUOffsetT(itemBuf)
 			item.Init(itemBuf, n)
 
 			doc := l.bsonDPool.Get().(bson.D)
-			if mongodb.UseTimeseries {
-				// timeseries implies measurement is in meta field ie. tags
-				doc = append(doc, bson.E{ Key: "timestamp", Value: time.Unix(0, item.TimestampNanos())})
-			} else {
-				doc = append(doc, bson.E{ Key: "measurement", Value: unsafeBytesToString(item.MeasurementNameBytes()) })
-				doc = append(doc, bson.E{ Key:"timestamp_ns", Value: item.TimestampNanos()})
-			}
+			doc = l.toBsonD(item, doc)
 
-			var tags interface{}
-			var tagsM bson.M
-			var tagsA bson.A
-			tagLength := item.TagsLength()
-			if mongodb.DocumentFormat == mongodb.FlatFormat {
-				tagsM = make(bson.M, tagLength)
-				tags = tagsM
-			} else {
-				tagsA = make(bson.A, tagLength)
-				tags = tagsA
-			}
-			if mongodb.UseTimeseries {
-				tagsM["measurement"] = unsafeBytesToString(item.MeasurementNameBytes())
-			}
-			for i := 0; i < tagLength; i++ {
-				*destTag = mongo_serialization.Tag{} // clear
-				item.Tags(destTag, i)
-				tagKey := unsafeBytesToString(destTag.KeyBytes())
-				tagValue := unsafeBytesToString(destTag.ValBytes())
-				if mongodb.DocumentFormat == mongodb.FlatFormat {
-					tagsM[tagKey] = tagValue
-				} else {
-					tagsA[i] = bson.D{{"key", tagKey }, {"val", tagValue }}
-				}
-			}
-			doc = append(doc, bson.E{ Key: "tags", Value: tags })
-
-			var fields interface{}
-			var fieldsM bson.M
-			var fieldsA bson.A
 			fieldLength := item.FieldsLength()
-			if mongodb.DocumentFormat == mongodb.FlatFormat {
-				fieldsM = make(bson.M, fieldLength)
-				fields = fieldsM
-			} else {
-				fieldsA = make(bson.A, fieldLength)
-				fields = fieldsA
-			}
-			for i := 0; i < fieldLength; i++ {
-				*destField = mongo_serialization.Field{} // clear
-				item.Fields(destField, i)
-				fieldKey := unsafeBytesToString(destField.KeyBytes())
-				var fieldValue interface{}
-				switch destField.ValueType() {
-				case mongo_serialization.ValueTypeInt:
-					fieldValue = destField.IntValue()
-				case mongo_serialization.ValueTypeLong:
-					fieldValue = destField.LongValue()
-				case mongo_serialization.ValueTypeFloat:
-					fieldValue = destField.FloatValue()
-				case mongo_serialization.ValueTypeDouble:
-					fieldValue = destField.DoubleValue()
-				case mongo_serialization.ValueTypeString:
-					fieldValue = unsafeBytesToString(destField.StringValueBytes())
-				default:
-					panic("logic error")
-				}
-				if mongodb.DocumentFormat == mongodb.FlatFormat {
-					fieldsM[fieldKey] = fieldValue
-				} else {
-					fieldsA[i] = bson.D{{"key", fieldKey }, { "val", fieldValue }}
-				}
-			}
-			doc = append(doc, bson.E{ Key: "fields", Value: fields })
 
 			pvs[i] = doc
 			workerValuesRead += int64(fieldLength)
+
+			if i == 0 {
+				if mongodb.UseSingleCollection {
+					cn = pointCollectionName
+				} else {
+					cn = unsafeBytesToString(item.MeasurementNameBytes())
+				}
+			}
 		}
 
 		if bulk_load.Runner.DoLoad {
@@ -373,9 +327,10 @@ outer:
 			opts := &options.InsertManyOptions{
 				Ordered: &f,
 			}
-			_, err := collection.InsertMany(context.TODO(), pvs, opts)
+			collection := getCollection(cn)
+			_, err := collection.InsertMany(ctx, pvs, opts)
 			if err != nil {
-				rerr = fmt.Errorf("collection InsertMany err: %s\n", err.Error())
+				rerr = fmt.Errorf("%s.InsertMany err: %s\n", cn, err.Error())
 				break outer
 			}
 		}
@@ -387,11 +342,14 @@ outer:
 			l.bsonDPool.Put(d)
 		}
 
-		// cleanup item data
-		for _, itemBuf := range *batch {
+		// reuse buffers
+		for _, itemBuf := range batch {
+			itemBuf = itemBuf[:0]
 			l.bufPool.Put(itemBuf)
 		}
-		batch.ClearReferences()
+
+		// reuse batch
+		batch = batch[:0]
 		l.batchPool.Put(batch)
 	}
 
@@ -400,11 +358,123 @@ outer:
 	return rerr
 }
 
+func (l *MongoBulkLoad) toBsonD(item *mongo_serialization.Item, doc bson.D) bson.D {
+	destTag := &mongo_serialization.Tag{}
+	destField := &mongo_serialization.Field{}
+
+	if mongodb.UseTimeseries {
+		doc = append(doc, bson.E{ Key: "timestamp", Value: time.Unix(0, item.TimestampNanos())})
+	} else {
+		if mongodb.UseSingleCollection {
+			doc = append(doc, bson.E{Key: "measurement", Value: unsafeBytesToString(item.MeasurementNameBytes())})
+		}
+		doc = append(doc, bson.E{ Key:"timestamp_ns", Value: item.TimestampNanos()})
+	}
+
+	var tags interface{}
+	var tagsM bson.M
+	var tagsA bson.A
+	tagLength := item.TagsLength()
+	if mongodb.DocumentFormat == mongodb.FlatFormat {
+		tagsM = make(bson.M, tagLength)
+		tags = tagsM
+	} else {
+		tagsA = make(bson.A, tagLength)
+		tags = tagsA
+	}
+	if mongodb.UseTimeseries {
+		if mongodb.UseSingleCollection {
+			tagsM["measurement"] = unsafeBytesToString(item.MeasurementNameBytes())
+		}
+	}
+	for i := 0; i < tagLength; i++ {
+		*destTag = mongo_serialization.Tag{} // clear
+		item.Tags(destTag, i)
+		tagKey := unsafeBytesToString(destTag.KeyBytes())
+		tagValue := unsafeBytesToString(destTag.ValBytes())
+		if mongodb.DocumentFormat == mongodb.FlatFormat {
+			tagsM[tagKey] = tagValue
+		} else {
+			tagsA[i] = bson.D{{"key", tagKey }, {"val", tagValue }}
+		}
+	}
+	doc = append(doc, bson.E{ Key: "tags", Value: tags })
+
+	var fields interface{}
+	var fieldsM bson.M
+	var fieldsA bson.A
+	fieldLength := item.FieldsLength()
+	if mongodb.DocumentFormat == mongodb.FlatFormat {
+		fieldsM = make(bson.M, fieldLength)
+		fields = fieldsM
+	} else {
+		fieldsA = make(bson.A, fieldLength)
+		fields = fieldsA
+	}
+	for i := 0; i < fieldLength; i++ {
+		*destField = mongo_serialization.Field{} // clear
+		item.Fields(destField, i)
+		fieldKey := unsafeBytesToString(destField.KeyBytes())
+		var fieldValue interface{}
+		switch destField.ValueType() {
+		case mongo_serialization.ValueTypeInt:
+			fieldValue = destField.IntValue()
+		case mongo_serialization.ValueTypeLong:
+			fieldValue = destField.LongValue()
+		case mongo_serialization.ValueTypeFloat:
+			fieldValue = destField.FloatValue()
+		case mongo_serialization.ValueTypeDouble:
+			fieldValue = destField.DoubleValue()
+		case mongo_serialization.ValueTypeString:
+			fieldValue = unsafeBytesToString(destField.StringValueBytes())
+		default:
+			panic("logic error")
+		}
+		if mongodb.DocumentFormat == mongodb.FlatFormat {
+			fieldsM[fieldKey] = fieldValue
+		} else {
+			fieldsA[i] = bson.D{{"key", fieldKey }, { "val", fieldValue }}
+		}
+	}
+	doc = append(doc, bson.E{ Key: "fields", Value: fields })
+	return doc
+}
+
+var devopsCollections = []string{
+	"cpu",
+	"diskio",
+	"disk",
+	"kernel",
+	"mem",
+	"net",
+	"nginx",
+	"postgresl",
+	"redis",
+}
+
+var iotCollections = []string{
+	"air_quality_room",
+	"air_condition_room",
+	"air_condition_outdoor",
+	"camera_detection",
+	"door_state",
+	"home_config",
+	"home_state",
+	"light_level_room",
+	"radiator_valve_room",
+	"water_leakage_room",
+	"water_level",
+	"weather_outdoor",
+	"window_state_room",
+}
+
 func mustCreateCollections(daemonUrl string, dbName string) {
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(daemonUrl))
+	ctx := context.TODO()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(daemonUrl))
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer client.Disconnect(ctx)
 
 	meta := "tags"
 	var opts *options.CreateCollectionOptions
@@ -418,9 +488,24 @@ func mustCreateCollections(daemonUrl string, dbName string) {
 	}
 
 	db := client.Database(dbName)
-	err = db.CreateCollection(context.TODO(), pointCollectionName, opts)
-	if err != nil {
-		log.Fatalf("CreateCollection: %v", err)
+
+	createCollectionOrFail := func(collectionName string) {
+		err = db.CreateCollection(ctx, collectionName, opts)
+		if err != nil {
+			log.Fatalf("CreateCollection: %v", err)
+		}
+	}
+
+	if mongodb.UseSingleCollection {
+		createCollectionOrFail(pointCollectionName)
+	} else {
+		// TODO create only use-case specific schema
+		for _, cn := range devopsCollections {
+			createCollectionOrFail(cn)
+		}
+		for _, cn := range iotCollections {
+			createCollectionOrFail(cn)
+		}
 	}
 
 	var indexKeys bson.D
@@ -430,11 +515,14 @@ func mustCreateCollections(daemonUrl string, dbName string) {
 		// - hashed indexes do not currently support array values
 		indexKeys = bson.D{{"tags", 1}, {"timestamp", 1}}
 	} else {
-		indexKeys = bson.D{{"measurement", "text"}, {"tags", "text"}, {"timestamp_ns", 1}}
+		if mongodb.UseSingleCollection {
+			indexKeys = bson.D{{"measurement", "text"}, {"tags", "text"}, {"timestamp_ns", 1}}
+		} else {
+			indexKeys = bson.D{{"tags", "text"}, {"timestamp_ns", 1}}
+		}
 	}
 
 	f := false
-	collection := db.Collection(pointCollectionName)
 	index := mongo.IndexModel{
 		Keys: indexKeys,
 		Options: &options.IndexOptions{
@@ -445,8 +533,32 @@ func mustCreateCollections(daemonUrl string, dbName string) {
 		},
 	}
 
-	_, err = collection.Indexes().CreateOne(context.TODO(), index)
-	if err != nil {
-		log.Fatalf("index CreateOne: %v", err)
+	createIndexOrFail := func(collectionName string) {
+		collection := db.Collection(collectionName)
+		_, err = collection.Indexes().CreateOne(ctx, index)
+		if err != nil {
+			log.Fatalf("index CreateOne: %v", err)
+		}
 	}
+
+	if mongodb.UseSingleCollection {
+		createIndexOrFail(pointCollectionName)
+	} else {
+		// TODO index only use-case specific collections
+		for _, cn := range devopsCollections {
+			createIndexOrFail(cn)
+		}
+		for _, cn := range iotCollections {
+			createIndexOrFail(cn)
+		}
+	}
+}
+
+func clone(s string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	b := make([]byte, len(s))
+	copy(b, s)
+	return string(b)
 }
