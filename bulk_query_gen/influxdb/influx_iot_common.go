@@ -34,7 +34,7 @@ func (d *InfluxIot) Dispatch(i int) bulkQuerygen.Query {
 }
 
 func (d *InfluxIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query) {
-	d.averageTemperatureDayByHourNHomes(q.(*bulkQuerygen.HTTPQuery), 1, time.Hour*6)
+	d.averageTemperatureDayByHourNHomes(q.(*bulkQuerygen.HTTPQuery), 1, time.Hour*12)
 }
 
 // averageTemperatureDayByHourNHomes populates a Query with a query that looks like:

@@ -108,18 +108,32 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 
 	var pipelineQuery []M
 	if UseTimeseries {
+		var match M
+		if UseSingleCollection {
+			match = M{
+				"tags.measurement": "cpu",
+				"timestamp": M{
+					"$gte": time.Unix(0, interval.StartUnixNano()),
+					"$lt":  time.Unix(0, interval.EndUnixNano()),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		} else {
+			match = M{
+				"timestamp": M{
+					"$gte": time.Unix(0, interval.StartUnixNano()),
+					"$lt":  time.Unix(0, interval.EndUnixNano()),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		}
 		pipelineQuery = []M{
 			{
-				"$match": M{
-					"tags.measurement": "cpu",
-					"timestamp": M{
-						"$gte": time.Unix(0, interval.StartUnixNano()),
-						"$lt":  time.Unix(0, interval.EndUnixNano()),
-					},
-					tagSpec: M{
-						"$in": tagClause,
-					},
-				},
+				"$match": match,
 			},
 			{
 				"$project": M{
@@ -149,18 +163,32 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 		}
 	} else {
 		bucketNano := time.Minute.Nanoseconds()
+		var match M
+		if UseSingleCollection {
+			match = M{
+				"measurement": "cpu",
+				"timestamp_ns": M{
+					"$gte": interval.StartUnixNano(),
+					"$lt":  interval.EndUnixNano(),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		} else {
+			match = M{
+				"timestamp_ns": M{
+					"$gte": interval.StartUnixNano(),
+					"$lt":  interval.EndUnixNano(),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		}
 		pipelineQuery = []M{
 			{
-				"$match": M{
-					"measurement": "cpu",
-					"timestamp_ns": M{
-						"$gte": interval.StartUnixNano(),
-						"$lt":  interval.EndUnixNano(),
-					},
-					tagSpec: M{
-						"$in": tagClause,
-					},
-				},
+				"$match": match,
 			},
 			{
 				"$project": M{
@@ -195,7 +223,11 @@ func (d *MongoDevops) maxCPUUsageHourByMinuteNHosts(qi bulkQuerygen.Query, nhost
 	q.HumanLabel = humanLabel
 	q.BsonDoc = pipelineQuery
 	q.DatabaseName = []byte(d.DatabaseName)
-	q.CollectionName = []byte("point_data")
+	if UseSingleCollection {
+		q.CollectionName = []byte("point_data")
+	} else {
+		q.CollectionName = []byte("cpu")
+	}
 	q.MeasurementName = []byte("cpu")
 	q.FieldName = []byte("usage_user")
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s (%s, %s, %s, %s)", humanLabel, interval.StartString(), q.DatabaseName, q.CollectionName, q.MeasurementName, q.FieldName))

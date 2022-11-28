@@ -29,10 +29,8 @@ func (d *MongoIot) Dispatch(i int) bulkQuerygen.Query {
 	return q
 }
 
-// AverageTemperatureDayByHourOneHome populates a Query for getting the average temperature
-// for one home over the course of a half a day.
 func (d *MongoIot) AverageTemperatureDayByHourOneHome(q bulkQuerygen.Query) {
-	d.averageTemperatureDayByHourNHomes(q.(*MongoQuery), 1, 12*time.Hour)
+	d.averageTemperatureDayByHourNHomes(q.(*MongoQuery), 1, time.Hour*12)
 }
 
 func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHomes int, timeRange time.Duration) {
@@ -77,18 +75,32 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 
 	var pipelineQuery []M
 	if UseTimeseries {
+		var match M
+		if UseSingleCollection {
+			match = M{
+				"tags.measurement": "air_condition_room",
+				"timestamp": M{
+					"$gte": time.Unix(0, interval.StartUnixNano()),
+					"$lt":  time.Unix(0, interval.EndUnixNano()),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		} else {
+			match = M{
+				"timestamp": M{
+					"$gte": time.Unix(0, interval.StartUnixNano()),
+					"$lt":  time.Unix(0, interval.EndUnixNano()),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		}
 		pipelineQuery = []M{
 			{
-				"$match": M{
-					"measurement": "air_condition_room",
-					"timestamp": M{
-						"$gte": time.Unix(0, interval.StartUnixNano()),
-						"$lt":  time.Unix(0, interval.EndUnixNano()),
-					},
-					tagSpec: M{
-						"$in": tagClause,
-					},
-				},
+				"$match": match,
 			},
 			{
 				"$project": M{
@@ -96,11 +108,11 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 					"time_bucket": M{
 						"$dateTrunc": M{
 							"date": "$timestamp",
-							"unit": "minute",
+							"unit": "hour",
 						},
 					},
 					fieldSpec:     fieldExpr, // was value: 1
-					"measurement": 1,
+					//"measurement": 1, // why was this set?
 				},
 			},
 			{
@@ -108,7 +120,7 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 			},
 			{
 				"$group": M{
-					"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
+					"_id":       M{"time_bucket": "$time_bucket", "tags": "$" + tagSpec}, // was: "$tags"
 					"agg_value": M{"$avg": "$" + fieldPath}, // was: $value
 				},
 			},
@@ -118,18 +130,32 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 		}
 	} else {
 		bucketNano := time.Hour.Nanoseconds()
+		var match M
+		if UseSingleCollection {
+			match = M{
+				"measurement": "air_condition_room",
+				"timestamp_ns": M{
+					"$gte": interval.StartUnixNano(),
+					"$lt":  interval.EndUnixNano(),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		} else {
+			match = M{
+				"timestamp_ns": M{
+					"$gte": interval.StartUnixNano(),
+					"$lt":  interval.EndUnixNano(),
+				},
+				tagSpec: M{
+					"$in": tagClause,
+				},
+			}
+		}
 		pipelineQuery = []M{
 			{
-				"$match": M{
-					"measurement": "air_condition_room",
-					"timestamp_ns": M{
-						"$gte": interval.StartUnixNano(),
-						"$lt":  interval.EndUnixNano(),
-					},
-					tagSpec: M{
-						"$in": tagClause,
-					},
-				},
+				"$match": match,
 			},
 			{
 				"$project": M{
@@ -141,7 +167,7 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 						},
 					},
 					fieldSpec:     fieldExpr, // was value: 1
-					"measurement": 1,
+					//"measurement": 1, // why was this set?
 				},
 			},
 			{
@@ -149,7 +175,7 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 			},
 			{
 				"$group": M{
-					"_id":       M{"time_bucket": "$time_bucket", "tags": "$tags"},
+					"_id":       M{"time_bucket": "$time_bucket", "tags": "$" + tagSpec}, // was: "$tags"
 					"agg_value": M{"$avg": "$" + fieldPath}, // was: $value
 				},
 			},
@@ -164,7 +190,11 @@ func (d *MongoIot) averageTemperatureDayByHourNHomes(qi bulkQuerygen.Query, nHom
 	q.HumanLabel = humanLabel
 	q.BsonDoc = pipelineQuery
 	q.DatabaseName = []byte(d.DatabaseName)
-	q.CollectionName = []byte("point_data")
+	if UseSingleCollection {
+		q.CollectionName = []byte("point_data")
+	} else {
+		q.CollectionName = []byte("air_condition_room")
+	}
 	q.MeasurementName = []byte("air_condition_room")
 	q.FieldName = []byte("temperature")
 	q.HumanDescription = []byte(fmt.Sprintf("%s: %s (%s, %s, %s, %s)", humanLabel, interval.StartString(), q.DatabaseName, q.CollectionName, q.MeasurementName, q.FieldName))

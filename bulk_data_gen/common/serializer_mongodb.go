@@ -58,9 +58,21 @@ func (s *SerializerMongo) SerializePoint(w io.Writer, p *Point) (err error) {
 	// write the field data, which must be separate:
 	for i := 0; i < len(p.FieldKeys); i++ {
 		keyData := builder.CreateByteVector(p.FieldKeys[i])
+		genericValue := p.FieldValues[i]
+		// objects, vectors etc cannot be nested
+		var stringOffset flatbuffers.UOffsetT
+		switch v := genericValue.(type) {
+		case string, []byte:
+			switch v2 := v.(type) {
+			case string:
+				stringOffset = builder.CreateString(v2)
+			case []byte:
+				stringOffset = builder.CreateByteVector(v2)
+			}
+		}
+		// ~
 		mongo_serialization.FieldStart(builder)
 		mongo_serialization.FieldAddKey(builder, keyData)
-		genericValue := p.FieldValues[i]
 		switch v := genericValue.(type) {
 		// (We can't switch on sets of types (e.g. int, int64) because that does not make v concrete.)
 		case int:
@@ -79,13 +91,6 @@ func (s *SerializerMongo) SerializePoint(w io.Writer, p *Point) (err error) {
 			mongo_serialization.FieldAddValueType(builder, mongo_serialization.ValueTypeDouble)
 			mongo_serialization.FieldAddDoubleValue(builder, v)
 		case string, []byte:
-			var stringOffset flatbuffers.UOffsetT
-			switch v2 := v.(type) {
-			case string:
-				stringOffset = builder.CreateString(v2)
-			case []byte:
-				stringOffset = builder.CreateByteVector(v2)
-			}
 			mongo_serialization.FieldAddValueType(builder, mongo_serialization.ValueTypeString)
 			mongo_serialization.FieldAddStringValue(builder, stringOffset)
 		default:
