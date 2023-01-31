@@ -18,7 +18,7 @@ func NewInfluxMetaqueryCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfi
 	}
 
 	return &InfluxMetaquery{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], queriesFullRange, scaleVar),
 	}
 }
 

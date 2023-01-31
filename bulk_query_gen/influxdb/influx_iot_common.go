@@ -22,7 +22,7 @@ func NewInfluxIotCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, que
 	}
 
 	return &InfluxIot{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], queriesFullRange, scaleVar),
 	}
 }
 

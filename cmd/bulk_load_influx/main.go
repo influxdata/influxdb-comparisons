@@ -290,10 +290,16 @@ func (l *InfluxBulkLoad) PrepareProcess(i int) {
 			DebugInfo:      fmt.Sprintf("worker #%d, dest url: %s", i, l.configs[i].url),
 			Host:           l.configs[i].url,
 			Database:       bulk_load.Runner.DbName,
+			User:           bulk_load.Runner.User,
+			Password:       bulk_load.Runner.Password,
+			BasicAuthentication: bulk_load.Runner.BasicAuthentication,
 			BackingOffChan: l.configs[i].backingOffChan,
 			BackingOffDone: l.configs[i].backingOffDone,
 		}
 		url = c.Host + "/write?consistency=" + l.consistency + "&db=" + neturl.QueryEscape(c.Database)
+		if len(c.User) != 0 && len(c.Password) != 0 {
+			url = url + "&u=" + neturl.QueryEscape(c.User) + "&p=" + neturl.QueryEscape(c.Password)
+		}
 	}
 	l.configs[i].writer = NewHTTPWriter(*c, url)
 }

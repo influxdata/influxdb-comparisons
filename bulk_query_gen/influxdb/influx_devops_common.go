@@ -21,7 +21,7 @@ func newInfluxDevopsCommon(lang Language, dbConfig bulkQuerygen.DatabaseConfig, 
 	}
 
 	return &InfluxDevops{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], interval, scaleVar),
 	}
 }
 
