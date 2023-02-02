@@ -20,7 +20,7 @@ func NewInfluxGroupWindowTransposeQuery(agg Aggregate, card Cardinality, lang La
 	}
 
 	return &InfluxGroupWindowTransposeQuery{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], queriesFullRange, scaleVar),
 		aggregate:    agg,
 		interval:     queryInterval,
 		cardinality:  card,
