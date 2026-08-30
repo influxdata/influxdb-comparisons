@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"encoding/base64"
 
 	"github.com/valyala/fasthttp"
 )
@@ -31,6 +32,10 @@ type HTTPWriterConfig struct {
 
 	// Name of the target database into which points will be written.
 	Database string
+
+	User string
+	Password string
+	BasicAuthentication string 
 
 	// Id of the target bucket into which points will be written. (InfluxDB v2)
 	BucketId string
@@ -85,6 +90,9 @@ func (w *HTTPWriter) WriteLineProtocol(body []byte, isGzip bool) (int64, error) 
 	}
 	if w.c.AuthToken != "" {
 		req.Header.Add("Authorization", fmt.Sprintf("Token %s", w.c.AuthToken))
+	}
+	if w.c.BasicAuthentication != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(w.c.BasicAuthentication))))
 	}
 	req.SetBody(body)
 

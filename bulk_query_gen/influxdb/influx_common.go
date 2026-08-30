@@ -45,13 +45,17 @@ type InfluxCommon struct {
 	bulkQuerygen.CommonParams
 	language     Language
 	DatabaseName string
+	UserName     string
+	Password     string
 }
 
-func newInfluxCommon(lang Language, dbName string, interval bulkQuerygen.TimeInterval, scaleVar int) *InfluxCommon {
+func newInfluxCommon(lang Language, dbName string, userName string, password string, interval bulkQuerygen.TimeInterval, scaleVar int) *InfluxCommon {
 	return &InfluxCommon{
 		CommonParams: *bulkQuerygen.NewCommonParams(interval, scaleVar),
 		language:     lang,
-		DatabaseName: dbName}
+		DatabaseName: dbName,
+		UserName: userName,
+		Password: password}
 }
 
 // getHttpQuery gets the right kind of http request based on the language being used
@@ -64,6 +68,10 @@ func (d *InfluxCommon) getHttpQuery(humanLabel, intervalStart, query string, q *
 		getValues := url.Values{}
 		getValues.Set("db", d.DatabaseName)
 		getValues.Set("q", query)
+		if len(d.UserName) != 0 && len(d.Password) != 0 {
+			getValues.Set("u", d.UserName)
+			getValues.Set("p", d.Password)
+		}
 		q.Method = []byte("GET")
 		q.Path = []byte(fmt.Sprintf("/query?%s", getValues.Encode()))
 		q.Body = nil

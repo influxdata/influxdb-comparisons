@@ -40,6 +40,9 @@ type BulkLoad interface {
 
 type LoadRunner struct {
 	DbName                 string
+	User                   string
+	Password               string
+	BasicAuthentication    string
 	Workers                int
 	ItemLimit              int64
 	BatchSize              int
@@ -110,6 +113,9 @@ func (r *LoadRunner) notifyHandler(arg int) (int, error) {
 
 func (r *LoadRunner) Init(defaultBatchSize int) {
 	flag.StringVar(&r.DbName, "db", "benchmark_db", "Database name.")
+	flag.StringVar(&r.User, "user", "", "User name, credentials as query parameters.")
+	flag.StringVar(&r.Password, "password", "", "User password, credentials as query parameters.")
+	flag.StringVar(&r.BasicAuthentication, "basic-authentication", "", "Authenticate with basic authentication. format [user:password].")
 	flag.IntVar(&r.BatchSize, "batch-size", defaultBatchSize, "Batch size (1 line of input = 1 item).")
 	flag.IntVar(&r.Workers, "workers", 1, "Number of parallel requests to make.")
 	flag.Int64Var(&r.ItemLimit, "item-limit", -1, "Number of items to read from stdin before quitting. (1 item per 1 line of input.)")

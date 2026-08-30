@@ -25,7 +25,7 @@ func newInfluxDashboard(lang Language, dbConfig bulkQuerygen.DatabaseConfig, int
 		clustersCount = 1
 	}
 	return &InfluxDashboard{
-		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], interval, scaleVar),
+		InfluxCommon:  *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], interval, scaleVar),
 		ClustersCount: clustersCount,
 		TimeWindow:    bulkQuerygen.TimeWindow{interval.Start, duration},
 	}

@@ -18,7 +18,7 @@ func NewInfluxUngroupedAggregateQuery(agg Aggregate, lang Language, dbConfig bul
 	}
 
 	return &InfluxUngroupedAggregateQuery{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], queriesFullRange, scaleVar),
 		aggregate:    agg,
 	}
 }

@@ -19,7 +19,7 @@ func InfluxMultiMeasurementCommon(lang Language, dbConfig bulkQuerygen.DatabaseC
 	}
 
 	return &InfluxMultiMeasurement{
-		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], queriesFullRange, scaleVar),
+		InfluxCommon: *newInfluxCommon(lang, dbConfig[bulkQuerygen.DatabaseName], dbConfig[bulkQuerygen.UserName], dbConfig[bulkQuerygen.Password], queriesFullRange, scaleVar),
 	}
 }
 

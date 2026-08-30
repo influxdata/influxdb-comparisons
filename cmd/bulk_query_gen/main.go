@@ -431,6 +431,8 @@ var (
 	queryCount int
 
 	dbName string // TODO(rw): make this a map[string]string -> DatabaseConfig
+	userName string 
+	password string
 
 	timestampStartStr string
 	timestampEndStr   string
@@ -475,6 +477,8 @@ func init() {
 	flag.IntVar(&scaleVar, "scale-var", 1, "Scaling variable (must be the equal to the scale-var used for data generation).")
 	flag.IntVar(&queryCount, "queries", 1000, "Number of queries to generate.")
 	flag.StringVar(&dbName, "db", "benchmark_db", "Database to use (ignored for ElasticSearch).")
+	flag.StringVar(&userName, "user", "", "User name, credentials as query parameters.")
+	flag.StringVar(&password, "password", "", "User password, credentials as query parameters.")
 
 	flag.StringVar(&timestampStartStr, "timestamp-start", common.DefaultDateTimeStart, "Beginning timestamp (RFC3339).")
 	flag.StringVar(&timestampEndStr, "timestamp-end", common.DefaultDateTimeEnd, "Ending timestamp (RFC3339).")
@@ -587,6 +591,8 @@ func main() {
 
 	dbConfig := bulkQueryGen.DatabaseConfig{
 		bulkQueryGen.DatabaseName: dbName,
+		bulkQueryGen.UserName: userName,
+		bulkQueryGen.Password: password,
 	}
 
 	// Make the query generator:
